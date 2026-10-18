@@ -354,9 +354,9 @@ def chat(body: ChatRequest) -> Dict[str, Any]:
     ic = get_ic()
     die = body.die
     if die is None:
-        loaded = list(ic._models.keys())
+        loaded = ic.loaded_dies()
         die = loaded[0] if loaded else None
-    modality = ic._modality.get(die) if die is not None else None
+    modality = ic.modality_of(die) if die is not None else None
 
     # Agent path: model emits tool calls, studio runs them, result is fed back.
     if modality == "agent":
@@ -374,7 +374,12 @@ def chat(body: ChatRequest) -> Dict[str, Any]:
             s.get("tool") for s in (result.get("steps") or []) if isinstance(result, dict) and s.get("tool")
         ]
         _chat.append({"role": "assistant", "content": text})
-        return {"result": text, "history": _chat, "steps": result.get("steps") if isinstance(result, dict) else [], "tools": tools_used}
+        return {
+            "result": text,
+            "history": _chat,
+            "steps": result.get("steps") if isinstance(result, dict) else [],
+            "tools": tools_used,
+        }
 
     try:
         result = ic.generate(
@@ -465,7 +470,7 @@ def asio_start(body: AsioStartRequest) -> Dict[str, Any]:
     if track is None:
         raise HTTPException(status_code=404, detail="track not found")
     if not track.get("armed"):
-        raise HTTPException(status_code=400, detail="track is not armed")
+            raise HTTPException(status_code=400, detail="track is not armed")
     if _asio_recorder.recording:
         raise HTTPException(status_code=400, detail="already recording")
 
