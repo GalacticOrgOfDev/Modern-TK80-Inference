@@ -79,6 +79,15 @@
         <div id="asio-status" class="badge">ASIO off</div>
         <div id="scarlett-badge" class="badge">No Scarlett detected</div>
         <hr />
+        <h3>Master</h3>
+        <label>Master level<input id="master-gain" type="range" min="0" max="2" step="0.05" value="1" /></label>
+        <label class="check"><input type="checkbox" id="master-mute" /> Master mute</label>
+        <label class="check"><input type="checkbox" id="master-comp" /> Master compressor</label>
+        <label>Threshold<input id="master-thresh" type="number" value="0.5" step="0.05" min="0" max="1" /></label>
+        <label>Ratio<input id="master-ratio" type="number" value="4" step="0.5" min="1" /></label>
+        <label>Makeup<input id="master-makeup" type="number" value="1" step="0.1" min="0" /></label>
+        <button id="master-apply">Apply master</button>
+        <hr />
         <label>BPM<input id="bpm" type="number" value="120" min="40" max="220" /></label>
         <div class="edit-row">
           <button id="bpm-set">Set BPM</button>
@@ -152,6 +161,12 @@
           <button id="audio-reverse">Reverse</button>
           <button id="audio-silence">Silence</button>
           <button id="audio-set-position">Set position</button>
+          <button id="audio-clip-mute">Mute clip</button>
+        </div>
+        <div class="edit-row">
+          <button id="fx-normalize">Normalize</button>
+          <button id="fx-compress">Compress</button>
+          <button id="fx-morph">Morph wave</button>
         </div>
         <pre id="audio-output"></pre>
       </div>
