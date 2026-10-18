@@ -182,26 +182,40 @@
         <button id="audio-upload">Upload to selected track</button>
         <button id="audio-transcribe">Transcribe</button>
       </div>
-      <div class="studio">
-        <h2>Mini Audio Studio</h2>
-        <div class="transport">
-          <button id="audio-play">Play</button>
-          <button id="audio-play-mix">Play mix</button>
-          <button id="audio-stop">Stop</button>
-          <button id="audio-record">Record</button>
-          <button id="audio-bounce">Bounce</button>
-          <span id="audio-transport-status">Ready</span>
-          <span id="rate-pill">44100 Hz</span>
-          <span id="bpm-pill">120 BPM</span>
-          <audio id="audio-player"></audio>
+      <div class="studio daw">
+        <div class="daw-top">
+          <div class="transport">
+            <button id="audio-play">Play</button>
+            <button id="audio-play-mix">Play mix</button>
+            <button id="audio-stop">Stop</button>
+            <button id="audio-record">Record</button>
+            <button id="audio-bounce">Bounce</button>
+            <span id="audio-transport-status">Ready</span>
+            <span id="rate-pill">44100 Hz</span>
+            <span id="bpm-pill">120 BPM</span>
+            <span id="time-pill">00:00.000</span>
+            <audio id="audio-player"></audio>
+          </div>
+        </div>
+        <div class="daw-body">
+          <div class="daw-headers">
+            <div class="daw-ruler-spacer">Tracks</div>
+            <div id="track-list" class="track-list"></div>
+            <div class="track master-row">
+              <span class="track-name">Master</span>
+              <button id="master-mute-btn">M</button>
+            </div>
+          </div>
+          <div class="daw-arrange">
+            <div id="daw-ruler" class="daw-ruler"></div>
+            <div id="daw-clips" class="daw-clips"></div>
+          </div>
         </div>
         <div id="sequencer" class="sequencer"></div>
         <div class="edit-row">
           <button id="pattern-render">Render pattern</button>
         </div>
-        <div id="track-list" class="track-list"></div>
-        <canvas id="audio-wave" width="640" height="100"></canvas>
-        <div id="audio-clips" class="clip-list"></div>
+        <canvas id="audio-wave" width="640" height="80"></canvas>
         <div class="edit-row">
           <label>Clip #<input id="audio-clip-id" type="number" value="0" /></label>
           <label>Trim start<input id="audio-start" type="number" value="0" step="0.1" /></label>
@@ -219,6 +233,8 @@
           <button id="fx-normalize">Normalize</button>
           <button id="fx-compress">Compress</button>
           <button id="fx-morph">Morph wave</button>
+          <button id="fx-eq">Apply EQ</button>
+        </div>
           <button id="fx-eq">Apply EQ</button>
         </div>
         <div id="eq-panel" class="eq-panel">

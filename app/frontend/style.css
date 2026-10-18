@@ -80,16 +80,27 @@ main { flex: 1; display: flex; overflow: hidden; }
 .clip .clip-mute { padding: 2px 8px; font-size: 12px; }
 .clip.muted { opacity: 0.45; }
 .clip-list { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
-.track-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
-.track {
-  display: flex; gap: 8px; align-items: center;
-  background: #1a1a1a; border: 1px solid #333; padding: 6px 8px; border-radius: 4px;
+.daw { display: flex; flex-direction: column; gap: 8px; }
+.daw-body { display: flex; border: 1px solid #333; min-height: 220px; background: #111; }
+.daw-headers { width: 180px; border-right: 1px solid #333; display: flex; flex-direction: column; }
+.daw-ruler-spacer { height: 24px; background: #1a1a1a; border-bottom: 1px solid #333; font-size: 11px; padding: 4px 6px; color: #888; }
+.daw-arrange { flex: 1; overflow-x: auto; position: relative; }
+.daw-ruler { height: 24px; background: #1a1a1a; border-bottom: 1px solid #333; position: relative; min-width: 800px; }
+.daw-ruler span { position: absolute; top: 4px; font-size: 10px; color: #888; }
+.daw-clips { position: relative; min-height: 180px; min-width: 800px; }
+.daw-clip {
+  position: absolute; height: 28px; background: #0a7; color: #fff;
+  font-size: 11px; padding: 4px 6px; border-radius: 2px; overflow: hidden; cursor: pointer;
 }
-.track.selected { border-color: #0a7; }
-.track.armed { border-color: #c33; }
-.track .track-name { min-width: 90px; cursor: pointer; }
-.track .lvl { width: 80px; }
-.track .dev { font-size: 11px; color: #888; margin-left: auto; }
+.track-list { display: flex; flex-direction: column; }
+.track {
+  display: flex; align-items: center; gap: 4px;
+  height: 36px; padding: 0 6px; border-bottom: 1px solid #222; background: #1a1a1a;
+}
+.track.selected { background: #1a2a1a; }
+.track.armed { border-left: 3px solid #c33; }
+.track .track-name { flex: 1; cursor: pointer; font-size: 12px; }
+.master-row { background: #222; }
 
 .vst-palette { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
 .vst-item { background: #222; border: 1px solid #444; padding: 6px 10px; cursor: grab; border-radius: 4px; }

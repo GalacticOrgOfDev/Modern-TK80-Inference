@@ -310,72 +310,12 @@ async function refreshTracks() {
 async function refreshClips() {
   const data = await api("/api/audio/clips");
   audioClips = data.clips;
-  const list = document.getElementById("audio-clips");
-  list.innerHTML = "";
-  for (const c of audioClips) {
-    const div = document.createElement("div");
-    div.className = "clip" + (c.id === selectedClip ? " selected" : "") + (c.mute ? " muted" : "");
-    const tr = audioTracks.find((t) => t.id === c.track_id);
-    const ch = tr ? tr.channel : "-";
-    const asio = c.asio ? " ASIO" : "";
-    const mix = c.mix ? " MIX" : "";
-    const muted = c.mute ? " MUTE" : "";
-    const pos = c.position != null ? `@${c.position}s` : "";
-
-    const label = document.createElement("span");
-    label.className = "clip-label";
-    label.textContent = `#${c.id} ${c.name} [T${c.track_id}/${ch}] ${pos} ${c.duration}s${asio}${mix}${muted}`;
-    label.onclick = () => selectClip(c);
-
-    const lvl = document.createElement("input");
-    lvl.type = "range";
-    lvl.className = "clip-lvl";
-    lvl.min = "0";
-    lvl.max = "2";
-    lvl.step = "0.05";
-    lvl.value = String(c.gain || 1);
-    lvl.title = "Clip level";
-    lvl.onchange = async (e) => {
-      e.stopPropagation();
-      try {
-        await api("/api/audio/edit", {
-          method: "POST",
-          body: JSON.stringify({
-            action: "gain",
-            clip_id: c.id,
-            gain: Number(e.target.value),
-          }),
-        });
-        await refreshClips();
-      } catch (err) {
-        alert(err.message);
-      }
-    };
-
-    const muteBtn = document.createElement("button");
-    muteBtn.className = "clip-mute";
-    muteBtn.textContent = c.mute ? "Unmute" : "Mute";
-    muteBtn.onclick = async (e) => {
-      e.stopPropagation();
-      try {
-        await api("/api/audio/clips/mute", {
-          method: "POST",
-          body: JSON.stringify({ clip_id: c.id, mute: !c.mute }),
-        });
-        await refreshClips();
-      } catch (err) {
-        alert(err.message);
-      }
-    };
-
-    div.appendChild(label);
-    div.appendChild(lvl);
-    div.appendChild(muteBtn);
-    list.appendChild(div);
-  }
+  drawRuler();
+  drawArrange();
   const current = audioClips.find((c) => c.id === selectedClip) || audioClips[0];
   if (current && !asioRecording) drawWave(current);
-  document.getElementById("audio-output").textContent = JSON.stringify({
+  const out = document.getElementById("audio-output");
+  if (out) out.textContent = JSON.stringify({
     tracks: audioTracks,
     clips: audioClips,
     master,
@@ -384,6 +324,35 @@ async function refreshClips() {
     buffer: asioBuffer,
     bpm,
   }, null, 2);
+}
+
+function drawRuler() {
+  const ruler = document.getElementById("daw-ruler");
+  if (!ruler) return;
+  ruler.innerHTML = "";
+  for (let i = 0; i <= 16; i++) {
+    const span = document.createElement("span");
+    span.style.left = (i * 60) + "px";
+    span.textContent = String(i + 1);
+    ruler.appendChild(span);
+  }
+}
+
+function drawArrange() {
+  const area = document.getElementById("daw-clips");
+  if (!area) return;
+  area.innerHTML = "";
+  const px = 40;
+  for (const c of audioClips) {
+    const div = document.createElement("div");
+    div.className = "daw-clip" + (c.mute ? " muted" : "");
+    div.style.left = ((c.position || 0) * px) + "px";
+    div.style.width = Math.max(24, (c.duration || 1) * px) + "px";
+    div.style.top = ((c.track_id || 0) * 36 + 4) + "px";
+    div.textContent = c.name || ("#" + c.id);
+    div.onclick = () => selectClip(c);
+    area.appendChild(div);
+  }
 }
 
 function selectClip(c) {
