@@ -14,7 +14,15 @@ from pydantic import BaseModel
 from drivers.interconnector import Interconnector, InterconnectorError
 from drivers.interconnector.diefusion import DieFusionCore
 
-from .audio import make_clip, make_track, save_upload
+from .audio import (
+    COMMON_RATES,
+    DEFAULT_SAMPLE_RATE,
+    SCARLETT_PROFILES,
+    detect_scarlett,
+    make_clip,
+    make_track,
+    save_upload,
+)
 
 log = logging.getLogger("tk80.app")
 
@@ -33,6 +41,7 @@ _chat: List[Dict[str, str]] = []
 _audio_tracks: List[Dict[str, Any]] = []
 _audio_clips: List[Dict[str, Any]] = []
 _video_frames: List[Dict[str, Any]] = []
+_sample_rate: int = DEFAULT_SAMPLE_RATE
 
 
 def get_ic() -> Interconnector:
@@ -54,7 +63,7 @@ def get_fusion() -> DieFusionCore:
 
 def _ensure_track() -> int:
     if not _audio_tracks:
-        _audio_tracks.append(make_track(0, "Track 1", "stereo"))
+        _audio_tracks.append(make_track(0, "Track 1", "stereo", _sample_rate))
     return _audio_tracks[0]["id"]
 
 
@@ -100,6 +109,11 @@ class TrackUpdate(BaseModel):
     armed: Optional[bool] = None
     device_id: Optional[str] = None
     device_label: Optional[str] = None
+    sample_rate: Optional[int] = None
+
+
+class SampleRateRequest(BaseModel):
+    sample_rate: int
 
 
 class VideoEditRequest(BaseModel):
@@ -203,6 +217,26 @@ def chat_clear() -> Dict[str, str]:
     return {"ok": "cleared"}
 
 
+# ---- Studio audio settings ----
+@app.get("/api/audio/settings")
+def audio_settings() -> Dict[str, Any]:
+    return {
+        "sample_rate": _sample_rate,
+        "default_sample_rate": DEFAULT_SAMPLE_RATE,
+        "common_rates": list(COMMON_RATES),
+        "scarlett_profiles": SCARLETT_PROFILES,
+    }
+
+
+@app.post("/api/audio/settings")
+def set_audio_settings(body: SampleRateRequest) -> Dict[str, Any]:
+    global _sample_rate
+    if body.sample_rate not in COMMON_RATES:
+        raise HTTPException(status_code=400, detail=f"unsupported rate: {body.sample_rate}")
+    _sample_rate = body.sample_rate
+    return {"sample_rate": _sample_rate}
+
+
 # ---- Tracks ----
 @app.get("/api/audio/tracks")
 def list_tracks() -> Dict[str, Any]:
@@ -211,7 +245,7 @@ def list_tracks() -> Dict[str, Any]:
 
 @app.post("/api/audio/tracks")
 def create_track(name: str = "Track", channel: str = "stereo") -> Dict[str, Any]:
-    track = make_track(len(_audio_tracks), name, channel)
+    track = make_track(len(_audio_tracks), name, channel, _sample_rate)
     _audio_tracks.append(track)
     return track
 
@@ -224,12 +258,16 @@ def update_track(track_id: int, body: TrackUpdate) -> Dict[str, Any]:
     data = body.model_dump(exclude_none=True)
     if "channel" in data and data["channel"] not in ("stereo", "left", "right"):
         raise HTTPException(status_code=400, detail="channel must be stereo, left, or right")
-    # Only one armed track at a time
+    if "sample_rate" in data and data["sample_rate"] not in COMMON_RATES:
+        raise HTTPException(status_code=400, detail="unsupported sample rate")
     if data.get("armed") is True:
         for t in _audio_tracks:
             if t["id"] != track_id:
                 t["armed"] = False
     track.update(data)
+    # Attach Scarlett profile when a matching device is armed
+    label = track.get("device_label") or ""
+    track["scarlett"] = detect_scarlett(label) if track.get("armed") else None
     return track
 
 
@@ -243,7 +281,7 @@ def list_clips() -> Dict[str, Any]:
 def add_clip(name: str, duration: float = 0.0, path: str = "", track_id: Optional[int] = None) -> Dict[str, Any]:
     if track_id is None:
         track_id = _ensure_track()
-    clip = make_clip(len(_audio_clips), name, Path(path) if path else None, duration, track_id)
+    clip = make_clip(len(_audio_clips), name, Path(path) if path else None, duration, track_id, _sample_rate)
     _audio_clips.append(clip)
     return clip
 
@@ -257,7 +295,7 @@ async def upload_audio(
         track_id = _ensure_track()
     data = await file.read()
     dest = save_upload(file.filename or "clip.wav", data)
-    clip = make_clip(len(_audio_clips), dest.name, dest, track_id=track_id)
+    clip = make_clip(len(_audio_clips), dest.name, dest, track_id=track_id, sample_rate=_sample_rate)
     _audio_clips.append(clip)
     return clip
 
@@ -267,7 +305,6 @@ async def save_recording(
     file: UploadFile = File(...),
     track_id: int = Form(...),
 ) -> Dict[str, Any]:
-    """Save a recording from an armed track's device."""
     track = next((t for t in _audio_tracks if t["id"] == track_id), None)
     if track is None:
         raise HTTPException(status_code=404, detail="track not found")
@@ -275,7 +312,8 @@ async def save_recording(
         raise HTTPException(status_code=400, detail="track is not armed")
     data = await file.read()
     dest = save_upload(file.filename or "recording.webm", data)
-    clip = make_clip(len(_audio_clips), dest.name, dest, track_id=track_id)
+    rate = track.get("sample_rate") or _sample_rate
+    clip = make_clip(len(_audio_clips), dest.name, dest, track_id=track_id, sample_rate=rate)
     _audio_clips.append(clip)
     return clip
 
