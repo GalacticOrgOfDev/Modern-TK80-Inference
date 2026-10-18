@@ -51,6 +51,7 @@ from .vst_ui import (
 )
 from .video import (
     BUILTIN_VFX,
+    TRANSITIONS,
     add_text_vfx,
     apply_vfx,
     export_manifest,
@@ -61,6 +62,7 @@ from .video import (
     make_vfx,
     reorder,
     save_video,
+    set_transition,
 )
 from .music import (
     DEFAULT_BPM,
@@ -329,6 +331,15 @@ def _dispatch_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
                 add_text_vfx(t, str(args.get("vfx", "none")), str(args.get("description", "")))
                 return {"ok": True, "name": name, "text": t}
         raise HTTPException(status_code=404, detail="text not found")
+
+    if name == "video_transition":
+        index = int(args.get("index", 0))
+        kind = str(args.get("kind", "cut"))
+        try:
+            clip = set_transition(_video_frames, index, kind)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return {"ok": True, "name": name, "clip": clip}
 
     raise HTTPException(status_code=400, detail=f"unknown tool: {name}")
 
@@ -1092,7 +1103,7 @@ def export_timeline(name: str = "timeline") -> Dict[str, Any]:
     """Export the movie timeline as a JSON manifest."""
     if not _video_frames:
         raise HTTPException(status_code=400, detail="no frames to export")
-    return export_manifest(_video_frames, name)
+    return export_manifest(_video_frames, _text_objects, name)
 
 
 @app.post("/api/video/edit")

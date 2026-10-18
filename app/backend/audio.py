@@ -87,6 +87,11 @@ def is_supported_audio(path: Path) -> bool:
     return path.suffix.lower() in (".wav", ".mp3")
 
 
+def clamp_gain(value: float) -> float:
+    """Keep gain in a safe 0..4 range."""
+    return max(0.0, min(4.0, float(value)))
+
+
 def _read_wav(path: Path) -> Tuple[int, int, int, bytes]:
     with wave.open(str(path), "rb") as w:
         return w.getframerate(), w.getnchannels(), w.getsampwidth(), w.readframes(w.getnframes())

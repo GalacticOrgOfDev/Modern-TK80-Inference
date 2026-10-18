@@ -86,6 +86,10 @@ TOOLS: Dict[str, Dict[str, Any]] = {
         "description": "Attach a VFX to an existing text object.",
         "args": {"text_id": "int", "vfx": "string", "description": "string"},
     },
+    "video_transition": {
+        "description": "Set the transition after a clip (cut, crossfade, wipe, dissolve).",
+        "args": {"index": "int", "kind": "cut|crossfade|wipe|dissolve"},
+    },
 }
 
 # Model emits: tool: name {"arg": value}

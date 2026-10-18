@@ -20,6 +20,7 @@ VFX_DIR = Path(os.environ.get("TK80_VFX", "uploads/vfx"))
 VFX_DIR.mkdir(parents=True, exist_ok=True)
 
 BUILTIN_VFX = ("none", "fade", "zoom", "pan", "color_grade", "overlay")
+TRANSITIONS = ("none", "cut", "crossfade", "wipe", "dissolve")
 SUPPORTED_VIDEO = (".mp4", ".mov", ".webm")
 
 
@@ -178,12 +179,24 @@ def reorder(clips: List[Dict[str, Any]], new_order: List[int]) -> List[Dict[str,
     return [by_id[i] for i in new_order if i in by_id]
 
 
-def export_manifest(clips: List[Dict[str, Any]], name: str = "timeline") -> Dict[str, Any]:
-    """Write a JSON manifest of the current timeline."""
+def set_transition(clips: List[Dict[str, Any]], index: int, kind: str = "cut") -> Dict[str, Any]:
+    """Set the transition that plays after the clip at index."""
+    if index < 0 or index >= len(clips):
+        raise ValueError("clip index out of range")
+    kind = _safe_name(kind)
+    if kind not in TRANSITIONS:
+        kind = "cut"
+    clips[index]["transition"] = kind
+    return clips[index]
+
+
+def export_manifest(clips: List[Dict[str, Any]], texts: Optional[List[Dict[str, Any]]] = None, name: str = "timeline") -> Dict[str, Any]:
+    """Write a JSON manifest of the current timeline, including text objects."""
     total = sum(c.get("duration", 1.0) for c in clips)
     manifest = {
         "name": name,
         "clips": clips,
+        "texts": texts or [],
         "total_duration": round(total, 3),
         "note": "Manifest staged. Full movie encode (ffmpeg) comes later.",
     }
