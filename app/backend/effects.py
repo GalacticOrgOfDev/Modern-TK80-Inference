@@ -144,15 +144,20 @@ def eq_30(
 ) -> List[int]:
     """30-band EQ from 100 Hz to 20 kHz.
 
-    gains is a list of 30 linear gains (1.0 = flat). Missing values default to 1.0.
-    This is a lightweight per-band gain applied by zero-crossing period estimate,
-    not a full filter bank. It is enough for creative shaping until a real FFT EQ lands.
+    gains is a list of 30 linear gains (1.0 = flat). Missing or bad values default to 1.0.
     """
     freqs = eq_frequencies()
     if not gains:
         gains = [1.0] * EQ_BANDS
-    gains = list(gains) + [1.0] * EQ_BANDS
-    gains = [max(0.0, float(g)) for g in gains[:EQ_BANDS]]
+    clean: List[float] = []
+    for g in list(gains)[:EQ_BANDS]:
+        try:
+            clean.append(max(0.0, float(g)))
+        except (TypeError, ValueError):
+            clean.append(1.0)
+    while len(clean) < EQ_BANDS:
+        clean.append(1.0)
+    gains = clean
 
     frame_size = max(1, channels)
     frames = len(samples) // frame_size

@@ -96,7 +96,11 @@ def is_processable(path: Path) -> bool:
 
 def clamp_gain(value: float) -> float:
     """Keep gain in a safe 0..4 range."""
-    return max(0.0, min(4.0, float(value)))
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return 1.0
+    return max(0.0, min(4.0, v))
 
 
 def apply_fade(samples: List[int], rate: int, channels: int, fade_in: float = 0.0, fade_out: float = 0.0) -> List[int]:

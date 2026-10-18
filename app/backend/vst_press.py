@@ -51,6 +51,9 @@ def find_toolchain() -> Dict[str, Optional[str]]:
 
 def press_vst(source: Path, name: str = "Plugin") -> Dict[str, Any]:
     """Configure and build a .vst3 from generated source."""
+    if not source or not Path(source).exists():
+        return {"pressed": False, "note": "source file not found", "source": str(source)}
+    source = Path(source)
     sdk = sdk_path()
     tools = find_toolchain()
     out_dir = source.parent / "build"

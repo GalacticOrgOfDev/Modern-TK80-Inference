@@ -32,7 +32,11 @@ def is_supported_video(path: Path) -> bool:
 
 
 def _safe_name(name: str) -> str:
-    return "".join(c if c.isalnum() or c == "_" else "_" for c in name.strip().lower()) or "custom"
+    """Sanitize a name for files and identifiers."""
+    if not name:
+        return "custom"
+    cleaned = "".join(c if c.isalnum() or c == "_" else "_" for c in str(name).strip().lower())
+    return cleaned or "custom"
 
 
 def save_video(filename: str, data: bytes) -> Path:
