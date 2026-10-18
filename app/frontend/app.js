@@ -622,6 +622,7 @@ document.getElementById("llm-send").onclick = async () => {
 document.getElementById("toggle-settings").onclick = () => {
   document.getElementById("settings-drawer").classList.toggle("open");
 };
+document.getElementById("audio-new-track").onclick = async () => {
   const name = document.getElementById("track-name").value || "Track";
   const channel = document.getElementById("track-channel").value;
   const t = await api(`/api/audio/tracks?name=${encodeURIComponent(name)}&channel=${channel}`, { method: "POST" });

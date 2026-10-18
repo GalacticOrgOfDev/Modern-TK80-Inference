@@ -1040,6 +1040,9 @@ def delete_track(track_id: int) -> Dict[str, Any]:
     _audio_tracks = [t for t in _audio_tracks if t["id"] != track_id]
     _audio_clips = [c for c in _audio_clips if c.get("track_id") != track_id]
     return {"tracks": _audio_tracks}
+
+
+@app.post("/api/audio/tracks/{track_id}")
 def update_track(track_id: int, body: TrackUpdate) -> Dict[str, Any]:
     track = next((t for t in _audio_tracks if t["id"] == track_id), None)
     if track is None:
