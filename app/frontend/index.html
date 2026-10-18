@@ -10,15 +10,16 @@
   <header>
     <h1>Modern-TK80</h1>
     <nav>
-      <button data-tab="llm" class="active">LLM</button>
+      <button data-tab="llm" class="active">Chat</button>
       <button data-tab="audio">Audio</button>
       <button data-tab="video">Video</button>
+      <button data-tab="fusion">Fusion</button>
     </nav>
     <span id="status-pill">connecting...</span>
   </header>
 
   <main>
-    <!-- LLM -->
+    <!-- Chat -->
     <section id="llm" class="panel active">
       <div class="sidebar">
         <label>Model<input id="llm-model" placeholder="path or HF id" /></label>
@@ -29,8 +30,11 @@
         <label>Split
           <select id="llm-split"><option>single</option><option>dual</option><option>layer</option></select>
         </label>
+        <label>Max tokens<input id="llm-max" type="number" value="256" /></label>
+        <label>Temperature<input id="llm-temp" type="number" value="0.7" step="0.1" /></label>
         <button id="llm-load">Load</button>
         <button id="llm-unload">Unload</button>
+        <button id="llm-clear">Clear chat</button>
         <pre id="llm-status"></pre>
       </div>
       <div class="chat">
@@ -42,40 +46,84 @@
       </div>
     </section>
 
-    <!-- Audio -->
+    <!-- Audio studio -->
     <section id="audio" class="panel">
       <div class="sidebar">
         <label>Voice model<input id="audio-model" placeholder="openai/whisper-small" /></label>
         <label>Die<input id="audio-die" type="number" value="0" /></label>
         <button id="audio-load">Load voice model</button>
+        <hr />
+        <label>Clip name<input id="audio-name" placeholder="clip" /></label>
+        <label>Duration (s)<input id="audio-dur" type="number" value="5" step="0.1" /></label>
+        <button id="audio-add">Add clip</button>
         <label>Audio file<input id="audio-file" type="file" accept="audio/*" /></label>
         <button id="audio-transcribe">Transcribe</button>
       </div>
       <div class="studio">
         <h2>Mini Audio Studio</h2>
         <div class="transport">
-          <button disabled>Play</button>
-          <button disabled>Stop</button>
-          <span>Waveform and transport controls come next.</span>
+          <button id="audio-play">Play</button>
+          <button id="audio-stop">Stop</button>
+          <span id="audio-transport-status">Ready</span>
+        </div>
+        <div id="audio-clips" class="clip-list"></div>
+        <div class="edit-row">
+          <label>Clip #<input id="audio-clip-id" type="number" value="0" /></label>
+          <label>Start<input id="audio-start" type="number" value="0" step="0.1" /></label>
+          <label>End<input id="audio-end" type="number" value="5" step="0.1" /></label>
+          <label>Gain<input id="audio-gain" type="number" value="1" step="0.1" /></label>
+          <button id="audio-trim">Trim</button>
+          <button id="audio-gain-btn">Set gain</button>
+          <button id="audio-reverse">Reverse</button>
+          <button id="audio-silence">Silence</button>
         </div>
         <pre id="audio-output"></pre>
       </div>
     </section>
 
-    <!-- Video -->
+    <!-- Video studio -->
     <section id="video" class="panel">
       <div class="sidebar">
-        <label>Image model (for frames)<input id="video-model" placeholder="runwayml/stable-diffusion-v1-5" /></label>
+        <label>Image model<input id="video-model" placeholder="runwayml/stable-diffusion-v1-5" /></label>
         <label>Die<input id="video-die" type="number" value="0" /></label>
         <button id="video-load">Load image model</button>
-        <label>Prompt<input id="video-prompt" placeholder="frame description" /></label>
-        <button id="video-frame">Generate frame</button>
+        <hr />
+        <label>Frame prompt<input id="video-prompt" placeholder="frame description" /></label>
+        <label>Duration (s)<input id="video-dur" type="number" value="1" step="0.1" /></label>
+        <button id="video-add">Add frame</button>
+        <button id="video-gen">Generate frame</button>
       </div>
       <div class="studio">
         <h2>Mini Video Studio</h2>
         <div class="preview" id="video-preview">Preview</div>
-        <div class="timeline">Timeline (frame-by-frame on one die). Full video models exceed 12 GB.</div>
+        <div id="video-timeline" class="timeline"></div>
+        <div class="edit-row">
+          <label>Frame #<input id="video-frame-id" type="number" value="0" /></label>
+          <button id="video-delete">Delete</button>
+          <button id="video-set-dur">Set duration</button>
+        </div>
         <pre id="video-output"></pre>
+      </div>
+    </section>
+
+    <!-- Fusion -->
+    <section id="fusion" class="panel">
+      <div class="studio">
+        <h2>DieFusionCore</h2>
+        <p>Treat the two independent K80 dies as one logical device.</p>
+        <div class="edit-row">
+          <label>Strategy
+            <select id="fusion-strategy">
+              <option>pipeline</option>
+              <option>layer</option>
+              <option>data</option>
+            </select>
+          </label>
+          <button id="fusion-activate">Activate</button>
+          <button id="fusion-deactivate">Deactivate</button>
+          <button id="fusion-refresh">Refresh</button>
+        </div>
+        <pre id="fusion-status"></pre>
       </div>
     </section>
   </main>
