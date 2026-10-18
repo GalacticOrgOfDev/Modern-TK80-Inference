@@ -1,4 +1,8 @@
-"""Audio studio helpers: tracks, clips, sample rate, Scarlett profiles."""
+"""Audio studio helpers: tracks, clips, sample rate, Scarlett profiles.
+
+Modern-TK80 is a Windows desktop app. Audio I/O is native ASIO
+(PortAudio / Focusrite USB ASIO), not a browser media device.
+"""
 
 from __future__ import annotations
 
@@ -14,9 +18,6 @@ CHANNELS = ("stereo", "left", "right")
 DEFAULT_SAMPLE_RATE = 44100
 COMMON_RATES = (44100, 48000, 88200, 96000, 176400, 192000)
 
-# Focusrite Scarlett 2i2 profiles.
-# Gen 1: up to 96 kHz. Gen 2: up to 192 kHz.
-# Detection is by device label; generation is best-effort from label text.
 SCARLETT_PROFILES = {
     "scarlett_2i2_gen1": {
         "name": "Focusrite Scarlett 2i2 Gen 1",
@@ -46,13 +47,10 @@ def detect_scarlett(label: str) -> Optional[Dict[str, Any]]:
         return None
     if "2i2" not in text:
         return None
-
-    # Gen 2 labels often include "2nd" or "gen 2". Gen 1 is the default 2i2 match.
     if "2nd" in text or "gen 2" in text or "generation 2" in text:
         key = "scarlett_2i2_gen2"
     else:
         key = "scarlett_2i2_gen1"
-
     profile = dict(SCARLETT_PROFILES[key])
     profile["id"] = key
     profile["matched_label"] = label
@@ -150,7 +148,7 @@ def make_track(
         "mute": False,
         "solo": False,
         "armed": False,
-        "device_id": None,
+        "asio_index": None,
         "device_label": None,
         "sample_rate": sample_rate,
         "scarlett": None,
