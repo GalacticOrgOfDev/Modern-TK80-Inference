@@ -71,9 +71,9 @@ Catalog endpoint: `GET /api/vst/presets`.
 Pressing a binary:
 
 - `scripts/install_vst3sdk.sh` clones the official Steinberg VST3 SDK after you accept the license.
-- Export and `POST /api/vst/press` stage a CMake build when the SDK and a C++ toolchain are present.
+- Press searches common SDK paths and PATH for cmake and a C++ compiler.
+- When both are found it runs cmake configure and build automatically.
 - The expected output is a `.vst3` under the source's `build/` folder.
-- Full compile still needs cmake and a compiler on the machine.
 
 ## Recording
 
