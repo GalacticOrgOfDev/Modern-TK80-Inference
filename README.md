@@ -42,7 +42,10 @@ Opens a native window. Packaging notes for a Windows installer are in `app/packa
 - Timeline position per clip
 - True 16-bit peaks for the waveform
 - Play mix and bounce the arrangement to a stereo WAV (respects track mute/solo/gain, clip mute/gain, channel, position, and master bus)
-- MP3 and WAV uploads are accepted and stored as clips
+- MP3, FLAC, OGG, AIFF, M4A, and AAC are accepted and stored; WAV is the only processable format for edits and mix
+- Undo stack for audio edits (`undo` tool, 20 steps)
+- Video formats accepted: MP4, MOV, WebM, AVI, MKV, MPEG (stored; encode later)
+- Custom VFX stubs now carry parameters for later expansion
 
 ### VST Maker
 
@@ -119,6 +122,7 @@ The model (or a direct chat command) can call:
 | `make_3d` | Create a 3D text or model object |
 | `add_animation` | Add an animation clip to a 3D or text object |
 | `export_anim` | Export an animation file (json, gltf, fbx, bvh) |
+| `undo` | Undo the last audio edit |
 
 Chat routes by modality:
 

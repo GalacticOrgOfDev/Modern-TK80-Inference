@@ -21,6 +21,8 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 CHANNELS = ("stereo", "left", "right")
 DEFAULT_SAMPLE_RATE = 44100
 COMMON_RATES = (44100, 48000, 88200, 96000, 176400, 192000)
+AUDIO_FORMATS = (".wav", ".mp3", ".flac", ".ogg", ".aiff", ".m4a", ".aac")
+PROCESSABLE = (".wav",)
 
 SCARLETT_PROFILES = {
     "scarlett_2i2_gen1": {
@@ -83,8 +85,13 @@ def save_upload(filename: str, data: bytes) -> Path:
 
 
 def is_supported_audio(path: Path) -> bool:
-    """True if the file is a WAV or MP3 we can store."""
-    return path.suffix.lower() in (".wav", ".mp3")
+    """True if the file is a format we can store."""
+    return path.suffix.lower() in AUDIO_FORMATS
+
+
+def is_processable(path: Path) -> bool:
+    """True if the file can be edited and mixed (WAV only for now)."""
+    return path.suffix.lower() in PROCESSABLE
 
 
 def clamp_gain(value: float) -> float:

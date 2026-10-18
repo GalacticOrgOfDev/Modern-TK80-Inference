@@ -96,6 +96,8 @@ _fusion: Optional[DieFusionCore] = None
 _chat: List[Dict[str, str]] = []
 _audio_tracks: List[Dict[str, Any]] = []
 _audio_clips: List[Dict[str, Any]] = []
+_undo_stack: List[Dict[str, Any]] = []
+_MAX_UNDO = 20
 _video_frames: List[Dict[str, Any]] = []
 _text_objects: List[Dict[str, Any]] = []
 _objects_3d: List[Dict[str, Any]] = []
@@ -125,6 +127,13 @@ def get_fusion() -> DieFusionCore:
     get_ic()
     assert _fusion is not None
     return _fusion
+
+
+def _push_undo(kind: str, data: Dict[str, Any]) -> None:
+    """Keep a short undo stack for audio edits."""
+    _undo_stack.append({"kind": kind, "data": data})
+    if len(_undo_stack) > _MAX_UNDO:
+        _undo_stack.pop(0)
 
 
 def _ensure_track() -> int:
@@ -398,6 +407,12 @@ def _dispatch_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
                 result["name"] = name
                 return result
         raise HTTPException(status_code=404, detail="object not found")
+
+    if name == "undo":
+        if not _undo_stack:
+            return {"ok": False, "name": name, "note": "nothing to undo"}
+        entry = _undo_stack.pop()
+        return {"ok": True, "name": name, "undone": entry}
 
     raise HTTPException(status_code=400, detail=f"unknown tool: {name}")
 

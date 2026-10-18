@@ -106,6 +106,10 @@ TOOLS: Dict[str, Dict[str, Any]] = {
         "description": "Export an animation file for a 3D or text object.",
         "args": {"target": "3d|text", "id": "int", "format": "json|gltf|fbx|bvh"},
     },
+    "undo": {
+        "description": "Undo the last audio edit.",
+        "args": {},
+    },
 }
 
 # Model emits: tool: name {"arg": value}

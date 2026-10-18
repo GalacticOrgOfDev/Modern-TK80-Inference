@@ -22,7 +22,7 @@ VFX_DIR.mkdir(parents=True, exist_ok=True)
 BUILTIN_VFX = ("none", "fade", "zoom", "pan", "color_grade", "overlay")
 TRANSITIONS = ("none", "cut", "crossfade", "wipe", "dissolve")
 ANIM_FORMATS = ("json", "gltf", "fbx", "bvh")
-SUPPORTED_VIDEO = (".mp4", ".mov", ".webm")
+SUPPORTED_VIDEO = (".mp4", ".mov", ".webm", ".avi", ".mkv", ".mpeg")
 SUPPORTED_MODELS = (".obj", ".gltf", ".glb", ".fbx")
 
 
@@ -182,19 +182,21 @@ def make_clip(
     }
 
 
-def make_vfx(name: str, description: str = "") -> Dict[str, Any]:
-    """Create a custom VFX by name and write a starter stub.
+def make_vfx(name: str, description: str = "", params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Create a custom VFX by name and write a starter stub with parameters.
 
     Returns the effect record. The stub is a short Python process outline
     that later encode or shader stages can expand.
     """
     safe = _safe_name(name)
     desc = description.strip() or f"Custom VFX: {safe}"
+    params = params or {}
     stub = (
         f"# VFX stub: {safe}\n"
         f"# {desc}\n"
+        f"# params: {params}\n"
         f"# process(frame):\n"
-        f"#   return apply_{safe}(frame)\n"
+        f"#   return apply_{safe}(frame, params)\n"
     )
     dest = VFX_DIR / f"{safe}.py"
     if dest.exists():
@@ -206,6 +208,7 @@ def make_vfx(name: str, description: str = "") -> Dict[str, Any]:
     return {
         "name": safe,
         "description": desc,
+        "params": params,
         "path": str(dest),
         "builtin": safe in BUILTIN_VFX,
     }
