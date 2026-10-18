@@ -4,8 +4,6 @@ let audioClips = [];
 let audioTracks = [];
 let selectedClip = 0;
 let selectedTrack = 0;
-let mediaRecorder = null;
-let recordChunks = [];
 let studioRate = 44100;
 let asioEnabled = false;
 let asioBuffer = 128;
@@ -150,6 +148,7 @@ async function refreshTracks() {
     const row = document.createElement("div");
     row.className = "track" + (t.id === selectedTrack ? " selected" : "") + (t.armed ? " armed" : "");
     const scar = t.scarlett ? " · Scarlett" : "";
+    const idx = t.asio_index != null ? ` #${t.asio_index}` : "";
     row.innerHTML = `
       <span class="track-name">#${t.id} ${t.name}</span>
       <select class="ch" data-id="${t.id}">
@@ -159,7 +158,7 @@ async function refreshTracks() {
       </select>
       <button class="arm" data-id="${t.id}">${t.armed ? "Armed" : "Arm"}</button>
       <button class="mute" data-id="${t.id}">${t.mute ? "Muted" : "Mute"}</button>
-      <span class="dev">${t.device_label || "no device"}${scar}</span>
+      <span class="dev">${t.device_label || "no device"}${idx}${scar}</span>
     `;
     row.querySelector(".track-name").onclick = () => { selectedTrack = t.id; refreshTracks(); };
     row.querySelector(".ch").onchange = async (e) => {
@@ -172,12 +171,13 @@ async function refreshTracks() {
     row.querySelector(".arm").onclick = async () => {
       const device = document.getElementById("audio-devices");
       const opt = device.selectedOptions[0];
+      const asio_index = opt && opt.value !== "" ? Number(opt.value) : null;
       try {
         await api(`/api/audio/tracks/${t.id}`, {
           method: "POST",
           body: JSON.stringify({
             armed: !t.armed,
-            device_id: opt ? opt.value : null,
+            asio_index,
             device_label: opt ? opt.textContent : null,
             sample_rate: studioRate,
           }),
@@ -261,21 +261,21 @@ async function detectDevices() {
   const sel = document.getElementById("audio-devices");
   sel.innerHTML = "";
   try {
-    await navigator.mediaDevices.getUserMedia({ audio: true });
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const inputs = devices.filter((d) => d.kind === "audioinput");
-    if (!inputs.length) {
-      sel.innerHTML = "<option value=\"\">No input devices</option>";
+    const data = await api("/api/audio/asio/devices");
+    const devices = data.devices || [];
+    if (!devices.length) {
+      const reason = data.probe && data.probe.reason ? data.probe.reason : "No ASIO inputs";
+      sel.innerHTML = `<option value="">${reason}</option>`;
       return;
     }
-    for (const d of inputs) {
+    for (const d of devices) {
       const opt = document.createElement("option");
-      opt.value = d.deviceId;
-      opt.textContent = d.label || `Input ${d.deviceId.slice(0, 6)}`;
+      opt.value = String(d.index);
+      opt.textContent = `${d.name} (${d.inputs} in)`;
       sel.appendChild(opt);
     }
   } catch (e) {
-    sel.innerHTML = "<option value=\"\">Permission denied</option>";
+    sel.innerHTML = `<option value="">${e.message}</option>`;
   }
 }
 
@@ -468,9 +468,6 @@ async function stopRecording() {
     }
     return;
   }
-  if (mediaRecorder && mediaRecorder.state === "recording") {
-    mediaRecorder.stop();
-  }
   document.getElementById("audio-transport-status").textContent = "Stopped";
 }
 
@@ -483,60 +480,25 @@ document.getElementById("audio-stop").onclick = async () => {
 document.getElementById("audio-record").onclick = async () => {
   const track = audioTracks.find((t) => t.id === selectedTrack && t.armed);
   if (!track) {
-    alert("Arm a track and select a device first");
+    alert("Arm a track and select an ASIO device first");
     return;
   }
-
-  // Native ASIO path when enabled.
-  if (asioEnabled) {
-    try {
-      const info = await api("/api/audio/asio/start", {
-        method: "POST",
-        body: JSON.stringify({ track_id: track.id }),
-      });
-      asioRecording = true;
-      const scar = track.scarlett ? ` [${track.scarlett.name}]` : "";
-      document.getElementById("audio-transport-status").textContent =
-        `ASIO recording on track ${track.id} (${info.channels}ch) @ ${info.sample_rate} Hz / ${info.buffer}${scar}`;
-    } catch (e) {
-      alert("ASIO start failed: " + e.message);
-    }
+  if (!asioEnabled) {
+    alert("Enable ASIO first. Modern-TK80 records through the native ASIO path.");
     return;
   }
-
-  // Browser WASAPI fallback.
   try {
-    const audio = {
-      sampleRate: { ideal: studioRate },
-      channelCount: { ideal: track.channel === "stereo" ? 2 : 1 },
-    };
-    if (track.device_id) audio.deviceId = { exact: track.device_id };
-    const stream = await navigator.mediaDevices.getUserMedia({ audio });
-    recordChunks = [];
-    mediaRecorder = new MediaRecorder(stream);
-    mediaRecorder.ondataavailable = (e) => { if (e.data.size) recordChunks.push(e.data); };
-    mediaRecorder.onstop = async () => {
-      stream.getTracks().forEach((t) => t.stop());
-      const blob = new Blob(recordChunks, { type: "audio/webm" });
-      const fd = new FormData();
-      fd.append("file", blob, `rec_track${track.id}.webm`);
-      fd.append("track_id", String(track.id));
-      try {
-        const clip = await api("/api/audio/record", { method: "POST", body: fd });
-        selectedClip = clip.id;
-        await refreshClips();
-        document.getElementById("audio-transport-status").textContent =
-          `Recorded to track ${track.id} @ ${studioRate} Hz`;
-      } catch (e) {
-        alert(e.message);
-      }
-    };
-    mediaRecorder.start();
+    const info = await api("/api/audio/asio/start", {
+      method: "POST",
+      body: JSON.stringify({ track_id: track.id }),
+    });
+    asioRecording = true;
     const scar = track.scarlett ? ` [${track.scarlett.name}]` : "";
+    const dev = info.device ? info.device.name : "device";
     document.getElementById("audio-transport-status").textContent =
-      `Recording on track ${track.id} (${track.channel}) @ ${studioRate} Hz${scar}`;
+      `ASIO recording ${dev} on track ${track.id} (${info.channels}ch) @ ${info.sample_rate} Hz / ${info.buffer}${scar}`;
   } catch (e) {
-    alert("Could not start recording: " + e.message);
+    alert("ASIO start failed: " + e.message);
   }
 };
 
