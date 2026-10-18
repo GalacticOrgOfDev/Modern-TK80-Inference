@@ -1,14 +1,13 @@
 """Backends for Modern-TK80-Inference.
 
 Provides thin wrappers around llama-cpp-python (CUDA, sm_37) and PyTorch.
-Inspired by PoliSim's core.inference architecture (engine + pool) but
-simplified and CUDA-focused for the dual-GPU Tesla K80.
+Simplified and CUDA-focused for the dual-GPU Tesla K80.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 log = logging.getLogger("tk80.backends")
 
