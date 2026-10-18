@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 VST_DIR = Path(os.environ.get("TK80_VST", "uploads/vst"))
 VST_DIR.mkdir(parents=True, exist_ok=True)

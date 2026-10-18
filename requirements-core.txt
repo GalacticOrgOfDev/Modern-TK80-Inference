@@ -1,0 +1,13 @@
+# Core app dependencies for Modern-TK80.
+# Install this first so the desktop app launches.
+# Torch, llama-cpp, and the optional modality packages are separate
+# because they need a CUDA-capable install and may not exist for every
+# Python version.
+fastapi
+uvicorn
+python-multipart
+pydantic
+pyyaml
+numpy
+"""
+file_path="/workspace/artifacts/Modern-TK80-Inference/requirements-core.txt"

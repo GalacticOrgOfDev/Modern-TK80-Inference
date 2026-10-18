@@ -13,9 +13,9 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-from .vst import make_vst, EFFECT_PRESETS
+from .vst import make_vst
 from .vst_press import press_vst
 
 UI_DIR = Path(os.environ.get("TK80_VST_UI", "uploads/vst_ui"))

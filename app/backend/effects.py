@@ -6,7 +6,6 @@ All operate on 16-bit PCM and return a new WAV path.
 
 from __future__ import annotations
 
-import math
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 

@@ -55,7 +55,6 @@ from .export import export_animation, export_timeline as export_full_timeline
 from .video import (
     ANIM_FORMATS,
     BUILTIN_VFX,
-    TRANSITIONS,
     add_animation,
     add_text_vfx,
     apply_vfx,

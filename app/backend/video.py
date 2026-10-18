@@ -9,6 +9,10 @@ expanded later.
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 from .formats import ANIM_FORMATS, MODEL_STORE, VIDEO_STORE, is_model, is_video
 
 UPLOAD_DIR = Path(os.environ.get("TK80_VIDEO", "uploads/video"))
@@ -18,7 +22,6 @@ VFX_DIR.mkdir(parents=True, exist_ok=True)
 
 BUILTIN_VFX = ("none", "fade", "zoom", "pan", "color_grade", "overlay")
 TRANSITIONS = ("none", "cut", "crossfade", "wipe", "dissolve")
-ANIM_FORMATS = ANIM_FORMATS
 SUPPORTED_VIDEO = VIDEO_STORE
 SUPPORTED_MODELS = MODEL_STORE
 
@@ -48,6 +51,9 @@ def split_audio(path: Path) -> Dict[str, Any]:
         capture_output=True,
     )
     return {"video": str(path), "audio": str(audio_path)}
+
+
+def is_supported_model(path: Path) -> bool:
     """True if the file is a 3D model we can store."""
     return is_model(path)
 
