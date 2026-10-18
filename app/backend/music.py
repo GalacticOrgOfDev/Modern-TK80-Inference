@@ -87,7 +87,6 @@ def detect_bpm(path: Path) -> Dict[str, Any]:
     if len(raw) < 4:
         return {"bpm": DEFAULT_BPM, "confidence": 0.0}
 
-    # Downsample energy in ~10 ms windows.
     window = max(1, rate // 100)
     energies: List[float] = []
     for i in range(0, len(raw) - 1, window * 2):
@@ -113,7 +112,6 @@ def detect_bpm(path: Path) -> Dict[str, Any]:
         return {"bpm": DEFAULT_BPM, "confidence": 0.1}
 
     median = sorted(gaps)[len(gaps) // 2]
-    # 10 ms windows -> 100 windows per second.
     bpm = 60.0 * 100.0 / max(1, median)
     bpm = max(40.0, min(220.0, bpm))
     confidence = min(1.0, len(gaps) / 16.0)
@@ -131,9 +129,13 @@ def render_pattern(
     bars: int = 1,
 ) -> bytes:
     """Render a step pattern to mono PCM."""
-    steps = max(len(v) for v in pattern.values()) if pattern else STEPS
-    step_samples = int(rate * 60.0 / bpm / 4.0)  # 16th notes
-    total = step_samples * steps * bars
+    if not pattern:
+        return b""
+    steps = max((len(v) for v in pattern.values()), default=STEPS)
+    if steps < 1:
+        steps = STEPS
+    step_samples = max(1, int(rate * 60.0 / max(1.0, bpm) / 4.0))
+    total = step_samples * steps * max(1, bars)
     mix = [0.0] * total
 
     for name, steps_on in pattern.items():
@@ -141,7 +143,7 @@ def render_pattern(
             continue
         hit = render_instrument(name, 0.2, rate)
         hit_n = len(hit) // 2
-        for bar in range(bars):
+        for bar in range(max(1, bars)):
             for s, on in enumerate(steps_on):
                 if not on:
                     continue
