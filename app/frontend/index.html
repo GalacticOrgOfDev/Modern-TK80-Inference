@@ -57,6 +57,19 @@
             <option value="192000">192000</option>
           </select>
         </label>
+        <label class="check">
+          <input type="checkbox" id="asio-enabled" /> ASIO (Windows)
+        </label>
+        <label>ASIO buffer
+          <select id="asio-buffer">
+            <option value="64">64</option>
+            <option value="128" selected>128</option>
+            <option value="256">256</option>
+            <option value="512">512</option>
+            <option value="1024">1024</option>
+          </select>
+        </label>
+        <div id="asio-status" class="badge">ASIO off</div>
         <div id="scarlett-badge" class="badge">No Scarlett detected</div>
         <hr />
         <label>Voice model<input id="audio-model" placeholder="openai/whisper-small" /></label>
