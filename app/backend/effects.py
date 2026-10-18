@@ -244,8 +244,10 @@ def apply_effect(
             mix=float(params.get("mix", 0.5)),
         )
     elif kind == "eq":
-        raw = params.get("gains") or params.get("bands") or [1.0] * EQ_BANDS
-        gains_list = [float(g) for g in list(raw)]
+        raw_gains = params.get("gains") or params.get("bands") or [1.0] * EQ_BANDS
+        if not isinstance(raw_gains, list):
+            raw_gains = [1.0] * EQ_BANDS
+        gains_list = [float(g) for g in raw_gains]
         samples = eq_30(samples, rate, channels, gains_list)
     elif kind == "reverb":
         samples = reverb_simple(

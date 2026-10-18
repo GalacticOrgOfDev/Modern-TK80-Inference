@@ -73,7 +73,7 @@ class PyTorchBackend:
         self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name_or_path,
-            torch_dtype=torch.float32,  # K80 prefers FP32; no native Tensor Cores
+            torch_dtype=getattr(torch, "float32"),  # K80 prefers FP32; no native Tensor Cores
             device_map=device,
         )
 

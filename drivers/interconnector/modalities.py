@@ -45,7 +45,7 @@ class ImageBackend:
         log.info("Loading image model on %s: %s", device, model_name_or_path)
         self.pipe = StableDiffusionPipeline.from_pretrained(
             model_name_or_path,
-            torch_dtype=torch.float32,
+            torch_dtype=getattr(torch, "float32"),
             safety_checker=None,
         ).to(device)
 
@@ -71,7 +71,7 @@ class VoiceBackend:
             "automatic-speech-recognition",
             model=model_name_or_path,
             device=dev_idx,
-            torch_dtype=torch.float32,
+            torch_dtype=getattr(torch, "float32"),
         )
 
     def generate(self, audio_path: str, **kwargs: Any) -> str:

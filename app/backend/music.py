@@ -154,8 +154,8 @@ def render_pattern(
                     mix[start + i] += float(struct.unpack_from("<h", hit, i * 2)[0]) / 32767.0
 
     out = bytearray()
-    for s in mix:
-        sample = int(max(-1.0, min(1.0, s * 0.4)) * 32767)
+    for sample_f in mix:
+        sample = int(max(-1.0, min(1.0, sample_f * 0.4)) * 32767)
         out += struct.pack("<h", sample)
     return bytes(out)
 
