@@ -700,6 +700,20 @@ document.getElementById("fx-compress").onclick = () =>
 document.getElementById("fx-morph").onclick = () =>
   applyEffect("morph", { points: [[0, 0.2], [0.25, 1], [0.5, 0.4], [0.75, 1], [1, 0.2]] });
 
+document.getElementById("vst-make").onclick = async () => {
+  const name = document.getElementById("vst-name").value.trim() || "MyPlugin";
+  const plugin_type = document.getElementById("vst-type").value;
+  try {
+    const result = await api("/api/audio/vst", {
+      method: "POST",
+      body: JSON.stringify({ name, plugin_type, channels: 2 }),
+    });
+    document.getElementById("audio-transport-status").textContent =
+      `VST skeleton: ${result.path}`;
+    document.getElementById("audio-output").textContent = JSON.stringify(result, null, 2);
+  } catch (e) { alert(e.message); }
+};
+
 document.getElementById("audio-play").onclick = () => {
   const clip = audioClips.find((c) => c.id === selectedClip);
   if (!clip || !clip.path) {
@@ -862,6 +876,12 @@ document.getElementById("video-set-dur").onclick = async () => {
     }),
   });
   await refreshFrames();
+};
+document.getElementById("video-export").onclick = async () => {
+  try {
+    const data = await api("/api/video/export", { method: "POST" });
+    document.getElementById("video-output").textContent = JSON.stringify(data, null, 2);
+  } catch (e) { alert(e.message); }
 };
 
 // Fusion

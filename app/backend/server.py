@@ -40,6 +40,7 @@ from .audio import (
     save_upload,
 )
 from .effects import apply_effect
+from .vst import make_vst, PLUGIN_TYPES
 from .music import (
     DEFAULT_BPM,
     INSTRUMENTS,
@@ -292,6 +293,13 @@ class ToolRequest(BaseModel):
 
 class BounceRequest(BaseModel):
     name: str = "mix.wav"
+
+
+class VstRequest(BaseModel):
+    name: str
+    plugin_type: str = "instrument"
+    channels: int = 2
+    params: Dict[str, Any] = {}
 
 
 class MasterRequest(BaseModel):
@@ -607,6 +615,18 @@ def bounce_audio(body: BounceRequest) -> Dict[str, Any]:
     return clip
 
 
+@app.post("/api/audio/vst")
+def create_vst(body: VstRequest) -> Dict[str, Any]:
+    """Generate a VST3 skeleton for the mini DAW."""
+    if body.plugin_type not in PLUGIN_TYPES:
+        raise HTTPException(status_code=400, detail=f"plugin_type must be one of {PLUGIN_TYPES}")
+    try:
+        result = make_vst(body.name, body.plugin_type, body.channels, body.params)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return result
+
+
 @app.get("/api/music/state")
 def music_state() -> Dict[str, Any]:
     return {
@@ -849,6 +869,19 @@ def edit_audio(body: AudioEditRequest) -> Dict[str, Any]:
 @app.get("/api/video/frames")
 def list_frames() -> Dict[str, Any]:
     return {"frames": _video_frames}
+
+
+@app.post("/api/video/export")
+def export_timeline() -> Dict[str, Any]:
+    """Stage a simple timeline export (frame list as JSON for now)."""
+    if not _video_frames:
+        raise HTTPException(status_code=400, detail="no frames to export")
+    export = {
+        "frames": _video_frames,
+        "total_duration": sum(f.get("duration", 1.0) for f in _video_frames),
+        "note": "Timeline staged. Full video encode (ffmpeg) comes later.",
+    }
+    return export
 
 
 @app.post("/api/video/edit")

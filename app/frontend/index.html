@@ -108,6 +108,16 @@
         </label>
         <button id="loop-gen">Generate loop</button>
         <hr />
+        <h3>VST Maker</h3>
+        <label>Plugin name<input id="vst-name" placeholder="MyPlugin" /></label>
+        <label>Type
+          <select id="vst-type">
+            <option value="instrument">Instrument</option>
+            <option value="effect">Effect</option>
+          </select>
+        </label>
+        <button id="vst-make">Generate VST skeleton</button>
+        <hr />
         <label>Voice model<input id="audio-model" placeholder="openai/whisper-small" /></label>
         <label>Die<input id="audio-die" type="number" value="0" /></label>
         <button id="audio-load">Load voice model</button>
@@ -182,6 +192,7 @@
         <label>Duration (s)<input id="video-dur" type="number" value="1" step="0.1" /></label>
         <button id="video-add">Add frame</button>
         <button id="video-gen">Generate frame</button>
+        <button id="video-export">Export timeline</button>
       </div>
       <div class="studio">
         <h2>Mini Video Studio</h2>

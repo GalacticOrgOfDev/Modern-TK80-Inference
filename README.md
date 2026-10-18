@@ -39,9 +39,17 @@ Opens a native window. Packaging notes for a Windows installer are in `app/packa
 - Clip edits rewrite the WAV: trim, reverse, gain, silence
 - Per-clip level fader and mute toggle (inline on the clip list)
 - Per-clip effect channels: normalize, compressor, morphable envelope (time/gain points reshape the wave)
+- VST maker: generate simple VST3 skeleton (instrument or effect) as C++/JUCE starter source
 - Timeline position per clip
 - True 16-bit peaks for the waveform
 - Play mix and bounce the arrangement to a stereo WAV (respects track mute/solo/gain, clip mute/gain, channel, position, and master bus)
+
+## Mini Video Studio (staged)
+
+- Frame timeline with prompt and duration
+- Load image model and generate frames
+- Export timeline (JSON stage; full encode later)
+- Ready for further expansion once the DAW is locked
 
 ## Music tools
 
