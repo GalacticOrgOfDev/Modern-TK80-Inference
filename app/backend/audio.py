@@ -378,14 +378,14 @@ def mix_arrangement(
             if idx >= total:
                 break
             base = i * frame_size
-            l = samples[base] / 32767.0 * gain
-            r = samples[base + 1] / 32767.0 * gain if frame_size > 1 else l
+            left_s = samples[base] / 32767.0 * gain
+            right_s = samples[base + 1] / 32767.0 * gain if frame_size > 1 else left_s
             if channel == "left":
-                r = 0.0
+                right_s = 0.0
             elif channel == "right":
-                l = 0.0
-            left[idx] += l
-            right[idx] += r
+                left_s = 0.0
+            left[idx] += left_s
+            right[idx] += right_s
 
     # Master gain, then optional compressor on the sum.
     comp = master.get("compressor") or {}
@@ -396,13 +396,13 @@ def mix_arrangement(
 
     out = bytearray()
     for i in range(total):
-        l = left[i] * master_gain
-        r = right[i] * master_gain
+        left_s = left[i] * master_gain
+        right_s = right[i] * master_gain
         if use_comp:
-            l = _compress_sample(l, thresh, ratio) * makeup
-            r = _compress_sample(r, thresh, ratio) * makeup
-        ls = int(max(-1.0, min(1.0, l)) * 32767)
-        rs = int(max(-1.0, min(1.0, r)) * 32767)
+            left_s = _compress_sample(left_s, thresh, ratio) * makeup
+            right_s = _compress_sample(right_s, thresh, ratio) * makeup
+        ls = int(max(-1.0, min(1.0, left_s)) * 32767)
+        rs = int(max(-1.0, min(1.0, right_s)) * 32767)
         out += struct.pack("<hh", ls, rs)
 
     dest = UPLOAD_DIR / out_name

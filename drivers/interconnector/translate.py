@@ -6,7 +6,7 @@ then converts them into a plain prompt for the backend.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Union
 
 
 def messages_to_prompt(messages: List[Dict[str, str]], system_prefix: str = "") -> str:

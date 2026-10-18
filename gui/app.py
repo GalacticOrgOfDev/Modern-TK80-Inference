@@ -176,8 +176,8 @@ class TK80App:
                 )
                 self.root.after(0, self.refresh_status)
                 self.root.after(0, lambda: self._set_status("Model loaded"))
-            except Exception as e:
-                self.root.after(0, lambda: messagebox.showerror("Load failed", str(e)))
+            except Exception as exc:
+                self.root.after(0, lambda err=exc: messagebox.showerror("Load failed", str(err)))
                 self.root.after(0, lambda: self._set_status("Load failed"))
 
         threading.Thread(target=work, daemon=True).start()
@@ -229,8 +229,8 @@ class TK80App:
                 self.root.after(0, lambda: self._show_result(text))
                 self.root.after(0, lambda: self._set_status("Done"))
                 self.root.after(0, self.refresh_status)
-            except Exception as e:
-                self.root.after(0, lambda: messagebox.showerror("Generate failed", str(e)))
+            except Exception as exc:
+                self.root.after(0, lambda err=exc: messagebox.showerror("Generate failed", str(err)))
                 self.root.after(0, lambda: self._set_status("Generate failed"))
 
         threading.Thread(target=work, daemon=True).start()
