@@ -9,13 +9,14 @@ Hardware notes:
 - Compute capability: 3.7 (sm_37)
 - Dual independent GPUs (12 GB GDDR5 each, not unified)
 - Last supported CUDA Toolkit: 11.8
-- No Tensor Cores; FP32 preferred; limited FP16 via software
+- No Tensor Cores; FP32 preferred
 
-This module provides:
-- K80 device discovery and validation
-- Basic multi-device awareness
-- Skeleton for model loading and inference
-- Extensible hooks for custom CUDA kernels or llama.cpp / PyTorch backends
+Backends:
+- llama-cpp-python (CUDA build targeting sm_37) for GGUF models
+- PyTorch (cu118) for Hugging Face models
+
+Inspired by PoliSim's core.inference patterns (engine + device selection)
+but adapted for CUDA / dual K80 dies.
 """
 
 from __future__ import annotations
@@ -25,7 +26,9 @@ import logging
 import os
 import sys
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Any, List, Optional
+
+from tk80.backends import create_backend
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -63,10 +66,7 @@ class K80Device:
 # Device discovery
 # ---------------------------------------------------------------------------
 def discover_devices() -> List[K80Device]:
-    """
-    Discover CUDA devices. Prefers PyTorch if available; falls back to a
-    warning if the environment is not yet set up.
-    """
+    """Discover CUDA devices via PyTorch."""
     devices: List[K80Device] = []
 
     try:
@@ -90,10 +90,7 @@ def discover_devices() -> List[K80Device]:
                 )
             )
     except ImportError:
-        log.warning(
-            "PyTorch not installed. Install a CUDA 11.8-compatible build "
-            "(e.g. torch with cu118) to enable device discovery."
-        )
+        log.warning("PyTorch not installed. Device discovery limited.")
 
     return devices
 
@@ -104,7 +101,6 @@ def validate_k80(devices: List[K80Device]) -> bool:
     if not k80s:
         log.warning("No Tesla K80 / compute capability 3.7 devices detected.")
         if devices:
-            log.info("Detected devices:")
             for d in devices:
                 log.info("  %s", d)
         return False
@@ -116,42 +112,44 @@ def validate_k80(devices: List[K80Device]) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Engine skeleton
+# Engine
 # ---------------------------------------------------------------------------
 class TK80InferenceEngine:
-    """
-    Core inference engine for Tesla K80.
-
-    Currently a skeleton. Extend with:
-    - llama.cpp bindings (compiled for sm_37)
-    - PyTorch models (older versions compatible with CUDA 11.8)
-    - Custom CUDA kernels targeting sm_37
-    - Dual-GPU orchestration (independent or layer-split)
-    """
+    """Inference engine for Tesla K80 with llama.cpp and PyTorch backends."""
 
     def __init__(self, devices: List[K80Device], device_ids: Optional[List[int]] = None):
         self.devices = devices
         self.active_ids = device_ids if device_ids is not None else [d.index for d in devices]
+        self.backend: Any = None
         log.info("Engine initialized with device IDs: %s", self.active_ids)
 
-    def load_model(self, model_path: str) -> None:
-        """Placeholder for model loading."""
-        if not os.path.exists(model_path):
+    def load_model(self, model_path: str, backend: str = "llama", main_gpu: int = 0) -> None:
+        """Load a model using the requested backend."""
+        if backend == "llama" and not os.path.exists(model_path):
             raise FileNotFoundError(f"Model not found: {model_path}")
-        log.info("Model load requested: %s (stub — implement backend)", model_path)
 
-    def infer(self, prompt: str, max_tokens: int = 128) -> str:
-        """Placeholder inference."""
-        log.info("Inference requested (stub): prompt length=%d, max_tokens=%d", len(prompt), max_tokens)
-        return "[TK80InferenceEngine stub] Implement model backend to produce output."
+        kwargs = {}
+        if backend == "llama":
+            kwargs["main_gpu"] = main_gpu
+            kwargs["n_gpu_layers"] = -1
+        elif backend == "pytorch":
+            kwargs["device"] = f"cuda:{main_gpu}"
+
+        self.backend = create_backend(backend, model_path, **kwargs)
+        log.info("Model loaded with %s backend", backend)
+
+    def infer(self, prompt: str, max_tokens: int = 128, temperature: float = 0.7) -> str:
+        if self.backend is None:
+            return "[no model loaded]"
+        return self.backend.generate(prompt, max_tokens=max_tokens, temperature=temperature)
 
     def status(self) -> None:
-        """Print current engine status."""
         log.info("--- TK80 Inference Engine Status ---")
         log.info("Active devices: %s", self.active_ids)
         for d in self.devices:
             if d.index in self.active_ids:
                 log.info("  %s", d)
+        log.info("Backend loaded: %s", self.backend is not None)
 
 
 # ---------------------------------------------------------------------------
@@ -161,35 +159,14 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Modern-TK80-Inference — Tesla K80 inference engine"
     )
-    parser.add_argument(
-        "--devices",
-        type=str,
-        default=None,
-        help="Comma-separated CUDA device indices to use (default: all detected)",
-    )
-    parser.add_argument(
-        "--model",
-        type=str,
-        default=None,
-        help="Path to model file (optional; engine can start without a model)",
-    )
-    parser.add_argument(
-        "--prompt",
-        type=str,
-        default=None,
-        help="Run a single inference prompt and exit",
-    )
-    parser.add_argument(
-        "--max-tokens",
-        type=int,
-        default=128,
-        help="Maximum tokens to generate (default: 128)",
-    )
-    parser.add_argument(
-        "--status",
-        action="store_true",
-        help="Print device and engine status and exit",
-    )
+    parser.add_argument("--devices", type=str, default=None, help="Comma-separated CUDA device indices")
+    parser.add_argument("--model", type=str, default=None, help="Path to GGUF or Hugging Face model")
+    parser.add_argument("--backend", type=str, default="llama", choices=["llama", "pytorch"], help="Backend to use")
+    parser.add_argument("--main-gpu", type=int, default=0, help="Primary GPU index for the model")
+    parser.add_argument("--prompt", type=str, default=None, help="Prompt to run")
+    parser.add_argument("--max-tokens", type=int, default=128)
+    parser.add_argument("--temperature", type=float, default=0.7)
+    parser.add_argument("--status", action="store_true", help="Print status and exit")
     return parser.parse_args()
 
 
@@ -201,43 +178,39 @@ def main() -> int:
 
     devices = discover_devices()
     if not devices:
-        log.error("No CUDA devices found. Install CUDA 11.8 and a compatible PyTorch build.")
+        log.error("No CUDA devices found. Install CUDA 11.8 + PyTorch cu118.")
         return 1
 
-    has_k80 = validate_k80(devices)
-    if not has_k80:
-        log.warning("Continuing without confirmed K80 hardware (useful for development).")
+    validate_k80(devices)
 
-    # Select devices
     selected: Optional[List[int]] = None
     if args.devices:
         try:
             selected = [int(x.strip()) for x in args.devices.split(",") if x.strip()]
         except ValueError:
-            log.error("Invalid --devices value. Use comma-separated integers.")
+            log.error("Invalid --devices value.")
             return 1
 
     engine = TK80InferenceEngine(devices, selected)
 
-    if args.status or not args.model:
+    if args.status and not args.model:
         engine.status()
-        if args.status:
-            return 0
+        return 0
 
     if args.model:
         try:
-            engine.load_model(args.model)
-        except FileNotFoundError as e:
-            log.error(str(e))
+            engine.load_model(args.model, backend=args.backend, main_gpu=args.main_gpu)
+        except Exception as e:
+            log.error("Failed to load model: %s", e)
             return 1
 
     if args.prompt:
-        result = engine.infer(args.prompt, max_tokens=args.max_tokens)
+        result = engine.infer(args.prompt, max_tokens=args.max_tokens, temperature=args.temperature)
         print(result)
         return 0
 
-    log.info("Engine ready. No prompt supplied — idle mode.")
-    log.info("Use --prompt '...' to run inference once a backend is implemented.")
+    engine.status()
+    log.info("Engine ready. Use --prompt to run inference.")
     return 0
 
 
