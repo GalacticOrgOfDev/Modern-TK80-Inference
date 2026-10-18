@@ -3,7 +3,7 @@
 Supported now (single-die):
 - image: Stable Diffusion 1.5-class via diffusers
 - voice: Whisper-small-class ASR
-- agent: simple multi-step loop on top of an LLM backend
+- agent: tool-calling loop on top of an LLM backend
 
 Video is acknowledged but left as a constrained placeholder; most video models
 exceed a single 12 GB die.
@@ -12,9 +12,11 @@ exceed a single 12 GB die.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 log = logging.getLogger("tk80.interconnector.modalities")
+
+ToolRunner = Callable[[str, Dict[str, Any]], Dict[str, Any]]
 
 
 def _device_index(device: str) -> int:
@@ -65,7 +67,6 @@ class VoiceBackend:
         self.device = device
         dev_idx = _device_index(device)
         log.info("Loading voice model on %s (index %d): %s", device, dev_idx, model_name_or_path)
-        # transformers pipeline expects an int device index in most versions
         self.pipe = pipeline(
             "automatic-speech-recognition",
             model=model_name_or_path,
@@ -81,34 +82,86 @@ class VoiceBackend:
 
 
 class AgentBackend:
-    """Simple agentic loop over an already-loaded LLM backend."""
+    """Tool-calling loop over an already-loaded LLM backend.
+
+    The model emits `tool: <name> {json}` or `Final: <answer>`.
+    A tool_runner callback executes the call and the result is fed back.
+    """
 
     def __init__(self, llm_backend: Any, max_steps: int = 4):
         self.llm = llm_backend
         self.max_steps = max_steps
 
-    def run(self, goal: str, tools: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
-        """Very small ReAct-style loop. Tools are described in the prompt."""
+    def run(
+        self,
+        goal: str,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_runner: Optional[ToolRunner] = None,
+        tool_prompt: str = "",
+    ) -> Dict[str, Any]:
         if not goal:
             raise ValueError("agent run requires a goal")
         tools = tools or []
-        tool_desc = "\n".join(
+        tool_desc = tool_prompt or "\n".join(
             f"- {t.get('name', 'unnamed')}: {t.get('description', '')}" for t in tools
         )
         history = [f"Goal: {goal}"]
         if tool_desc:
-            history.append(f"Available tools:\n{tool_desc}")
+            history.append(tool_desc)
 
-        steps: List[str] = []
+        steps: List[Dict[str, Any]] = []
+        final = ""
         for _ in range(self.max_steps):
-            prompt = "\n".join(history) + "\n\nNext action (Thought / Action / or Final):"
+            prompt = "\n".join(history) + "\n\nNext (tool: name {json} or Final: answer):"
             reply = self.llm.generate(prompt, max_tokens=256, temperature=0.3)
-            steps.append(reply)
+            step: Dict[str, Any] = {"reply": reply}
+            steps.append(step)
             history.append(reply)
+
             if "Final:" in reply or "final:" in reply.lower():
+                final = reply
                 break
 
-        return {"goal": goal, "steps": steps, "result": steps[-1] if steps else ""}
+            call = _extract_call(reply)
+            if call and tool_runner is not None:
+                try:
+                    result = tool_runner(call["name"], call.get("args", {}))
+                except Exception as e:  # pragma: no cover
+                    result = {"error": str(e)}
+                step["tool"] = call
+                step["result"] = result
+                history.append(f"Tool result: {result}")
+            elif call is None:
+                # No tool and no Final: stop to avoid spinning.
+                final = reply
+                break
+
+        return {
+            "goal": goal,
+            "steps": steps,
+            "result": final or (steps[-1]["reply"] if steps else ""),
+        }
+
+
+def _extract_call(text: str) -> Optional[Dict[str, Any]]:
+    """Local extractor so the interconnector does not import the app package."""
+    import json
+    import re
+
+    match = re.search(r"tool\s*:\s*([a-z_]+)\s*(\{.*\})?", text, re.IGNORECASE | re.DOTALL)
+    if not match:
+        return None
+    name = match.group(1).strip().lower()
+    raw = match.group(2)
+    args: Dict[str, Any] = {}
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                args = parsed
+        except Exception:
+            args = {}
+    return {"name": name, "args": args}
 
 
 class VideoBackend:
