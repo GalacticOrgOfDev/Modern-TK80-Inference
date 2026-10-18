@@ -46,6 +46,16 @@ main { flex: 1; display: flex; overflow: hidden; }
 .msg { margin: 8px 0; padding: 8px; border-radius: 4px; }
 .msg.user { background: #1a2a1a; }
 .msg.assistant { background: #1a1a2a; }
+.tool-indicator {
+  margin-top: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 4px;
+  background: #1a2a22;
+  border: 1px solid #0a7;
+  color: #9f9;
+}
+.tool-indicator[hidden] { display: none; }
 .preview {
   height: 200px; background: #000; border: 1px solid #333;
   display: flex; align-items: center; justify-content: center; color: #666; margin-bottom: 12px;
