@@ -49,6 +49,7 @@ from .vst_ui import (
     default_project,
     export_project,
 )
+from .export import export_animation, export_timeline as export_full_timeline
 from .video import (
     ANIM_FORMATS,
     BUILTIN_VFX,
@@ -56,7 +57,6 @@ from .video import (
     add_animation,
     add_text_vfx,
     apply_vfx,
-    export_animation,
     export_manifest,
     is_supported_video,
     make_3d,
@@ -1168,7 +1168,7 @@ def export_timeline(name: str = "timeline") -> Dict[str, Any]:
     """Export the movie timeline as a JSON manifest."""
     if not _video_frames:
         raise HTTPException(status_code=400, detail="no frames to export")
-    return export_manifest(_video_frames, _text_objects, name)
+    return export_full_timeline(_video_frames, _text_objects, _objects_3d, name)
 
 
 @app.post("/api/video/edit")

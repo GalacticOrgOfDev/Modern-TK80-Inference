@@ -88,7 +88,9 @@ Models can add parameters and objects via tools. Users drag objects onto the can
 - Animation clips on 3D and text objects (`add_animation`)
 - Animation export formats: json, gltf, fbx, bvh (`export_anim`)
 - Audio fades: linear fade-in and fade-out helper on clips
-- Export timeline as a JSON manifest that includes clips, text objects, 3D objects, and transitions (full encode later)
+- Export timeline as a full JSON manifest (clips, text, 3D objects, transitions)
+- Dedicated exporter module stages animation formats (json native; gltf/fbx/bvh staged) and records audio bounces
+- Full mp4 encode comes later
 
 ## Music and VST tools
 
