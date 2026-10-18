@@ -6,7 +6,16 @@ Modern NVIDIA Tesla K80 inference engine and drivers.
 
 This repository is dedicated to developing a modern inference engine and supporting drivers optimized for the NVIDIA Tesla K80 GPU.
 
-The Tesla K80 is a dual-GPU Kepler-generation accelerator. This project aims to bring contemporary inference capabilities, modern driver support, and efficient model execution to this hardware.
+The Tesla K80 is a dual-GPU Kepler-generation accelerator (compute capability 3.7 / `sm_37`). This project aims to bring contemporary inference capabilities, modern driver support, and efficient model execution to this hardware.
+
+## CUDA Support
+
+The last CUDA Toolkit that supports the Tesla K80 is **CUDA 11.8**.
+
+See the [`cuda/`](./cuda/) directory for:
+- Official documentation and architecture matrix details
+- Direct download links
+- Install helper script
 
 ## Goals
 
