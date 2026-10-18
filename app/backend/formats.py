@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Dict, List
 
 AUDIO_STORE = (".wav", ".mp3", ".flac", ".ogg", ".aiff", ".m4a", ".aac", ".wma")
-AUDIO_PROCESS = (".wav",)
+AUDIO_PROCESS = AUDIO_STORE
 VIDEO_STORE = (".mp4", ".mov", ".webm", ".avi", ".mkv", ".mpeg", ".wmv")
 MODEL_STORE = (".obj", ".gltf", ".glb", ".fbx")
 ANIM_FORMATS = ("json", "gltf", "fbx", "bvh")

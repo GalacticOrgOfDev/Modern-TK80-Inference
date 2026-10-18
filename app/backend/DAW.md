@@ -20,8 +20,9 @@ The Modern-TK80 mini DAW is a native Windows desktop studio. Audio I/O is ASIO (
 
 Shared catalog in `formats.py`. Endpoint: `GET /api/formats`.
 
-- Audio store: WAV, MP3, FLAC, OGG, AIFF, M4A, AAC, WMA
-- Audio process: WAV only
+- Audio store and process: WAV, MP3, FLAC, OGG, AIFF, M4A, AAC, WMA
+- Non-WAV files are converted to 16-bit WAV via ffmpeg before edit or mix
+- ffmpeg is required for non-WAV processing
 - Video store: MP4, MOV, WebM, AVI, MKV, MPEG, WMV
 - Model store: OBJ, glTF, GLB, FBX
 - Animation: json, gltf, fbx, bvh

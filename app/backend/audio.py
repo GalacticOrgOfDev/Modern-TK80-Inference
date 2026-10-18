@@ -9,6 +9,14 @@ timeline position, clip mute, and the master bus.
 
 from __future__ import annotations
 
+import os
+import shutil
+import struct
+import subprocess
+import wave
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
 from .formats import AUDIO_PROCESS, AUDIO_STORE, is_audio, is_processable_audio
 
 UPLOAD_DIR = Path(os.environ.get("TK80_UPLOADS", "uploads/audio"))
@@ -86,8 +94,30 @@ def is_supported_audio(path: Path) -> bool:
 
 
 def is_processable(path: Path) -> bool:
-    """True if the file can be edited and mixed (WAV only for now)."""
-    return is_processable_audio(path)
+    """True if the file can be edited and mixed.
+
+    WAV is native. Other stored formats are processable when ffmpeg is present.
+    """
+    if is_processable_audio(path):
+        return path.suffix.lower() == ".wav" or shutil.which("ffmpeg") is not None
+    return False
+
+
+def _to_wav(path: Path) -> Path:
+    """Convert a stored audio file to 16-bit WAV via ffmpeg. Returns the WAV path."""
+    if path.suffix.lower() == ".wav":
+        return path
+    if not shutil.which("ffmpeg"):
+        raise ValueError("ffmpeg is required to process non-WAV audio")
+    dest = path.with_suffix(".wav")
+    if dest.exists():
+        dest = path.with_name(f"{path.stem}_conv.wav")
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", str(path), "-acodec", "pcm_s16le", str(dest)],
+        check=True,
+        capture_output=True,
+    )
+    return dest
 
 
 def clamp_gain(value: float) -> float:
@@ -254,6 +284,7 @@ def process_clip(
     gain: float = 1.0,
     out_name: str = "",
 ) -> Path:
+    path = _to_wav(path)
     rate, channels, width, raw = _read_wav(path)
     if width != 2:
         raise ValueError("only 16-bit WAV is supported")
