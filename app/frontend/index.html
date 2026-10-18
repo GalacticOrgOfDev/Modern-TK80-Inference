@@ -204,11 +204,33 @@
             <div class="track master-row">
               <span class="track-name">Master</span>
               <button id="master-mute-btn">M</button>
+              <button id="master-fx-btn" class="fx-btn">fx</button>
             </div>
           </div>
           <div class="daw-arrange">
             <div id="daw-ruler" class="daw-ruler"></div>
             <div id="daw-clips" class="daw-clips"></div>
+          </div>
+        </div>
+        <div id="track-fx" class="track-fx">
+          <div class="fx-head">
+            <span id="fx-title">Track FX</span>
+            <select id="fx-add">
+              <option value="eq">30-band EQ</option>
+              <option value="normalize">Normalize</option>
+              <option value="compress">Compress</option>
+              <option value="delay">Delay</option>
+              <option value="reverb">Reverb</option>
+              <option value="vst">VST plugin</option>
+            </select>
+            <button id="fx-add-btn">Add</button>
+            <button id="fx-close">Close</button>
+          </div>
+          <div id="fx-list" class="fx-list"></div>
+          <div id="eq-panel" class="eq-panel" style="display:none">
+            <div id="eq-sliders" class="eq-sliders"></div>
+            <div id="eq-tip" class="eq-tip">Hover a slider</div>
+            <button id="fx-eq">Apply EQ</button>
           </div>
         </div>
         <div id="sequencer" class="sequencer"></div>

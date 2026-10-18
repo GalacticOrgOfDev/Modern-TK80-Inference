@@ -251,8 +251,8 @@ async function refreshTracks() {
       <input class="lvl" type="range" min="0" max="2" step="0.05" value="${t.gain || 1}" title="Level" />
       <button class="arm" data-id="${t.id}">${t.armed ? "Armed" : "Arm"}</button>
       <button class="solo" data-id="${t.id}">${t.solo ? "Soloed" : "Solo"}</button>
-      <button class="mute" data-id="${t.id}">${t.mute ? "Muted" : "Mute"}</button>
-      <span class="dev">${t.device_label || "no device"}${idx}${scar}</span>
+      <button class="mute" data-id="${t.id}">${t.mute ? "M" : "M"}</button>
+      <button class="fx" data-id="${t.id}">fx</button>
     `;
     row.querySelector(".track-name").onclick = () => { selectedTrack = t.id; refreshTracks(); };
     row.querySelector(".ch").onchange = async (e) => {
@@ -302,10 +302,56 @@ async function refreshTracks() {
       });
       await refreshTracks();
     };
+    row.querySelector(".fx").onclick = () => openTrackFx(t.id);
     list.appendChild(row);
   }
   updateScarlettBadge();
 }
+
+let trackFx = {};
+let fxTrackId = null;
+
+function openTrackFx(trackId) {
+  fxTrackId = trackId;
+  const panel = document.getElementById("track-fx");
+  panel.classList.add("open");
+  document.getElementById("fx-title").textContent = "Track " + trackId + " FX";
+  renderFxList();
+}
+
+function renderFxList() {
+  const list = document.getElementById("fx-list");
+  list.innerHTML = "";
+  const items = trackFx[fxTrackId] || [];
+  items.forEach((fx, i) => {
+    const row = document.createElement("div");
+    row.className = "fx-item";
+    row.innerHTML = `<span>${fx.name}</span><button data-i="${i}">Remove</button>`;
+    row.querySelector("button").onclick = () => {
+      items.splice(i, 1);
+      renderFxList();
+    };
+    if (fx.name === "30-band EQ") {
+      row.onclick = () => {
+        document.getElementById("eq-panel").style.display = "block";
+      };
+    }
+    list.appendChild(row);
+  });
+}
+
+document.getElementById("fx-add-btn").onclick = () => {
+  if (fxTrackId == null) return;
+  const kind = document.getElementById("fx-add").value;
+  const names = { eq: "30-band EQ", normalize: "Normalize", compress: "Compress", delay: "Delay", reverb: "Reverb", vst: "VST plugin" };
+  trackFx[fxTrackId] = trackFx[fxTrackId] || [];
+  trackFx[fxTrackId].push({ name: names[kind] || kind, kind });
+  if (kind === "eq") document.getElementById("eq-panel").style.display = "block";
+  renderFxList();
+};
+document.getElementById("fx-close").onclick = () => {
+  document.getElementById("track-fx").classList.remove("open");
+};
 
 async function refreshClips() {
   const data = await api("/api/audio/clips");
