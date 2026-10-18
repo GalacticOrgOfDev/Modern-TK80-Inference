@@ -13,6 +13,12 @@ torch>=2.0.0
 fastapi
 uvicorn
 pywebview
+python-multipart
+
+# Native ASIO path (Windows + PortAudio ASIO host)
+# On Windows, install a PortAudio build with ASIO support, then:
+#   pip install sounddevice
+sounddevice
 
 # Optional modality support (single-die, smaller models)
 # diffusers          # image (SD 1.5-class)
