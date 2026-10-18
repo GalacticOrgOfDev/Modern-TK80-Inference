@@ -15,7 +15,7 @@ Single-die models for now; dual-die unification later.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from tk80.backends import create_backend
 
@@ -252,7 +252,12 @@ class Interconnector:
         elif modality == "agent":
             goal = request if isinstance(request, str) else request.get("goal", request.get("prompt", ""))
             tools = request.get("tools") if isinstance(request, dict) else None
-            result = backend.run(goal, tools=tools)
+            runner: Optional[Callable[..., Any]] = None
+            tool_prompt = ""
+            if isinstance(request, dict):
+                runner = request.get("tool_runner")
+                tool_prompt = request.get("tool_prompt", "")
+            result = backend.run(goal, tools=tools, tool_runner=runner, tool_prompt=tool_prompt)
             approx = 1
 
         else:
