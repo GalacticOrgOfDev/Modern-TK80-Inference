@@ -9,6 +9,7 @@ let recordChunks = [];
 let studioRate = 44100;
 let asioEnabled = false;
 let asioBuffer = 128;
+let asioRecording = false;
 
 async function api(path, opts = {}) {
   const res = await fetch(API + path, {
@@ -116,6 +117,7 @@ async function loadAudioSettings() {
     studioRate = data.sample_rate || 44100;
     asioEnabled = !!data.asio;
     asioBuffer = data.buffer || 128;
+    asioRecording = !!data.asio_recording;
     document.getElementById("sample-rate").value = String(studioRate);
     document.getElementById("asio-enabled").checked = asioEnabled;
     document.getElementById("asio-buffer").value = String(asioBuffer);
@@ -444,21 +446,38 @@ document.getElementById("audio-play").onclick = () => {
   const vol = Math.min(1, (clip.gain || 1) * (track ? track.gain : 1));
   player.volume = vol;
   player.play();
-  const asio = asioEnabled ? ` ASIO/${asioBuffer}` : "";
+  const asio = clip.asio ? ` ASIO/${clip.buffer || asioBuffer}` : "";
   document.getElementById("audio-transport-status").textContent =
-    `Playing #${clip.id} (${track ? track.channel : "stereo"}) @ ${studioRate} Hz${asio}`;
+    `Playing #${clip.id} (${track ? track.channel : "stereo"}) @ ${clip.sample_rate || studioRate} Hz${asio}`;
   player.ontimeupdate = () => {
     if (clip.end && player.currentTime >= clip.end) player.pause();
   };
 };
 
-document.getElementById("audio-stop").onclick = () => {
-  const player = document.getElementById("audio-player");
-  player.pause();
+async function stopRecording() {
+  if (asioRecording) {
+    try {
+      const info = await api("/api/audio/asio/stop", { method: "POST" });
+      asioRecording = false;
+      if (info.clip) selectedClip = info.clip.id;
+      await refreshClips();
+      document.getElementById("audio-transport-status").textContent =
+        `ASIO recorded to track ${info.clip ? info.clip.track_id : "?"}`;
+    } catch (e) {
+      alert(e.message);
+    }
+    return;
+  }
   if (mediaRecorder && mediaRecorder.state === "recording") {
     mediaRecorder.stop();
   }
   document.getElementById("audio-transport-status").textContent = "Stopped";
+}
+
+document.getElementById("audio-stop").onclick = async () => {
+  const player = document.getElementById("audio-player");
+  player.pause();
+  await stopRecording();
 };
 
 document.getElementById("audio-record").onclick = async () => {
@@ -467,19 +486,31 @@ document.getElementById("audio-record").onclick = async () => {
     alert("Arm a track and select a device first");
     return;
   }
+
+  // Native ASIO path when enabled.
+  if (asioEnabled) {
+    try {
+      const info = await api("/api/audio/asio/start", {
+        method: "POST",
+        body: JSON.stringify({ track_id: track.id }),
+      });
+      asioRecording = true;
+      const scar = track.scarlett ? ` [${track.scarlett.name}]` : "";
+      document.getElementById("audio-transport-status").textContent =
+        `ASIO recording on track ${track.id} (${info.channels}ch) @ ${info.sample_rate} Hz / ${info.buffer}${scar}`;
+    } catch (e) {
+      alert("ASIO start failed: " + e.message);
+    }
+    return;
+  }
+
+  // Browser WASAPI fallback.
   try {
     const audio = {
       sampleRate: { ideal: studioRate },
       channelCount: { ideal: track.channel === "stereo" ? 2 : 1 },
     };
     if (track.device_id) audio.deviceId = { exact: track.device_id };
-    // ASIO is Windows-only and native. The webview path still uses WASAPI,
-    // but we request the tighter constraints and stamp the clip with the preference.
-    if (asioEnabled) {
-      audio.echoCancellation = false;
-      audio.noiseSuppression = false;
-      audio.autoGainControl = false;
-    }
     const stream = await navigator.mediaDevices.getUserMedia({ audio });
     recordChunks = [];
     mediaRecorder = new MediaRecorder(stream);
@@ -494,18 +525,16 @@ document.getElementById("audio-record").onclick = async () => {
         const clip = await api("/api/audio/record", { method: "POST", body: fd });
         selectedClip = clip.id;
         await refreshClips();
-        const asio = asioEnabled ? ` ASIO/${asioBuffer}` : "";
         document.getElementById("audio-transport-status").textContent =
-          `Recorded to track ${track.id} @ ${studioRate} Hz${asio}`;
+          `Recorded to track ${track.id} @ ${studioRate} Hz`;
       } catch (e) {
         alert(e.message);
       }
     };
     mediaRecorder.start();
     const scar = track.scarlett ? ` [${track.scarlett.name}]` : "";
-    const asio = asioEnabled ? ` ASIO/${asioBuffer}` : "";
     document.getElementById("audio-transport-status").textContent =
-      `Recording on track ${track.id} (${track.channel}) @ ${studioRate} Hz${asio}${scar}`;
+      `Recording on track ${track.id} (${track.channel}) @ ${studioRate} Hz${scar}`;
   } catch (e) {
     alert("Could not start recording: " + e.message);
   }
