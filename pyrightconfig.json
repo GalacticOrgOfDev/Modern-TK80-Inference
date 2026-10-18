@@ -1,0 +1,6 @@
+{
+  "reportMissingImports": "none",
+  "reportMissingModuleSource": "none",
+  "typeCheckingMode": "basic"
+}
+file_path="/workspace/artifacts/Modern-TK80-Inference/pyrightconfig.json"

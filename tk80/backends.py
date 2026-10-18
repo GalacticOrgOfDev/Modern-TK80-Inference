@@ -24,7 +24,7 @@ class LlamaCppBackend:
         split_mode: int = 0,
     ):
         try:
-            from llama_cpp import Llama
+            from llama_cpp import Llama  # type: ignore[import-not-found]
         except ImportError as exc:
             raise RuntimeError(
                 "llama-cpp-python is not installed. "

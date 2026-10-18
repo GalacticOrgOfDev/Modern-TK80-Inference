@@ -30,7 +30,7 @@ def read_die_metrics(die_index: int) -> Dict[str, Any]:
 
     # Temperature and utilization require nvidia-ml-py or similar; best-effort.
     try:
-        import pynvml
+        import pynvml  # type: ignore[import-not-found]
 
         pynvml.nvmlInit()
         handle = pynvml.nvmlDeviceGetHandleByIndex(die_index)
