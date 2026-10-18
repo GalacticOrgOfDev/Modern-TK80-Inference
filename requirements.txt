@@ -1,0 +1,14 @@
+# Modern-TK80-Inference dependencies
+# CUDA 11.8 / Tesla K80 (sm_37) targeted builds
+
+# llama-cpp-python: build from source with CUDA for sm_37
+# See scripts/build_llama_cuda.sh
+llama-cpp-python>=0.3.0
+
+# PyTorch with CUDA 11.8 (use the official cu118 index)
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+torch>=2.0.0
+
+# Utilities
+numpy
+pyyaml
