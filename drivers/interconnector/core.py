@@ -6,8 +6,10 @@ Provides a modern interface:
 - Translation of modern request formats
 - Thermal and performance monitoring
 - Hybrid cluster advertisement
+- Modality routing: LLM, image, voice, agent (video placeholder)
 
 Runs on top of the R470 driver + CUDA 11.8 baseline.
+Single-die models for now; dual-die unification later.
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ from tk80.backends import create_backend
 
 from .cluster import advertise
 from .devices import K80Die, discover_dies
+from .modalities import AgentBackend, ImageBackend, VoiceBackend
 from .monitor import PerfTimer, read_all_metrics
 from .split import plan_split
 from .translate import translate_request
@@ -46,6 +49,7 @@ class Interconnector:
             self.dies = [d for d in self.dies if d.index in die_indices]
 
         self._models: Dict[int, Any] = {}  # die index -> backend instance
+        self._modality: Dict[int, str] = {}  # die index -> modality name
         self._last_perf: Dict[int, Dict[str, Any]] = {}
         log.info("Interconnector ready with %d die(s)", len(self.dies))
         for d in self.dies:
@@ -64,6 +68,7 @@ class Interconnector:
                     "cc": f"{d.compute_capability[0]}.{d.compute_capability[1]}",
                     "busy": d.busy,
                     "model_loaded": d.index in self._models,
+                    "modality": self._modality.get(d.index),
                 }
                 for d in self.dies
             ],
@@ -74,18 +79,21 @@ class Interconnector:
 
     def advertise(self, node_name: str = "") -> Dict[str, Any]:
         """Hybrid cluster advertisement."""
-        return advertise(self.dies, list(self._models.keys()), node_name=node_name)
+        base = advertise(self.dies, list(self._models.keys()), node_name=node_name)
+        base["capabilities"]["modalities"] = ["llm", "image", "voice", "agent"]
+        return base
 
     def load(
         self,
         model: str,
         backend: str = "llama",
+        modality: str = "llm",
         die: Optional[int] = None,
         split: str = "single",
         n_gpu_layers: int = -1,
         n_ctx: int = 2048,
     ) -> None:
-        """Load a model. split is 'single', 'dual', or 'layer'."""
+        """Load a model. modality is llm, image, voice, or agent."""
         free = self.free_dies()
         if die is not None:
             free = [die] if die in free else []
@@ -96,28 +104,48 @@ class Interconnector:
             if target in self._models:
                 raise InterconnectorError(f"Die {target} already has a model loaded")
 
-            kwargs: Dict[str, Any] = {}
-            if backend == "llama":
-                kwargs["main_gpu"] = target
-                kwargs["n_gpu_layers"] = n_gpu_layers
-                kwargs["n_ctx"] = n_ctx
-                if plan["mode"] == "layer":
-                    # Experimental: signal multi-GPU intent; actual split depends on llama.cpp build
-                    kwargs["split_mode"] = 1
-            elif backend == "pytorch":
-                kwargs["device"] = f"cuda:{target}"
-            else:
-                raise InterconnectorError(f"Unknown backend: {backend}")
+            device = f"cuda:{target}"
+            instance: Any
 
-            log.info("Loading %s on die %d via %s (mode=%s)", model, target, backend, plan["mode"])
-            self._models[target] = create_backend(backend, model, **kwargs)
+            if modality == "llm":
+                kwargs: Dict[str, Any] = {}
+                if backend == "llama":
+                    kwargs["main_gpu"] = target
+                    kwargs["n_gpu_layers"] = n_gpu_layers
+                    kwargs["n_ctx"] = n_ctx
+                    if plan["mode"] == "layer":
+                        kwargs["split_mode"] = 1
+                elif backend == "pytorch":
+                    kwargs["device"] = device
+                else:
+                    raise InterconnectorError(f"Unknown backend: {backend}")
+                instance = create_backend(backend, model, **kwargs)
+
+            elif modality == "image":
+                instance = ImageBackend(model, device=device)
+
+            elif modality == "voice":
+                instance = VoiceBackend(model, device=device)
+
+            elif modality == "agent":
+                # Agent wraps an LLM; load the LLM first under the same die
+                kwargs = {"main_gpu": target, "n_gpu_layers": n_gpu_layers, "n_ctx": n_ctx}
+                llm = create_backend("llama", model, **kwargs)
+                instance = AgentBackend(llm)
+
+            else:
+                raise InterconnectorError(f"Unknown modality: {modality}")
+
+            log.info("Loading %s on die %d (modality=%s)", model, target, modality)
+            self._models[target] = instance
+            self._modality[target] = modality
 
             for d in self.dies:
                 if d.index == target:
                     d.busy = True
                     break
 
-        log.info("Model loaded (mode=%s, dies=%s)", plan["mode"], plan["dies"])
+        log.info("Model loaded (mode=%s, dies=%s, modality=%s)", plan["mode"], plan["dies"], modality)
 
     def unload(self, die: int) -> None:
         """Unload the model from a die."""
@@ -125,6 +153,7 @@ class Interconnector:
             raise InterconnectorError(f"No model on die {die}")
 
         del self._models[die]
+        self._modality.pop(die, None)
         for d in self.dies:
             if d.index == die:
                 d.busy = False
@@ -135,15 +164,10 @@ class Interconnector:
         self,
         request: Union[str, Dict[str, Any]],
         die: Optional[int] = None,
-    ) -> str:
-        """Generate text from a plain prompt or modern request dict."""
+    ) -> Any:
+        """Route to the correct modality on the chosen die."""
         if not self._models:
             raise InterconnectorError("No models loaded")
-
-        translated = translate_request(request)
-        prompt = translated["prompt"]
-        max_tokens = translated["max_tokens"]
-        temperature = translated["temperature"]
 
         if die is None:
             if len(self._models) != 1:
@@ -153,16 +177,43 @@ class Interconnector:
         if die not in self._models:
             raise InterconnectorError(f"No model on die {die}")
 
+        modality = self._modality.get(die, "llm")
+        backend = self._models[die]
+
         timer = PerfTimer()
         timer.begin()
-        backend = self._models[die]
-        result = backend.generate(prompt, max_tokens=max_tokens, temperature=temperature)
-        # Approximate token count for performance reporting
-        approx_tokens = max(1, len(result.split()))
-        timer.end(tokens=approx_tokens)
-        self._last_perf[die] = timer.report()
-        log.info("Die %d: %s", die, self._last_perf[die])
 
+        if modality == "llm":
+            translated = translate_request(request)
+            result = backend.generate(
+                translated["prompt"],
+                max_tokens=translated["max_tokens"],
+                temperature=translated["temperature"],
+            )
+            approx = max(1, len(str(result).split()))
+
+        elif modality == "image":
+            prompt = request if isinstance(request, str) else request.get("prompt", "")
+            result = backend.generate(prompt)
+            approx = 1
+
+        elif modality == "voice":
+            audio = request if isinstance(request, str) else request.get("audio", request.get("path", ""))
+            result = backend.generate(audio)
+            approx = max(1, len(str(result).split()))
+
+        elif modality == "agent":
+            goal = request if isinstance(request, str) else request.get("goal", request.get("prompt", ""))
+            tools = request.get("tools") if isinstance(request, dict) else None
+            result = backend.run(goal, tools=tools)
+            approx = 1
+
+        else:
+            raise InterconnectorError(f"Unsupported modality: {modality}")
+
+        timer.end(tokens=approx)
+        self._last_perf[die] = timer.report()
+        log.info("Die %d (%s): %s", die, modality, self._last_perf[die])
         return result
 
     def free_dies(self) -> List[int]:
