@@ -32,6 +32,7 @@ main { flex: 1; display: flex; overflow: hidden; }
   border-right: 1px solid #333; display: flex; flex-direction: column;
   gap: 10px; overflow: auto;
 }
+.sidebar h3 { margin: 0; font-size: 13px; color: #aaa; }
 .sidebar label, .edit-row label { display: flex; flex-direction: column; font-size: 12px; gap: 4px; }
 .sidebar label.check { flex-direction: row; align-items: center; gap: 8px; }
 .sidebar input, .sidebar select, .sidebar button, textarea,
@@ -69,6 +70,7 @@ main { flex: 1; display: flex; overflow: hidden; }
   border-radius: 4px; font-size: 12px; white-space: nowrap; cursor: pointer;
 }
 .clip.selected { border-color: #0a7; }
+.clip.muted { opacity: 0.45; }
 .clip-list { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
 .track-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
 .track {
@@ -78,6 +80,7 @@ main { flex: 1; display: flex; overflow: hidden; }
 .track.selected { border-color: #0a7; }
 .track.armed { border-color: #c33; }
 .track .track-name { min-width: 90px; cursor: pointer; }
+.track .lvl { width: 80px; }
 .track .dev { font-size: 11px; color: #888; margin-left: auto; }
 .badge {
   font-size: 12px; padding: 6px 8px; border-radius: 4px;
