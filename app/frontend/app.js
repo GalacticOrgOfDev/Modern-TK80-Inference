@@ -10,6 +10,7 @@ let asioBuffer = 64;
 let asioRecording = false;
 let bpm = 120;
 let pattern = {};
+let levelTimer = null;
 
 async function api(path, opts = {}) {
   const res = await fetch(API + path, {
@@ -77,6 +78,34 @@ function drawWave(clip) {
     const x2 = (clip.end / clip.duration) * w;
     ctx.strokeStyle = "#fa0";
     ctx.strokeRect(x1, 2, Math.max(2, x2 - x1), h - 4);
+  }
+}
+
+function drawLive(peaks) {
+  drawWave({ peaks, gain: 1 });
+}
+
+function startLevelPoll() {
+  if (levelTimer) return;
+  levelTimer = setInterval(async () => {
+    if (!asioRecording) {
+      clearInterval(levelTimer);
+      levelTimer = null;
+      return;
+    }
+    try {
+      const data = await api("/api/audio/asio/levels");
+      if (data.peaks && data.peaks.length) drawLive(data.peaks);
+    } catch (e) {
+      /* ignore transient */
+    }
+  }, 80);
+}
+
+function stopLevelPoll() {
+  if (levelTimer) {
+    clearInterval(levelTimer);
+    levelTimer = null;
   }
 }
 
@@ -266,7 +295,7 @@ async function refreshClips() {
     list.appendChild(div);
   }
   const current = audioClips.find((c) => c.id === selectedClip) || audioClips[0];
-  if (current) drawWave(current);
+  if (current && !asioRecording) drawWave(current);
   document.getElementById("audio-output").textContent = JSON.stringify({
     tracks: audioTracks,
     clips: audioClips,
@@ -448,6 +477,10 @@ document.getElementById("llm-send").onclick = async () => {
     });
     chatHistory = data.history;
     renderChat();
+    if (data.tool) {
+      await refreshClips();
+      await loadMusic();
+    }
   } catch (e) {
     chatHistory.push({ role: "assistant", content: "Error: " + e.message });
     renderChat();
@@ -556,6 +589,7 @@ document.getElementById("audio-play").onclick = () => {
 
 async function stopRecording() {
   if (asioRecording) {
+    stopLevelPoll();
     try {
       const info = await api("/api/audio/asio/stop", { method: "POST" });
       asioRecording = false;
@@ -564,6 +598,7 @@ async function stopRecording() {
       document.getElementById("audio-transport-status").textContent =
         `ASIO recorded to track ${info.clip ? info.clip.track_id : "?"}`;
     } catch (e) {
+      asioRecording = false;
       alert(e.message);
     }
     return;
@@ -593,6 +628,7 @@ document.getElementById("audio-record").onclick = async () => {
       body: JSON.stringify({ track_id: track.id }),
     });
     asioRecording = true;
+    startLevelPoll();
     const scar = track.scarlett ? ` [${track.scarlett.name}]` : "";
     const dev = info.device ? info.device.name : "device";
     document.getElementById("audio-transport-status").textContent =
