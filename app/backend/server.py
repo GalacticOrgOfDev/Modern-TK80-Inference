@@ -118,7 +118,7 @@ def _dispatch_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         if bpm < 40 or bpm > 220:
             raise HTTPException(status_code=400, detail="bpm out of range")
         _bpm = bpm
-        return {"ok": True, "bpm": _bpm}
+        return {"ok": True, "name": name, "bpm": _bpm}
 
     if name == "generate_instrument":
         instrument = str(args.get("instrument", "kick"))
@@ -132,7 +132,7 @@ def _dispatch_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         clip["instrument"] = instrument
         clip["note"] = note
         _audio_clips.append(clip)
-        return {"ok": True, "clip": clip}
+        return {"ok": True, "name": name, "clip": clip}
 
     if name == "generate_loop":
         style = str(args.get("style", "basic"))
@@ -143,7 +143,7 @@ def _dispatch_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         clip["bpm"] = _bpm
         clip["style"] = style
         _audio_clips.append(clip)
-        return {"ok": True, "clip": clip}
+        return {"ok": True, "name": name, "clip": clip}
 
     if name == "render_pattern":
         bars = int(args.get("bars", 1))
@@ -152,7 +152,7 @@ def _dispatch_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         clip = make_clip(len(_audio_clips), path.name, path, track_id=track_id, sample_rate=_sample_rate)
         clip["bpm"] = _bpm
         _audio_clips.append(clip)
-        return {"ok": True, "clip": clip}
+        return {"ok": True, "name": name, "clip": clip}
 
     if name == "detect_bpm":
         clip_id = int(args.get("clip_id", len(_audio_clips) - 1))
@@ -165,6 +165,7 @@ def _dispatch_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         if result.get("confidence", 0) > 0.2:
             _bpm = result["bpm"]
         result["applied"] = _bpm
+        result["name"] = name
         return result
 
     raise HTTPException(status_code=400, detail=f"unknown tool: {name}")
