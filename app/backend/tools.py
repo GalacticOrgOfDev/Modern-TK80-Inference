@@ -7,11 +7,11 @@ entry point so chat and the agent modality share one path.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List
+import json
+import re
+from typing import Any, Dict, List, Optional
 
 from .music import INSTRUMENTS
-
-ToolFn = Callable[[Dict[str, Any]], Dict[str, Any]]
 
 TOOLS: Dict[str, Dict[str, Any]] = {
     "set_bpm": {
@@ -40,6 +40,12 @@ TOOLS: Dict[str, Dict[str, Any]] = {
     },
 }
 
+# Model emits: tool: name {"arg": value}
+_CALL_RE = re.compile(
+    r"tool\s*:\s*([a-z_]+)\s*(\{.*\})?",
+    re.IGNORECASE | re.DOTALL,
+)
+
 
 def list_tools() -> List[Dict[str, Any]]:
     return [
@@ -48,10 +54,46 @@ def list_tools() -> List[Dict[str, Any]]:
     ]
 
 
-def parse_intent(text: str) -> Dict[str, Any] | None:
-    """Very small intent parser so chat can trigger a tool without a model."""
+def tool_prompt() -> str:
+    """Short prompt the agent prepends so the model knows how to call."""
+    lines = ["Available tools. Emit exactly one line: tool: <name> {json args}"]
+    for name, spec in TOOLS.items():
+        lines.append(f"- {name}: {spec['description']} args={spec['args']}")
+    lines.append("When done, emit: Final: <answer>")
+    return "\n".join(lines)
+
+
+def parse_tool_call(text: str) -> Optional[Dict[str, Any]]:
+    """Extract a tool call from model text. Returns {name, args} or None."""
     if not text:
         return None
+    match = _CALL_RE.search(text)
+    if not match:
+        return None
+    name = match.group(1).strip().lower()
+    if name not in TOOLS:
+        return None
+    raw = match.group(2)
+    args: Dict[str, Any] = {}
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                args = parsed
+        except Exception:
+            args = {}
+    return {"name": name, "args": args}
+
+
+def parse_intent(text: str) -> Optional[Dict[str, Any]]:
+    """Small intent parser so chat can trigger a tool without a model."""
+    if not text:
+        return None
+    # Prefer an explicit model-style call if present.
+    call = parse_tool_call(text)
+    if call:
+        return call
+
     t = text.lower().strip()
 
     if t.startswith("set bpm") or t.startswith("bpm "):
