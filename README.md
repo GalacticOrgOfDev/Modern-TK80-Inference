@@ -12,14 +12,15 @@ The K80 is two independent 12 GB dies. Official support ended with CUDA 11.x and
 
 ## Entry points
 
-- `python main.py` — thin CLI over the interconnector
+- `python main.py` — CLI over the interconnector
 - `python -m drivers.interconnector.cli` — same surface
+- `python -m gui.app` — Tkinter GUI
 - Python API: `from drivers.interconnector import Interconnector`
 
 ```bash
 python main.py --status
 python main.py --load ./model.gguf --die 0 --prompt "Hello from K80"
-python main.py --advertise
+python -m gui.app
 ```
 
 ## Interconnector
@@ -33,6 +34,10 @@ It provides:
 - Hybrid cluster advertisement
 - Thermal and performance monitoring
 - Modality routing: LLM, image, voice, agent (video placeholder)
+
+## GUI
+
+Tkinter interface in [`gui/`](./gui/). Shows dies, loads models, and runs generate.
 
 ## Drivers
 
@@ -53,8 +58,8 @@ CUDA 11.8 is the last toolkit that can target `sm_37`. See [`cuda/`](./cuda/).
 
 1. Install R470 driver and CUDA 11.8.
 2. Build llama-cpp-python: `./scripts/build_llama_cuda.sh`
-3. Run via `main.py` or the interconnector API.
+3. Run via `main.py`, the interconnector CLI, or the GUI.
 
 ## Status
 
-Single-die support for LLM, image, voice, and a basic agentic loop. Dual-die unification planned for later. Video remains a placeholder. Entry points are aligned on the interconnector.
+Single-die support for LLM, image, voice, and a basic agentic loop. Dual-die unification planned for later. Video remains a placeholder. GUI is available.
