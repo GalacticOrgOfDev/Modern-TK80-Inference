@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from drivers.interconnector import Interconnector, InterconnectorError
 from drivers.interconnector.diefusion import DieFusionCore
 
-from .audio import UPLOAD_DIR, make_clip, save_upload
+from .audio import make_clip, make_track, save_upload
 
 log = logging.getLogger("tk80.app")
 
@@ -30,6 +30,7 @@ _ic: Optional[Interconnector] = None
 _fusion: Optional[DieFusionCore] = None
 
 _chat: List[Dict[str, str]] = []
+_audio_tracks: List[Dict[str, Any]] = []
 _audio_clips: List[Dict[str, Any]] = []
 _video_frames: List[Dict[str, Any]] = []
 
@@ -49,6 +50,12 @@ def get_fusion() -> DieFusionCore:
     get_ic()
     assert _fusion is not None
     return _fusion
+
+
+def _ensure_track() -> int:
+    if not _audio_tracks:
+        _audio_tracks.append(make_track(0, "Track 1", "stereo"))
+    return _audio_tracks[0]["id"]
 
 
 class LoadRequest(BaseModel):
@@ -82,6 +89,17 @@ class AudioEditRequest(BaseModel):
     start: Optional[float] = None
     end: Optional[float] = None
     gain: Optional[float] = None
+
+
+class TrackUpdate(BaseModel):
+    name: Optional[str] = None
+    channel: Optional[str] = None
+    gain: Optional[float] = None
+    mute: Optional[bool] = None
+    solo: Optional[bool] = None
+    armed: Optional[bool] = None
+    device_id: Optional[str] = None
+    device_label: Optional[str] = None
 
 
 class VideoEditRequest(BaseModel):
@@ -131,13 +149,7 @@ def fusion_deactivate() -> Dict[str, str]:
 @app.post("/api/load")
 def load_model(body: LoadRequest) -> Dict[str, str]:
     try:
-        get_ic().load(
-            body.model,
-            backend=body.backend,
-            modality=body.modality,
-            die=body.die,
-            split=body.split,
-        )
+        get_ic().load(body.model, backend=body.backend, modality=body.modality, die=body.die, split=body.split)
     except (InterconnectorError, ValueError) as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     return {"ok": "loaded"}
@@ -191,23 +203,79 @@ def chat_clear() -> Dict[str, str]:
     return {"ok": "cleared"}
 
 
+# ---- Tracks ----
+@app.get("/api/audio/tracks")
+def list_tracks() -> Dict[str, Any]:
+    return {"tracks": _audio_tracks}
+
+
+@app.post("/api/audio/tracks")
+def create_track(name: str = "Track", channel: str = "stereo") -> Dict[str, Any]:
+    track = make_track(len(_audio_tracks), name, channel)
+    _audio_tracks.append(track)
+    return track
+
+
+@app.post("/api/audio/tracks/{track_id}")
+def update_track(track_id: int, body: TrackUpdate) -> Dict[str, Any]:
+    track = next((t for t in _audio_tracks if t["id"] == track_id), None)
+    if track is None:
+        raise HTTPException(status_code=404, detail="track not found")
+    data = body.model_dump(exclude_none=True)
+    if "channel" in data and data["channel"] not in ("stereo", "left", "right"):
+        raise HTTPException(status_code=400, detail="channel must be stereo, left, or right")
+    # Only one armed track at a time
+    if data.get("armed") is True:
+        for t in _audio_tracks:
+            if t["id"] != track_id:
+                t["armed"] = False
+    track.update(data)
+    return track
+
+
+# ---- Clips ----
 @app.get("/api/audio/clips")
 def list_clips() -> Dict[str, Any]:
     return {"clips": _audio_clips}
 
 
 @app.post("/api/audio/clips")
-def add_clip(name: str, duration: float = 0.0, path: str = "") -> Dict[str, Any]:
-    clip = make_clip(len(_audio_clips), name, Path(path) if path else None, duration)
+def add_clip(name: str, duration: float = 0.0, path: str = "", track_id: Optional[int] = None) -> Dict[str, Any]:
+    if track_id is None:
+        track_id = _ensure_track()
+    clip = make_clip(len(_audio_clips), name, Path(path) if path else None, duration, track_id)
     _audio_clips.append(clip)
     return clip
 
 
 @app.post("/api/audio/upload")
-async def upload_audio(file: UploadFile = File(...)) -> Dict[str, Any]:
+async def upload_audio(
+    file: UploadFile = File(...),
+    track_id: Optional[int] = Form(None),
+) -> Dict[str, Any]:
+    if track_id is None:
+        track_id = _ensure_track()
     data = await file.read()
     dest = save_upload(file.filename or "clip.wav", data)
-    clip = make_clip(len(_audio_clips), dest.name, dest)
+    clip = make_clip(len(_audio_clips), dest.name, dest, track_id=track_id)
+    _audio_clips.append(clip)
+    return clip
+
+
+@app.post("/api/audio/record")
+async def save_recording(
+    file: UploadFile = File(...),
+    track_id: int = Form(...),
+) -> Dict[str, Any]:
+    """Save a recording from an armed track's device."""
+    track = next((t for t in _audio_tracks if t["id"] == track_id), None)
+    if track is None:
+        raise HTTPException(status_code=404, detail="track not found")
+    if not track.get("armed"):
+        raise HTTPException(status_code=400, detail="track is not armed")
+    data = await file.read()
+    dest = save_upload(file.filename or "recording.webm", data)
+    clip = make_clip(len(_audio_clips), dest.name, dest, track_id=track_id)
     _audio_clips.append(clip)
     return clip
 
