@@ -1,7 +1,11 @@
 const API = "";
 let chatHistory = [];
 let audioClips = [];
+let audioTracks = [];
 let selectedClip = 0;
+let selectedTrack = 0;
+let mediaRecorder = null;
+let recordChunks = [];
 
 async function api(path, opts = {}) {
   const res = await fetch(API + path, {
@@ -72,6 +76,58 @@ function drawWave(clip) {
   }
 }
 
+async function refreshTracks() {
+  const data = await api("/api/audio/tracks");
+  audioTracks = data.tracks;
+  const list = document.getElementById("track-list");
+  list.innerHTML = "";
+  for (const t of audioTracks) {
+    const row = document.createElement("div");
+    row.className = "track" + (t.id === selectedTrack ? " selected" : "") + (t.armed ? " armed" : "");
+    row.innerHTML = `
+      <span class="track-name">#${t.id} ${t.name}</span>
+      <select class="ch" data-id="${t.id}">
+        <option value="stereo" ${t.channel === "stereo" ? "selected" : ""}>Stereo</option>
+        <option value="left" ${t.channel === "left" ? "selected" : ""}>Left</option>
+        <option value="right" ${t.channel === "right" ? "selected" : ""}>Right</option>
+      </select>
+      <button class="arm" data-id="${t.id}">${t.armed ? "Armed" : "Arm"}</button>
+      <button class="mute" data-id="${t.id}">${t.mute ? "Muted" : "Mute"}</button>
+      <span class="dev">${t.device_label || "no device"}</span>
+    `;
+    row.querySelector(".track-name").onclick = () => { selectedTrack = t.id; refreshTracks(); };
+    row.querySelector(".ch").onchange = async (e) => {
+      await api(`/api/audio/tracks/${t.id}`, {
+        method: "POST",
+        body: JSON.stringify({ channel: e.target.value }),
+      });
+      await refreshTracks();
+    };
+    row.querySelector(".arm").onclick = async () => {
+      const device = document.getElementById("audio-devices");
+      const opt = device.selectedOptions[0];
+      await api(`/api/audio/tracks/${t.id}`, {
+        method: "POST",
+        body: JSON.stringify({
+          armed: !t.armed,
+          device_id: opt ? opt.value : null,
+          device_label: opt ? opt.textContent : null,
+        }),
+      });
+      selectedTrack = t.id;
+      await refreshTracks();
+    };
+    row.querySelector(".mute").onclick = async () => {
+      await api(`/api/audio/tracks/${t.id}`, {
+        method: "POST",
+        body: JSON.stringify({ mute: !t.mute }),
+      });
+      await refreshTracks();
+    };
+    list.appendChild(row);
+  }
+}
+
 async function refreshClips() {
   const data = await api("/api/audio/clips");
   audioClips = data.clips;
@@ -80,7 +136,9 @@ async function refreshClips() {
   for (const c of audioClips) {
     const div = document.createElement("div");
     div.className = "clip" + (c.id === selectedClip ? " selected" : "");
-    div.textContent = `#${c.id} ${c.name} [${c.start}→${c.end}s] gain=${c.gain}${c.reversed ? " rev" : ""}`;
+    const tr = audioTracks.find((t) => t.id === c.track_id);
+    const ch = tr ? tr.channel : "-";
+    div.textContent = `#${c.id} ${c.name} [T${c.track_id}/${ch}] [${c.start}→${c.end}s]`;
     div.onclick = () => {
       selectedClip = c.id;
       document.getElementById("audio-clip-id").value = c.id;
@@ -94,7 +152,7 @@ async function refreshClips() {
   }
   const current = audioClips.find((c) => c.id === selectedClip) || audioClips[0];
   if (current) drawWave(current);
-  document.getElementById("audio-output").textContent = JSON.stringify(audioClips, null, 2);
+  document.getElementById("audio-output").textContent = JSON.stringify({ tracks: audioTracks, clips: audioClips }, null, 2);
 }
 
 async function refreshFrames() {
@@ -117,6 +175,28 @@ async function refreshFusion() {
     document.getElementById("fusion-status").textContent = JSON.stringify(data, null, 2);
   } catch (e) {
     document.getElementById("fusion-status").textContent = String(e);
+  }
+}
+
+async function detectDevices() {
+  const sel = document.getElementById("audio-devices");
+  sel.innerHTML = "";
+  try {
+    await navigator.mediaDevices.getUserMedia({ audio: true });
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const inputs = devices.filter((d) => d.kind === "audioinput");
+    if (!inputs.length) {
+      sel.innerHTML = "<option value=\"\">No input devices</option>";
+      return;
+    }
+    for (const d of inputs) {
+      const opt = document.createElement("option");
+      opt.value = d.deviceId;
+      opt.textContent = d.label || `Input ${d.deviceId.slice(0, 6)}`;
+      sel.appendChild(opt);
+    }
+  } catch (e) {
+    sel.innerHTML = "<option value=\"\">Permission denied</option>";
   }
 }
 
@@ -172,7 +252,17 @@ document.getElementById("llm-send").onclick = async () => {
   }
 };
 
-// Audio
+// Tracks and devices
+document.getElementById("audio-new-track").onclick = async () => {
+  const name = document.getElementById("track-name").value || "Track";
+  const channel = document.getElementById("track-channel").value;
+  const t = await api(`/api/audio/tracks?name=${encodeURIComponent(name)}&channel=${channel}`, { method: "POST" });
+  selectedTrack = t.id;
+  await refreshTracks();
+};
+document.getElementById("audio-refresh-devices").onclick = detectDevices;
+
+// Audio clips
 document.getElementById("audio-load").onclick = async () => {
   try {
     await api("/api/load", {
@@ -192,20 +282,14 @@ document.getElementById("audio-upload").onclick = async () => {
   if (!file) { alert("Select an audio file"); return; }
   const fd = new FormData();
   fd.append("file", file);
+  fd.append("track_id", String(selectedTrack));
   try {
     const clip = await api("/api/audio/upload", { method: "POST", body: fd });
     selectedClip = clip.id;
     document.getElementById("audio-clip-id").value = clip.id;
     await refreshClips();
-    document.getElementById("audio-transport-status").textContent = `Uploaded ${clip.name}`;
+    document.getElementById("audio-transport-status").textContent = `Uploaded to track ${selectedTrack}`;
   } catch (e) { alert(e.message); }
-};
-
-document.getElementById("audio-add").onclick = async () => {
-  const name = document.getElementById("audio-name").value || "clip";
-  const duration = Number(document.getElementById("audio-dur").value);
-  await api(`/api/audio/clips?name=${encodeURIComponent(name)}&duration=${duration}`, { method: "POST" });
-  await refreshClips();
 };
 
 document.getElementById("audio-transcribe").onclick = async () => {
@@ -249,20 +333,69 @@ document.getElementById("audio-play").onclick = () => {
     document.getElementById("audio-transport-status").textContent = "No file on this clip";
     return;
   }
+  const track = audioTracks.find((t) => t.id === clip.track_id);
+  if (track && track.mute) {
+    document.getElementById("audio-transport-status").textContent = "Track is muted";
+    return;
+  }
   const player = document.getElementById("audio-player");
   player.src = `/api/audio/file/${clip.id}`;
   player.currentTime = clip.start || 0;
-  player.volume = Math.min(1, clip.gain || 1);
+  let vol = Math.min(1, (clip.gain || 1) * (track ? track.gain : 1));
+  if (track && track.channel === "left") player.volume = vol;
+  else if (track && track.channel === "right") player.volume = vol;
+  else player.volume = vol;
   player.play();
-  document.getElementById("audio-transport-status").textContent = `Playing #${clip.id}`;
+  document.getElementById("audio-transport-status").textContent =
+    `Playing #${clip.id} (${track ? track.channel : "stereo"})`;
   player.ontimeupdate = () => {
     if (clip.end && player.currentTime >= clip.end) player.pause();
   };
 };
+
 document.getElementById("audio-stop").onclick = () => {
   const player = document.getElementById("audio-player");
   player.pause();
+  if (mediaRecorder && mediaRecorder.state === "recording") {
+    mediaRecorder.stop();
+  }
   document.getElementById("audio-transport-status").textContent = "Stopped";
+};
+
+document.getElementById("audio-record").onclick = async () => {
+  const track = audioTracks.find((t) => t.id === selectedTrack && t.armed);
+  if (!track) {
+    alert("Arm a track and select a device first");
+    return;
+  }
+  try {
+    const constraints = {
+      audio: track.device_id ? { deviceId: { exact: track.device_id } } : true,
+    };
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    recordChunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = (e) => { if (e.data.size) recordChunks.push(e.data); };
+    mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach((t) => t.stop());
+      const blob = new Blob(recordChunks, { type: "audio/webm" });
+      const fd = new FormData();
+      fd.append("file", blob, `rec_track${track.id}.webm`);
+      fd.append("track_id", String(track.id));
+      try {
+        const clip = await api("/api/audio/record", { method: "POST", body: fd });
+        selectedClip = clip.id;
+        await refreshClips();
+        document.getElementById("audio-transport-status").textContent = `Recorded to track ${track.id}`;
+      } catch (e) {
+        alert(e.message);
+      }
+    };
+    mediaRecorder.start();
+    document.getElementById("audio-transport-status").textContent = `Recording on track ${track.id} (${track.channel})`;
+  } catch (e) {
+    alert("Could not start recording: " + e.message);
+  }
 };
 
 // Video
@@ -353,7 +486,9 @@ document.getElementById("fusion-refresh").onclick = refreshFusion;
 
 setupTabs();
 refreshStatus();
+refreshTracks();
 refreshClips();
 refreshFrames();
 refreshFusion();
+detectDevices();
 setInterval(refreshStatus, 15000);
