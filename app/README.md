@@ -1,40 +1,33 @@
 # Modern-TK80 App
 
-Custom desktop application for Windows 10 and later.
+Starter creator setup for Windows 10 and later.
 
-Three studios on top of the K80 interconnector:
+## Studios
 
-- **LLM** — chat / generate interface
-- **Audio** — mini studio (load voice model, transcribe, simple controls)
-- **Video** — mini studio (timeline placeholder + image/video path; full video models still constrained by the 12 GB die)
+- **Chat** — multi-turn LLM conversation with history
+- **Audio** — mini studio: add clips, trim, gain, reverse, silence, transcribe
+- **Video** — mini studio: add / generate / delete frames, set duration, timeline
+- **Fusion** — DieFusionCore status and activation
 
 ## Architecture
 
 ```
 app/
-  backend/          FastAPI server wrapping the interconnector
-  frontend/         Custom HTML/CSS/JS UI
-  launcher.py       Starts the server and opens a native window
+  backend/          FastAPI (chat, audio edit, video edit, fusion)
+  frontend/         Custom HTML/CSS/JS
+  launcher.py       Native window via pywebview
 ```
 
-## Run (development)
+## Run
 
 ```bash
 pip install fastapi uvicorn pywebview
 python -m app.launcher
 ```
 
-Opens a native window (pywebview). Falls back to the default browser if pywebview is unavailable.
+## DieFusionCore
 
-## Windows install (Windows 10+)
+Foundation for treating the two independent K80 dies as one logical device.
+See `drivers/interconnector/diefusion.py` and the Fusion tab.
 
-1. Build the backend with PyInstaller.
-2. Bundle the frontend static files.
-3. Package with Inno Setup or MSIX for a proper installer.
-
-See `packaging/README.md` for the planned steps.
-
-## Notes
-
-- Tkinter GUI in `gui/` is deprecated for this use.
-- Video studio is a shell ready for smaller models or frame-by-frame work; large video models still exceed one K80 die.
+Strategies planned: pipeline, layer, data. Data movement comes next.
