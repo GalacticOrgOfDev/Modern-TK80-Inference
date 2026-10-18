@@ -1,10 +1,11 @@
 const API = "";
 let chatHistory = [];
-let audioPlaying = false;
+let audioClips = [];
+let selectedClip = 0;
 
 async function api(path, opts = {}) {
   const res = await fetch(API + path, {
-    headers: { "Content-Type": "application/json" },
+    headers: opts.body instanceof FormData ? {} : { "Content-Type": "application/json" },
     ...opts,
   });
   if (!res.ok) {
@@ -48,17 +49,52 @@ function renderChat() {
   box.scrollTop = box.scrollHeight;
 }
 
+function drawWave(clip) {
+  const canvas = document.getElementById("audio-wave");
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = "#0d0d0d";
+  ctx.fillRect(0, 0, w, h);
+  const peaks = (clip && clip.peaks && clip.peaks.length) ? clip.peaks : Array(64).fill(0.15);
+  const barW = w / peaks.length;
+  ctx.fillStyle = clip && clip.gain === 0 ? "#555" : "#0a7";
+  peaks.forEach((p, i) => {
+    const bh = Math.max(2, p * (h - 8));
+    ctx.fillRect(i * barW + 1, (h - bh) / 2, barW - 2, bh);
+  });
+  if (clip && clip.duration > 0) {
+    const x1 = (clip.start / clip.duration) * w;
+    const x2 = (clip.end / clip.duration) * w;
+    ctx.strokeStyle = "#fa0";
+    ctx.strokeRect(x1, 2, Math.max(2, x2 - x1), h - 4);
+  }
+}
+
 async function refreshClips() {
   const data = await api("/api/audio/clips");
+  audioClips = data.clips;
   const list = document.getElementById("audio-clips");
   list.innerHTML = "";
-  for (const c of data.clips) {
+  for (const c of audioClips) {
     const div = document.createElement("div");
-    div.className = "clip";
+    div.className = "clip" + (c.id === selectedClip ? " selected" : "");
     div.textContent = `#${c.id} ${c.name} [${c.start}→${c.end}s] gain=${c.gain}${c.reversed ? " rev" : ""}`;
+    div.onclick = () => {
+      selectedClip = c.id;
+      document.getElementById("audio-clip-id").value = c.id;
+      document.getElementById("audio-start").value = c.start;
+      document.getElementById("audio-end").value = c.end;
+      document.getElementById("audio-gain").value = c.gain;
+      drawWave(c);
+      refreshClips();
+    };
     list.appendChild(div);
   }
-  document.getElementById("audio-output").textContent = JSON.stringify(data.clips, null, 2);
+  const current = audioClips.find((c) => c.id === selectedClip) || audioClips[0];
+  if (current) drawWave(current);
+  document.getElementById("audio-output").textContent = JSON.stringify(audioClips, null, 2);
 }
 
 async function refreshFrames() {
@@ -98,27 +134,19 @@ document.getElementById("llm-load").onclick = async () => {
       }),
     });
     await refreshStatus();
-  } catch (e) {
-    alert(e.message);
-  }
+  } catch (e) { alert(e.message); }
 };
-
 document.getElementById("llm-unload").onclick = async () => {
   try {
-    const die = Number(document.getElementById("llm-die").value);
-    await api(`/api/unload?die=${die}`, { method: "POST" });
+    await api(`/api/unload?die=${Number(document.getElementById("llm-die").value)}`, { method: "POST" });
     await refreshStatus();
-  } catch (e) {
-    alert(e.message);
-  }
+  } catch (e) { alert(e.message); }
 };
-
 document.getElementById("llm-clear").onclick = async () => {
   await api("/api/chat/clear", { method: "POST" });
   chatHistory = [];
   renderChat();
 };
-
 document.getElementById("llm-send").onclick = async () => {
   const input = document.getElementById("llm-input");
   const text = input.value.trim();
@@ -127,19 +155,17 @@ document.getElementById("llm-send").onclick = async () => {
   renderChat();
   input.value = "";
   try {
-    const die = Number(document.getElementById("llm-die").value);
     const data = await api("/api/chat", {
       method: "POST",
       body: JSON.stringify({
         messages: chatHistory,
-        die,
+        die: Number(document.getElementById("llm-die").value),
         max_tokens: Number(document.getElementById("llm-max").value),
         temperature: Number(document.getElementById("llm-temp").value),
       }),
     });
     chatHistory = data.history;
     renderChat();
-    await refreshStatus();
   } catch (e) {
     chatHistory.push({ role: "assistant", content: "Error: " + e.message });
     renderChat();
@@ -158,10 +184,21 @@ document.getElementById("audio-load").onclick = async () => {
       }),
     });
     document.getElementById("audio-output").textContent = "Voice model loaded.";
-    await refreshStatus();
-  } catch (e) {
-    alert(e.message);
-  }
+  } catch (e) { alert(e.message); }
+};
+
+document.getElementById("audio-upload").onclick = async () => {
+  const file = document.getElementById("audio-file").files[0];
+  if (!file) { alert("Select an audio file"); return; }
+  const fd = new FormData();
+  fd.append("file", file);
+  try {
+    const clip = await api("/api/audio/upload", { method: "POST", body: fd });
+    selectedClip = clip.id;
+    document.getElementById("audio-clip-id").value = clip.id;
+    await refreshClips();
+    document.getElementById("audio-transport-status").textContent = `Uploaded ${clip.name}`;
+  } catch (e) { alert(e.message); }
 };
 
 document.getElementById("audio-add").onclick = async () => {
@@ -172,16 +209,15 @@ document.getElementById("audio-add").onclick = async () => {
 };
 
 document.getElementById("audio-transcribe").onclick = async () => {
-  const file = document.getElementById("audio-file").files[0];
-  if (!file) {
-    alert("Select an audio file");
-    return;
-  }
+  const clip = audioClips.find((c) => c.id === selectedClip);
+  if (!clip || !clip.path) { alert("Select an uploaded clip"); return; }
   try {
-    const die = Number(document.getElementById("audio-die").value);
     const data = await api("/api/generate", {
       method: "POST",
-      body: JSON.stringify({ request: { audio: file.name }, die }),
+      body: JSON.stringify({
+        request: { audio: clip.path },
+        die: Number(document.getElementById("audio-die").value),
+      }),
     });
     document.getElementById("audio-output").textContent = data.result;
   } catch (e) {
@@ -200,22 +236,32 @@ async function audioEdit(action) {
   try {
     await api("/api/audio/edit", { method: "POST", body: JSON.stringify(body) });
     await refreshClips();
-  } catch (e) {
-    alert(e.message);
-  }
+  } catch (e) { alert(e.message); }
 }
-
 document.getElementById("audio-trim").onclick = () => audioEdit("trim");
 document.getElementById("audio-gain-btn").onclick = () => audioEdit("gain");
 document.getElementById("audio-reverse").onclick = () => audioEdit("reverse");
 document.getElementById("audio-silence").onclick = () => audioEdit("silence");
 
 document.getElementById("audio-play").onclick = () => {
-  audioPlaying = true;
-  document.getElementById("audio-transport-status").textContent = "Playing (starter transport)";
+  const clip = audioClips.find((c) => c.id === selectedClip);
+  if (!clip || !clip.path) {
+    document.getElementById("audio-transport-status").textContent = "No file on this clip";
+    return;
+  }
+  const player = document.getElementById("audio-player");
+  player.src = `/api/audio/file/${clip.id}`;
+  player.currentTime = clip.start || 0;
+  player.volume = Math.min(1, clip.gain || 1);
+  player.play();
+  document.getElementById("audio-transport-status").textContent = `Playing #${clip.id}`;
+  player.ontimeupdate = () => {
+    if (clip.end && player.currentTime >= clip.end) player.pause();
+  };
 };
 document.getElementById("audio-stop").onclick = () => {
-  audioPlaying = false;
+  const player = document.getElementById("audio-player");
+  player.pause();
   document.getElementById("audio-transport-status").textContent = "Stopped";
 };
 
@@ -231,29 +277,28 @@ document.getElementById("video-load").onclick = async () => {
       }),
     });
     document.getElementById("video-output").textContent = "Image model loaded for frames.";
-    await refreshStatus();
-  } catch (e) {
-    alert(e.message);
-  }
+  } catch (e) { alert(e.message); }
 };
-
 document.getElementById("video-add").onclick = async () => {
-  const prompt = document.getElementById("video-prompt").value;
-  const duration = Number(document.getElementById("video-dur").value);
   await api("/api/video/edit", {
     method: "POST",
-    body: JSON.stringify({ action: "add_frame", prompt, duration }),
+    body: JSON.stringify({
+      action: "add_frame",
+      prompt: document.getElementById("video-prompt").value,
+      duration: Number(document.getElementById("video-dur").value),
+    }),
   });
   await refreshFrames();
 };
-
 document.getElementById("video-gen").onclick = async () => {
   const prompt = document.getElementById("video-prompt").value;
   try {
-    const die = Number(document.getElementById("video-die").value);
     const data = await api("/api/generate", {
       method: "POST",
-      body: JSON.stringify({ request: { prompt }, die }),
+      body: JSON.stringify({
+        request: { prompt },
+        die: Number(document.getElementById("video-die").value),
+      }),
     });
     document.getElementById("video-preview").textContent = "Frame generated";
     document.getElementById("video-output").textContent = String(data.result).slice(0, 400);
@@ -270,22 +315,24 @@ document.getElementById("video-gen").onclick = async () => {
     document.getElementById("video-output").textContent = String(e);
   }
 };
-
 document.getElementById("video-delete").onclick = async () => {
-  const frame_id = Number(document.getElementById("video-frame-id").value);
   await api("/api/video/edit", {
     method: "POST",
-    body: JSON.stringify({ action: "delete_frame", frame_id }),
+    body: JSON.stringify({
+      action: "delete_frame",
+      frame_id: Number(document.getElementById("video-frame-id").value),
+    }),
   });
   await refreshFrames();
 };
-
 document.getElementById("video-set-dur").onclick = async () => {
-  const frame_id = Number(document.getElementById("video-frame-id").value);
-  const duration = Number(document.getElementById("video-dur").value);
   await api("/api/video/edit", {
     method: "POST",
-    body: JSON.stringify({ action: "set_duration", frame_id, duration }),
+    body: JSON.stringify({
+      action: "set_duration",
+      frame_id: Number(document.getElementById("video-frame-id").value),
+      duration: Number(document.getElementById("video-dur").value),
+    }),
   });
   await refreshFrames();
 };
@@ -296,9 +343,7 @@ document.getElementById("fusion-activate").onclick = async () => {
   try {
     const data = await api(`/api/fusion/activate?strategy=${strategy}`, { method: "POST" });
     document.getElementById("fusion-status").textContent = JSON.stringify(data, null, 2);
-  } catch (e) {
-    alert(e.message);
-  }
+  } catch (e) { alert(e.message); }
 };
 document.getElementById("fusion-deactivate").onclick = async () => {
   await api("/api/fusion/deactivate", { method: "POST" });
