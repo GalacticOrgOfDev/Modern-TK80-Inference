@@ -46,6 +46,7 @@ from .music import (
     render_pattern,
     save_pcm,
 )
+from .tools import list_tools, parse_intent
 
 log = logging.getLogger("tk80.app")
 
@@ -103,6 +104,70 @@ def _validate_rate_for_track(track: Dict[str, Any], rate: int) -> None:
             status_code=400,
             detail=f"{scar['name']} does not support {rate} Hz",
         )
+
+
+def _dispatch_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Run a music tool and return its result. Shared by chat and the tool endpoint."""
+    global _bpm
+    track_id = args.get("track_id")
+    if track_id is None:
+        track_id = _ensure_track()
+
+    if name == "set_bpm":
+        bpm = float(args.get("bpm", _bpm))
+        if bpm < 40 or bpm > 220:
+            raise HTTPException(status_code=400, detail="bpm out of range")
+        _bpm = bpm
+        return {"ok": True, "bpm": _bpm}
+
+    if name == "generate_instrument":
+        instrument = str(args.get("instrument", "kick"))
+        if instrument not in INSTRUMENTS:
+            raise HTTPException(status_code=400, detail="unknown instrument")
+        note = int(args.get("note", 60))
+        duration = float(args.get("duration", 0.4))
+        pcm = render_instrument(instrument, duration, _sample_rate, note)
+        path = save_pcm(f"{instrument}_{len(_audio_clips)}.wav", pcm, _sample_rate)
+        clip = make_clip(len(_audio_clips), path.name, path, track_id=track_id, sample_rate=_sample_rate)
+        clip["instrument"] = instrument
+        clip["note"] = note
+        _audio_clips.append(clip)
+        return {"ok": True, "clip": clip}
+
+    if name == "generate_loop":
+        style = str(args.get("style", "basic"))
+        bars = int(args.get("bars", 1))
+        pcm = generate_loop(_bpm, bars, _sample_rate, style)
+        path = save_pcm(f"loop_{style}_{len(_audio_clips)}.wav", pcm, _sample_rate)
+        clip = make_clip(len(_audio_clips), path.name, path, track_id=track_id, sample_rate=_sample_rate)
+        clip["bpm"] = _bpm
+        clip["style"] = style
+        _audio_clips.append(clip)
+        return {"ok": True, "clip": clip}
+
+    if name == "render_pattern":
+        bars = int(args.get("bars", 1))
+        pcm = render_pattern(_pattern, _bpm, _sample_rate, bars)
+        path = save_pcm(f"pattern_{len(_audio_clips)}.wav", pcm, _sample_rate)
+        clip = make_clip(len(_audio_clips), path.name, path, track_id=track_id, sample_rate=_sample_rate)
+        clip["bpm"] = _bpm
+        _audio_clips.append(clip)
+        return {"ok": True, "clip": clip}
+
+    if name == "detect_bpm":
+        clip_id = int(args.get("clip_id", len(_audio_clips) - 1))
+        if clip_id < 0 or clip_id >= len(_audio_clips):
+            raise HTTPException(status_code=404, detail="clip not found")
+        path = _audio_clips[clip_id].get("path")
+        if not path:
+            raise HTTPException(status_code=400, detail="clip has no file")
+        result = detect_bpm(Path(path))
+        if result.get("confidence", 0) > 0.2:
+            _bpm = result["bpm"]
+        result["applied"] = _bpm
+        return result
+
+    raise HTTPException(status_code=400, detail=f"unknown tool: {name}")
 
 
 class LoadRequest(BaseModel):
@@ -179,6 +244,11 @@ class LoopRequest(BaseModel):
     style: str = "basic"
     bars: int = 1
     track_id: Optional[int] = None
+
+
+class ToolRequest(BaseModel):
+    name: str
+    args: Dict[str, Any] = {}
 
 
 class VideoEditRequest(BaseModel):
@@ -259,6 +329,21 @@ def chat(body: ChatRequest) -> Dict[str, Any]:
     messages = [{"role": m.role, "content": m.content} for m in body.messages]
     _chat.clear()
     _chat.extend(messages)
+
+    # Tool intercept: if the last user message is a music command, run it.
+    last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
+    intent = parse_intent(last_user)
+    tool_result: Optional[Dict[str, Any]] = None
+    if intent:
+        tool_result = _dispatch_tool(intent["name"], intent.get("args", {}))
+        text = f"Ran {intent['name']}."
+        if "clip" in tool_result:
+            text = f"Created {tool_result['clip']['name']} on track {tool_result['clip']['track_id']}."
+        elif "bpm" in tool_result:
+            text = f"BPM set to {tool_result['bpm']}."
+        _chat.append({"role": "assistant", "content": text})
+        return {"result": text, "history": _chat, "tool": tool_result}
+
     try:
         result = get_ic().generate(
             {"messages": messages, "max_tokens": body.max_tokens, "temperature": body.temperature},
@@ -327,6 +412,11 @@ def asio_devices() -> Dict[str, Any]:
     return {"devices": list_asio_devices(), "probe": probe_asio()}
 
 
+@app.get("/api/audio/asio/levels")
+def asio_levels() -> Dict[str, Any]:
+    return _asio_recorder.levels()
+
+
 @app.post("/api/audio/asio/start")
 def asio_start(body: AsioStartRequest) -> Dict[str, Any]:
     global _asio_track_id
@@ -386,7 +476,7 @@ def asio_stop() -> Dict[str, Any]:
     return info
 
 
-# ---- Music: BPM, sequencer, instruments, loops ----
+# ---- Music: BPM, sequencer, instruments, loops, tools ----
 @app.get("/api/music/state")
 def music_state() -> Dict[str, Any]:
     return {
@@ -394,31 +484,28 @@ def music_state() -> Dict[str, Any]:
         "pattern": _pattern,
         "instruments": list(INSTRUMENTS),
         "sample_rate": _sample_rate,
+        "tools": list_tools(),
     }
+
+
+@app.get("/api/music/tools")
+def music_tools() -> Dict[str, Any]:
+    return {"tools": list_tools()}
+
+
+@app.post("/api/music/tool")
+def music_tool(body: ToolRequest) -> Dict[str, Any]:
+    return _dispatch_tool(body.name, body.args)
 
 
 @app.post("/api/music/bpm")
 def set_bpm(body: BpmRequest) -> Dict[str, Any]:
-    global _bpm
-    if body.bpm < 40 or body.bpm > 220:
-        raise HTTPException(status_code=400, detail="bpm out of range")
-    _bpm = body.bpm
-    return {"bpm": _bpm}
+    return _dispatch_tool("set_bpm", {"bpm": body.bpm})
 
 
 @app.post("/api/music/bpm/detect")
 def detect_bpm_from_clip(clip_id: int) -> Dict[str, Any]:
-    global _bpm
-    if clip_id < 0 or clip_id >= len(_audio_clips):
-        raise HTTPException(status_code=404, detail="clip not found")
-    path = _audio_clips[clip_id].get("path")
-    if not path:
-        raise HTTPException(status_code=400, detail="clip has no file")
-    result = detect_bpm(Path(path))
-    if result.get("confidence", 0) > 0.2:
-        _bpm = result["bpm"]
-    result["applied"] = _bpm
-    return result
+    return _dispatch_tool("detect_bpm", {"clip_id": clip_id})
 
 
 @app.get("/api/music/pattern")
@@ -441,40 +528,31 @@ def set_pattern(body: PatternRequest) -> Dict[str, Any]:
 
 @app.post("/api/music/instrument")
 def generate_instrument(body: InstrumentRequest) -> Dict[str, Any]:
-    if body.instrument not in INSTRUMENTS:
-        raise HTTPException(status_code=400, detail="unknown instrument")
-    track_id = body.track_id if body.track_id is not None else _ensure_track()
-    pcm = render_instrument(body.instrument, body.duration, _sample_rate, body.note)
-    path = save_pcm(f"{body.instrument}_{len(_audio_clips)}.wav", pcm, _sample_rate)
-    clip = make_clip(len(_audio_clips), path.name, path, track_id=track_id, sample_rate=_sample_rate)
-    clip["instrument"] = body.instrument
-    clip["note"] = body.note
-    _audio_clips.append(clip)
-    return clip
+    result = _dispatch_tool(
+        "generate_instrument",
+        {
+            "instrument": body.instrument,
+            "note": body.note,
+            "duration": body.duration,
+            "track_id": body.track_id,
+        },
+    )
+    return result.get("clip", result)
 
 
 @app.post("/api/music/loop")
 def generate_loop_clip(body: LoopRequest) -> Dict[str, Any]:
-    track_id = body.track_id if body.track_id is not None else _ensure_track()
-    pcm = generate_loop(_bpm, body.bars, _sample_rate, body.style)
-    path = save_pcm(f"loop_{body.style}_{len(_audio_clips)}.wav", pcm, _sample_rate)
-    clip = make_clip(len(_audio_clips), path.name, path, track_id=track_id, sample_rate=_sample_rate)
-    clip["bpm"] = _bpm
-    clip["style"] = body.style
-    _audio_clips.append(clip)
-    return clip
+    result = _dispatch_tool(
+        "generate_loop",
+        {"style": body.style, "bars": body.bars, "track_id": body.track_id},
+    )
+    return result.get("clip", result)
 
 
 @app.post("/api/music/render")
 def render_current_pattern(track_id: Optional[int] = None, bars: int = 1) -> Dict[str, Any]:
-    if track_id is None:
-        track_id = _ensure_track()
-    pcm = render_pattern(_pattern, _bpm, _sample_rate, bars)
-    path = save_pcm(f"pattern_{len(_audio_clips)}.wav", pcm, _sample_rate)
-    clip = make_clip(len(_audio_clips), path.name, path, track_id=track_id, sample_rate=_sample_rate)
-    clip["bpm"] = _bpm
-    _audio_clips.append(clip)
-    return clip
+    result = _dispatch_tool("render_pattern", {"track_id": track_id, "bars": bars})
+    return result.get("clip", result)
 
 
 @app.get("/api/audio/tracks")
