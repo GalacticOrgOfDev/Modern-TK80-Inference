@@ -2,9 +2,10 @@
 
 Provides a modern interface:
 - Device discovery and die tracking
-- Explicit model placement on one die (or future split)
-- generate() that routes to the chosen backend
-- Status reporting for hybrid cluster use
+- Explicit model placement and dual-die split modes
+- Translation of modern request formats
+- Thermal and performance monitoring
+- Hybrid cluster advertisement
 
 Runs on top of the R470 driver + CUDA 11.8 baseline.
 """
@@ -12,11 +13,15 @@ Runs on top of the R470 driver + CUDA 11.8 baseline.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from tk80.backends import create_backend
 
+from .cluster import advertise
 from .devices import K80Die, discover_dies
+from .monitor import PerfTimer, read_all_metrics
+from .split import plan_split
+from .translate import translate_request
 
 log = logging.getLogger("tk80.interconnector")
 
@@ -41,12 +46,14 @@ class Interconnector:
             self.dies = [d for d in self.dies if d.index in die_indices]
 
         self._models: Dict[int, Any] = {}  # die index -> backend instance
+        self._last_perf: Dict[int, Dict[str, Any]] = {}
         log.info("Interconnector ready with %d die(s)", len(self.dies))
         for d in self.dies:
             log.info("  %s", d)
 
     def status(self) -> Dict[str, Any]:
         """Return a snapshot suitable for hybrid cluster monitoring."""
+        metrics = read_all_metrics([d.index for d in self.dies])
         return {
             "dies": [
                 {
@@ -60,43 +67,57 @@ class Interconnector:
                 }
                 for d in self.dies
             ],
+            "metrics": metrics,
             "models_loaded": list(self._models.keys()),
+            "last_perf": self._last_perf,
         }
+
+    def advertise(self, node_name: str = "") -> Dict[str, Any]:
+        """Hybrid cluster advertisement."""
+        return advertise(self.dies, list(self._models.keys()), node_name=node_name)
 
     def load(
         self,
         model: str,
         backend: str = "llama",
-        die: int = 0,
+        die: Optional[int] = None,
+        split: str = "single",
         n_gpu_layers: int = -1,
         n_ctx: int = 2048,
     ) -> None:
-        """Load a model onto a specific die."""
-        if die not in {d.index for d in self.dies}:
-            raise InterconnectorError(f"Die {die} is not managed by this interconnector")
+        """Load a model. split is 'single', 'dual', or 'layer'."""
+        free = self.free_dies()
+        if die is not None:
+            free = [die] if die in free else []
 
-        if die in self._models:
-            raise InterconnectorError(f"Die {die} already has a model loaded")
+        plan = plan_split(split, free, backend)
 
-        kwargs: Dict[str, Any] = {}
-        if backend == "llama":
-            kwargs["main_gpu"] = die
-            kwargs["n_gpu_layers"] = n_gpu_layers
-            kwargs["n_ctx"] = n_ctx
-        elif backend == "pytorch":
-            kwargs["device"] = f"cuda:{die}"
-        else:
-            raise InterconnectorError(f"Unknown backend: {backend}")
+        for target in plan["dies"]:
+            if target in self._models:
+                raise InterconnectorError(f"Die {target} already has a model loaded")
 
-        log.info("Loading %s on die %d via %s", model, die, backend)
-        self._models[die] = create_backend(backend, model, **kwargs)
+            kwargs: Dict[str, Any] = {}
+            if backend == "llama":
+                kwargs["main_gpu"] = target
+                kwargs["n_gpu_layers"] = n_gpu_layers
+                kwargs["n_ctx"] = n_ctx
+                if plan["mode"] == "layer":
+                    # Experimental: signal multi-GPU intent; actual split depends on llama.cpp build
+                    kwargs["split_mode"] = 1
+            elif backend == "pytorch":
+                kwargs["device"] = f"cuda:{target}"
+            else:
+                raise InterconnectorError(f"Unknown backend: {backend}")
 
-        for d in self.dies:
-            if d.index == die:
-                d.busy = True
-                break
+            log.info("Loading %s on die %d via %s (mode=%s)", model, target, backend, plan["mode"])
+            self._models[target] = create_backend(backend, model, **kwargs)
 
-        log.info("Model loaded on die %d", die)
+            for d in self.dies:
+                if d.index == target:
+                    d.busy = True
+                    break
+
+        log.info("Model loaded (mode=%s, dies=%s)", plan["mode"], plan["dies"])
 
     def unload(self, die: int) -> None:
         """Unload the model from a die."""
@@ -112,14 +133,17 @@ class Interconnector:
 
     def generate(
         self,
-        prompt: str,
+        request: Union[str, Dict[str, Any]],
         die: Optional[int] = None,
-        max_tokens: int = 128,
-        temperature: float = 0.7,
     ) -> str:
-        """Generate text. Uses the only loaded model if die is None."""
+        """Generate text from a plain prompt or modern request dict."""
         if not self._models:
             raise InterconnectorError("No models loaded")
+
+        translated = translate_request(request)
+        prompt = translated["prompt"]
+        max_tokens = translated["max_tokens"]
+        temperature = translated["temperature"]
 
         if die is None:
             if len(self._models) != 1:
@@ -129,8 +153,17 @@ class Interconnector:
         if die not in self._models:
             raise InterconnectorError(f"No model on die {die}")
 
+        timer = PerfTimer()
+        timer.begin()
         backend = self._models[die]
-        return backend.generate(prompt, max_tokens=max_tokens, temperature=temperature)
+        result = backend.generate(prompt, max_tokens=max_tokens, temperature=temperature)
+        # Approximate token count for performance reporting
+        approx_tokens = max(1, len(result.split()))
+        timer.end(tokens=approx_tokens)
+        self._last_perf[die] = timer.report()
+        log.info("Die %d: %s", die, self._last_perf[die])
+
+        return result
 
     def free_dies(self) -> List[int]:
         """Return indices of dies that do not currently have a model."""
