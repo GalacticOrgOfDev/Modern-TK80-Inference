@@ -617,6 +617,13 @@ document.getElementById("audio-new-track").onclick = async () => {
   selectedTrack = t.id;
   await refreshTracks();
 };
+document.getElementById("audio-del-track").onclick = async () => {
+  if (selectedTrack == null) { alert("Select a track first"); return; }
+  await api(`/api/audio/tracks/${selectedTrack}`, { method: "DELETE" });
+  selectedTrack = null;
+  await refreshTracks();
+  await refreshClips();
+};
 document.getElementById("audio-refresh-devices").onclick = detectDevices;
 
 // Audio clips

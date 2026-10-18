@@ -1030,7 +1030,12 @@ def create_track(name: str = "Track", channel: str = "stereo") -> Dict[str, Any]
     return track
 
 
-@app.post("/api/audio/tracks/{track_id}")
+@app.delete("/api/audio/tracks/{track_id}")
+def delete_track(track_id: int) -> Dict[str, Any]:
+    global _audio_tracks, _audio_clips
+    _audio_tracks = [t for t in _audio_tracks if t["id"] != track_id]
+    _audio_clips = [c for c in _audio_clips if c.get("track_id") != track_id]
+    return {"tracks": _audio_tracks}
 def update_track(track_id: int, body: TrackUpdate) -> Dict[str, Any]:
     track = next((t for t in _audio_tracks if t["id"] == track_id), None)
     if track is None:

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import threading
 import time
-import webbrowser
 from pathlib import Path
 
 import uvicorn
@@ -32,6 +31,10 @@ def _run_server() -> None:
 
 
 def main() -> None:
+    """Start the backend and open a native Windows window.
+
+    pywebview is required. There is no browser fallback.
+    """
     _mount_frontend()
     thread = threading.Thread(target=_run_server, daemon=True)
     thread.start()
@@ -40,13 +43,14 @@ def main() -> None:
     url = f"http://{HOST}:{PORT}"
     try:
         import webview
+    except ImportError as e:
+        raise SystemExit(
+            "pywebview is required for the native window. "
+            "Install it with: pip install pywebview"
+        ) from e
 
-        webview.create_window("Modern-TK80", url, width=1100, height=760)
-        webview.start()
-    except ImportError:
-        print(f"pywebview not installed. Opening browser: {url}")
-        webbrowser.open(url)
-        thread.join()
+    webview.create_window("Modern-TK80", url, width=1280, height=800)
+    webview.start()
 
 
 if __name__ == "__main__":
