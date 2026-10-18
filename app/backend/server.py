@@ -243,10 +243,10 @@ def _dispatch_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         clip_id = int(args.get("clip_id", len(_audio_clips) - 1))
         if clip_id < 0 or clip_id >= len(_audio_clips):
             raise HTTPException(status_code=404, detail="clip not found")
-        path = _audio_clips[clip_id].get("path")
-        if not path:
+        raw_path = _audio_clips[clip_id].get("path")
+        if not raw_path:
             raise HTTPException(status_code=400, detail="clip has no file")
-        result = detect_bpm(Path(str(path)))
+        result = detect_bpm(Path(str(raw_path)))
         if result.get("confidence", 0) > 0.2:
             _bpm = result["bpm"]
         result["applied"] = _bpm

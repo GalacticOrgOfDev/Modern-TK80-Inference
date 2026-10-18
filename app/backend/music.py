@@ -136,7 +136,7 @@ def render_pattern(
         steps = STEPS
     step_samples = max(1, int(rate * 60.0 / max(1.0, bpm) / 4.0))
     total = step_samples * steps * max(1, bars)
-    mix = [0.0] * total
+    mix: List[float] = [0.0] * total
 
     for name, steps_on in pattern.items():
         if name not in INSTRUMENTS:

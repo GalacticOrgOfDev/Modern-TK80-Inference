@@ -44,15 +44,15 @@ def compress(
     ratio = max(1.0, ratio)
     out: List[int] = []
     for s in samples:
-        a = abs(s)
-        if a <= thresh:
-            v = s
+        amp = float(abs(s))
+        if amp <= thresh:
+            val = float(s)
         else:
-            over = float(a) - thresh
-            a = thresh + over / ratio
-            v = a if s >= 0 else -a
-        v *= makeup
-        out.append(int(max(-32768, min(32767, v))))
+            over = amp - thresh
+            amp = thresh + over / ratio
+            val = amp if s >= 0 else -amp
+        val *= makeup
+        out.append(int(max(-32768, min(32767, val))))
     return out
 
 
@@ -245,8 +245,8 @@ def apply_effect(
         )
     elif kind == "eq":
         raw = params.get("gains") or params.get("bands") or [1.0] * EQ_BANDS
-        gains = [float(g) for g in raw]
-        samples = eq_30(samples, rate, channels, gains)
+        gains_list = [float(g) for g in list(raw)]
+        samples = eq_30(samples, rate, channels, gains_list)
     elif kind == "reverb":
         samples = reverb_simple(
             samples,
