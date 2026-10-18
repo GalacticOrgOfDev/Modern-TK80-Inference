@@ -42,6 +42,7 @@ Opens a native window. Packaging notes for a Windows installer are in `app/packa
 - Timeline position per clip
 - True 16-bit peaks for the waveform
 - Play mix and bounce the arrangement to a stereo WAV (respects track mute/solo/gain, clip mute/gain, channel, position, and master bus)
+- MP3 and WAV uploads are accepted and stored as clips
 
 ### VST Maker
 
@@ -71,10 +72,12 @@ Models can add parameters and objects via tools. Users drag objects onto the can
 
 ## Movie / VFX Studio
 
-- Timeline of clips (prompt, duration, optional image path)
+- Timeline of clips (prompt, duration, optional image or MP4 path)
 - VFX per clip: none, fade, zoom, pan, color grade, overlay
 - Load image model and generate frames
+- Upload MP4 (or mov/webm) and place it on the timeline
 - Reorder, set duration, apply VFX
+- Models can call `vfx_add` and `vfx_apply` to create and edit clips
 - Export timeline as a JSON manifest (full encode later)
 - Ready for further expansion (layers, transitions, encode)
 
@@ -94,6 +97,8 @@ The model (or a direct chat command) can call:
 | `vst_add_object` | Place a knob, slider, button, or label on the VST canvas |
 | `vst_bind` | Bind a UI object to a parameter by name |
 | `vst_export` | Export the VST UI project to source plus layout JSON |
+| `vfx_add` | Add a clip to the movie timeline with an optional VFX effect |
+| `vfx_apply` | Apply a VFX effect to an existing timeline clip |
 
 Chat routes by modality:
 

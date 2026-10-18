@@ -62,6 +62,14 @@ TOOLS: Dict[str, Dict[str, Any]] = {
         "description": "Export the current VST UI project to VST3 source plus layout.",
         "args": {},
     },
+    "vfx_add": {
+        "description": "Add a clip to the movie timeline with an optional VFX effect.",
+        "args": {"prompt": "string", "duration": "float", "vfx": "none|fade|zoom|pan|color_grade|overlay"},
+    },
+    "vfx_apply": {
+        "description": "Apply a VFX effect to an existing timeline clip.",
+        "args": {"frame_id": "int", "vfx": "none|fade|zoom|pan|color_grade|overlay"},
+    },
 }
 
 # Model emits: tool: name {"arg": value}
@@ -151,5 +159,13 @@ def parse_intent(text: str) -> Optional[Dict[str, Any]]:
                 effect = e
                 break
         return {"name": "make_vst", "args": {"name": "GeneratedPlugin", "effect": effect, "plugin_type": "effect"}}
+
+    if any(word in t for word in ("vfx", "fade", "zoom", "color grade")):
+        vfx = "none"
+        for e in ("fade", "zoom", "pan", "color_grade", "overlay"):
+            if e.replace("_", " ") in t or e in t:
+                vfx = e
+                break
+        return {"name": "vfx_add", "args": {"prompt": text, "duration": 1.0, "vfx": vfx}}
 
     return None

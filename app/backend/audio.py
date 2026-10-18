@@ -69,6 +69,7 @@ def detect_scarlett(label: str) -> Optional[Dict[str, Any]]:
 
 
 def save_upload(filename: str, data: bytes) -> Path:
+    """Save an uploaded audio file. Accepts WAV or MP3; returns the path."""
     safe = Path(filename).name
     dest = UPLOAD_DIR / safe
     if dest.exists():
@@ -79,6 +80,11 @@ def save_upload(filename: str, data: bytes) -> Path:
             i += 1
     dest.write_bytes(data)
     return dest
+
+
+def is_supported_audio(path: Path) -> bool:
+    """True if the file is a WAV or MP3 we can store."""
+    return path.suffix.lower() in (".wav", ".mp3")
 
 
 def _read_wav(path: Path) -> Tuple[int, int, int, bytes]:

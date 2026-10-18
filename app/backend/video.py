@@ -15,6 +15,26 @@ UPLOAD_DIR = Path(os.environ.get("TK80_VIDEO", "uploads/video"))
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 VFX_TYPES = ("none", "fade", "zoom", "pan", "color_grade", "overlay")
+SUPPORTED_VIDEO = (".mp4", ".mov", ".webm")
+
+
+def is_supported_video(path: Path) -> bool:
+    """True if the file is an MP4 (or related) we can store."""
+    return path.suffix.lower() in SUPPORTED_VIDEO
+
+
+def save_video(filename: str, data: bytes) -> Path:
+    """Save an uploaded video file (MP4 preferred)."""
+    safe = Path(filename).name
+    dest = UPLOAD_DIR / safe
+    if dest.exists():
+        stem, suffix = dest.stem, dest.suffix
+        i = 1
+        while dest.exists():
+            dest = UPLOAD_DIR / f"{stem}_{i}{suffix}"
+            i += 1
+    dest.write_bytes(data)
+    return dest
 
 
 def make_clip(

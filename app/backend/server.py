@@ -49,7 +49,15 @@ from .vst_ui import (
     default_project,
     export_project,
 )
-from .video import VFX_TYPES, apply_vfx, export_manifest, make_clip as make_video_clip, reorder
+from .video import (
+    VFX_TYPES,
+    apply_vfx,
+    export_manifest,
+    is_supported_video,
+    make_clip as make_video_clip,
+    reorder,
+    save_video,
+)
 from .music import (
     DEFAULT_BPM,
     INSTRUMENTS,
@@ -254,6 +262,28 @@ def _dispatch_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         result = export_project(_vst_project)
         result["name"] = "vst_export"
         return result
+
+    if name == "vfx_add":
+        clip = make_video_clip(
+            len(_video_frames),
+            str(args.get("prompt", "")),
+            float(args.get("duration", 1.0)),
+            vfx=str(args.get("vfx", "none")),
+        )
+        _video_frames.append(clip)
+        return {"ok": True, "name": name, "clip": clip}
+
+    if name == "vfx_apply":
+        frame_id = int(args.get("frame_id", -1))
+        vfx = str(args.get("vfx", "none"))
+        for f in _video_frames:
+            if f["id"] == frame_id:
+                try:
+                    apply_vfx(f, vfx, args.get("params"))
+                except ValueError as e:
+                    raise HTTPException(status_code=400, detail=str(e)) from e
+                return {"ok": True, "name": name, "clip": f}
+        raise HTTPException(status_code=404, detail="frame not found")
 
     raise HTTPException(status_code=400, detail=f"unknown tool: {name}")
 
@@ -985,7 +1015,22 @@ def list_frames() -> Dict[str, Any]:
     return {"frames": _video_frames, "vfx_types": list(VFX_TYPES)}
 
 
-@app.post("/api/video/export")
+@app.post("/api/video/upload")
+async def upload_video(
+    file: UploadFile = File(...),
+    prompt: str = Form(""),
+    duration: float = Form(1.0),
+    vfx: str = Form("none"),
+) -> Dict[str, Any]:
+    """Upload an MP4 (or related) and add it as a timeline clip."""
+    data = await file.read()
+    dest = save_video(file.filename or "clip.mp4", data)
+    if not is_supported_video(dest):
+        dest.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail="only mp4, mov, webm are supported")
+    clip = make_video_clip(len(_video_frames), prompt, duration, str(dest), vfx)
+    _video_frames.append(clip)
+    return clip
 def export_timeline(name: str = "timeline") -> Dict[str, Any]:
     """Export the movie timeline as a JSON manifest."""
     if not _video_frames:

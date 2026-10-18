@@ -977,6 +977,19 @@ document.getElementById("video-export").onclick = async () => {
     document.getElementById("video-output").textContent = JSON.stringify(data, null, 2);
   } catch (e) { alert(e.message); }
 };
+document.getElementById("video-upload").onclick = async () => {
+  const file = document.getElementById("video-file").files[0];
+  if (!file) { alert("Select an MP4"); return; }
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("prompt", document.getElementById("video-prompt").value || file.name);
+  fd.append("duration", document.getElementById("video-dur").value || "1");
+  fd.append("vfx", document.getElementById("video-vfx").value || "none");
+  try {
+    await api("/api/video/upload", { method: "POST", body: fd });
+    await refreshFrames();
+  } catch (e) { alert(e.message); }
+};
 
 // Fusion
 document.getElementById("fusion-activate").onclick = async () => {
