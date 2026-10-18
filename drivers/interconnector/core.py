@@ -98,7 +98,35 @@ class Interconnector:
         if die is not None:
             free = [die] if die in free else []
 
+        # Layer split is only meaningful for a single llama instance across dies.
+        # Independent modalities (image/voice/agent) only support single or dual.
+        if modality != "llm" and split == "layer":
+            raise InterconnectorError("layer split is only supported for LLM modality")
+
         plan = plan_split(split, free, backend)
+
+        # For true layer split we load one model and mark both dies busy.
+        if plan["mode"] == "layer":
+            primary = plan["dies"][0]
+            if primary in self._models:
+                raise InterconnectorError(f"Die {primary} already has a model loaded")
+            kwargs = {
+                "main_gpu": primary,
+                "n_gpu_layers": n_gpu_layers,
+                "n_ctx": n_ctx,
+                "split_mode": 1,
+            }
+            log.info("Loading %s as layer-split LLM (primary die %d)", model, primary)
+            instance = create_backend("llama", model, **kwargs)
+            for target in plan["dies"]:
+                self._models[target] = instance
+                self._modality[target] = "llm"
+                for d in self.dies:
+                    if d.index == target:
+                        d.busy = True
+                        break
+            log.info("Layer-split model loaded on dies %s", plan["dies"])
+            return
 
         for target in plan["dies"]:
             if target in self._models:
@@ -113,8 +141,7 @@ class Interconnector:
                     kwargs["main_gpu"] = target
                     kwargs["n_gpu_layers"] = n_gpu_layers
                     kwargs["n_ctx"] = n_ctx
-                    if plan["mode"] == "layer":
-                        kwargs["split_mode"] = 1
+                    kwargs["split_mode"] = 0
                 elif backend == "pytorch":
                     kwargs["device"] = device
                 else:
@@ -128,9 +155,18 @@ class Interconnector:
                 instance = VoiceBackend(model, device=device)
 
             elif modality == "agent":
-                # Agent wraps an LLM; load the LLM first under the same die
-                kwargs = {"main_gpu": target, "n_gpu_layers": n_gpu_layers, "n_ctx": n_ctx}
-                llm = create_backend("llama", model, **kwargs)
+                # Agent wraps an LLM on the same die. Respect backend when possible.
+                if backend == "pytorch":
+                    llm = create_backend("pytorch", model, device=device)
+                else:
+                    llm = create_backend(
+                        "llama",
+                        model,
+                        main_gpu=target,
+                        n_gpu_layers=n_gpu_layers,
+                        n_ctx=n_ctx,
+                        split_mode=0,
+                    )
                 instance = AgentBackend(llm)
 
             else:
@@ -148,17 +184,26 @@ class Interconnector:
         log.info("Model loaded (mode=%s, dies=%s, modality=%s)", plan["mode"], plan["dies"], modality)
 
     def unload(self, die: int) -> None:
-        """Unload the model from a die."""
+        """Unload the model from a die.
+
+        If the same instance is shared across dies (layer split), all dies
+        holding that instance are cleared.
+        """
         if die not in self._models:
             raise InterconnectorError(f"No model on die {die}")
 
-        del self._models[die]
-        self._modality.pop(die, None)
-        for d in self.dies:
-            if d.index == die:
-                d.busy = False
-                break
-        log.info("Unloaded model from die %d", die)
+        instance = self._models[die]
+        shared = [idx for idx, m in self._models.items() if m is instance]
+
+        for idx in shared:
+            del self._models[idx]
+            self._modality.pop(idx, None)
+            for d in self.dies:
+                if d.index == idx:
+                    d.busy = False
+                    break
+
+        log.info("Unloaded model from die(s) %s", shared)
 
     def generate(
         self,
@@ -194,7 +239,8 @@ class Interconnector:
 
         elif modality == "image":
             prompt = request if isinstance(request, str) else request.get("prompt", "")
-            result = backend.generate(prompt)
+            extra = {k: v for k, v in (request.items() if isinstance(request, dict) else []) if k != "prompt"}
+            result = backend.generate(prompt, **extra)
             approx = 1
 
         elif modality == "voice":
