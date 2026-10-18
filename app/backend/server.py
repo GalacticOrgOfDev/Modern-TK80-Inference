@@ -14,6 +14,12 @@ from pydantic import BaseModel
 from drivers.interconnector import Interconnector, InterconnectorError
 from drivers.interconnector.diefusion import DieFusionCore
 
+from .asio import (
+    ASIO_BUFFERS,
+    DEFAULT_BUFFER,
+    asio_profile,
+    probe_asio,
+)
 from .audio import (
     COMMON_RATES,
     DEFAULT_SAMPLE_RATE,
@@ -42,6 +48,8 @@ _audio_tracks: List[Dict[str, Any]] = []
 _audio_clips: List[Dict[str, Any]] = []
 _video_frames: List[Dict[str, Any]] = []
 _sample_rate: int = DEFAULT_SAMPLE_RATE
+_asio_enabled: bool = False
+_asio_buffer: int = DEFAULT_BUFFER
 
 
 def get_ic() -> Interconnector:
@@ -65,6 +73,16 @@ def _ensure_track() -> int:
     if not _audio_tracks:
         _audio_tracks.append(make_track(0, "Track 1", "stereo", _sample_rate))
     return _audio_tracks[0]["id"]
+
+
+def _validate_rate_for_track(track: Dict[str, Any], rate: int) -> None:
+    """Reject a rate the armed Scarlett cannot do."""
+    scar = track.get("scarlett")
+    if scar and rate not in scar.get("rates", []):
+        raise HTTPException(
+            status_code=400,
+            detail=f"{scar['name']} does not support {rate} Hz",
+        )
 
 
 class LoadRequest(BaseModel):
@@ -112,8 +130,10 @@ class TrackUpdate(BaseModel):
     sample_rate: Optional[int] = None
 
 
-class SampleRateRequest(BaseModel):
-    sample_rate: int
+class AudioSettingsRequest(BaseModel):
+    sample_rate: Optional[int] = None
+    asio: Optional[bool] = None
+    buffer: Optional[int] = None
 
 
 class VideoEditRequest(BaseModel):
@@ -225,16 +245,33 @@ def audio_settings() -> Dict[str, Any]:
         "default_sample_rate": DEFAULT_SAMPLE_RATE,
         "common_rates": list(COMMON_RATES),
         "scarlett_profiles": SCARLETT_PROFILES,
+        "asio": _asio_enabled,
+        "buffer": _asio_buffer,
+        "buffers": list(ASIO_BUFFERS),
+        "asio_probe": probe_asio(),
+        "asio_profile": asio_profile(_sample_rate, _asio_buffer),
     }
 
 
 @app.post("/api/audio/settings")
-def set_audio_settings(body: SampleRateRequest) -> Dict[str, Any]:
-    global _sample_rate
-    if body.sample_rate not in COMMON_RATES:
-        raise HTTPException(status_code=400, detail=f"unsupported rate: {body.sample_rate}")
-    _sample_rate = body.sample_rate
-    return {"sample_rate": _sample_rate}
+def set_audio_settings(body: AudioSettingsRequest) -> Dict[str, Any]:
+    global _sample_rate, _asio_enabled, _asio_buffer
+    if body.sample_rate is not None:
+        if body.sample_rate not in COMMON_RATES:
+            raise HTTPException(status_code=400, detail=f"unsupported rate: {body.sample_rate}")
+        _sample_rate = body.sample_rate
+    if body.asio is not None:
+        _asio_enabled = body.asio
+    if body.buffer is not None:
+        if body.buffer not in ASIO_BUFFERS:
+            raise HTTPException(status_code=400, detail=f"unsupported buffer: {body.buffer}")
+        _asio_buffer = body.buffer
+    return {
+        "sample_rate": _sample_rate,
+        "asio": _asio_enabled,
+        "buffer": _asio_buffer,
+        "asio_profile": asio_profile(_sample_rate, _asio_buffer),
+    }
 
 
 # ---- Tracks ----
@@ -260,14 +297,27 @@ def update_track(track_id: int, body: TrackUpdate) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail="channel must be stereo, left, or right")
     if "sample_rate" in data and data["sample_rate"] not in COMMON_RATES:
         raise HTTPException(status_code=400, detail="unsupported sample rate")
-    if data.get("armed") is True:
+
+    # Apply non-arm fields first so Scarlett detection sees the new label
+    arming = data.pop("armed", None)
+    track.update(data)
+    label = track.get("device_label") or ""
+    track["scarlett"] = detect_scarlett(label)
+
+    if "sample_rate" in data:
+        _validate_rate_for_track(track, data["sample_rate"])
+    else:
+        _validate_rate_for_track(track, track.get("sample_rate") or _sample_rate)
+
+    if arming is True:
         for t in _audio_tracks:
             if t["id"] != track_id:
                 t["armed"] = False
-    track.update(data)
-    # Attach Scarlett profile when a matching device is armed
-    label = track.get("device_label") or ""
-    track["scarlett"] = detect_scarlett(label) if track.get("armed") else None
+        track["armed"] = True
+        track["sample_rate"] = _sample_rate
+    elif arming is False:
+        track["armed"] = False
+        track["scarlett"] = None
     return track
 
 
@@ -314,6 +364,8 @@ async def save_recording(
     dest = save_upload(file.filename or "recording.webm", data)
     rate = track.get("sample_rate") or _sample_rate
     clip = make_clip(len(_audio_clips), dest.name, dest, track_id=track_id, sample_rate=rate)
+    clip["asio"] = _asio_enabled
+    clip["buffer"] = _asio_buffer if _asio_enabled else None
     _audio_clips.append(clip)
     return clip
 
