@@ -18,6 +18,11 @@ fi
 echo "nvcc version:"
 nvcc --version
 
+# Warn if the toolkit does not look like 11.8
+if ! nvcc --version | grep -q "release 11.8"; then
+  echo "WARNING: nvcc does not report CUDA 11.8. K80 (sm_37) requires CUDA 11.x."
+fi
+
 echo
 echo "Building llama-cpp-python with CMAKE_CUDA_ARCHITECTURES=37 (Tesla K80)"
 
