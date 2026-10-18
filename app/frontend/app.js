@@ -11,6 +11,7 @@ let asioRecording = false;
 let bpm = 120;
 let pattern = {};
 let levelTimer = null;
+let master = { gain: 1, mute: false, compressor: { enabled: false, threshold: 0.5, ratio: 4, makeup: 1 } };
 
 async function api(path, opts = {}) {
   const res = await fetch(API + path, {
@@ -86,7 +87,7 @@ function drawWave(clip) {
   ctx.fillRect(0, 0, w, h);
   const peaks = (clip && clip.peaks && clip.peaks.length) ? clip.peaks : Array(64).fill(0.15);
   const barW = w / peaks.length;
-  ctx.fillStyle = clip && clip.gain === 0 ? "#555" : "#0a7";
+  ctx.fillStyle = clip && clip.mute ? "#555" : "#0a7";
   peaks.forEach((p, i) => {
     const bh = Math.max(2, p * (h - 8));
     ctx.fillRect(i * barW + 1, (h - bh) / 2, barW - 2, bh);
@@ -109,7 +110,7 @@ function startLevelPoll() {
       const data = await api("/api/audio/asio/levels");
       if (data.peaks && data.peaks.length) drawLive(data.peaks);
     } catch (e) {
-      /* ignore transient */
+      /* ignore */
     }
   }, 80);
 }
@@ -199,10 +200,18 @@ async function loadAudioSettings() {
     asioEnabled = !!data.asio;
     asioBuffer = data.buffer || 64;
     asioRecording = !!data.asio_recording;
+    if (data.master) master = data.master;
     document.getElementById("sample-rate").value = String(studioRate);
     document.getElementById("asio-enabled").checked = asioEnabled;
     document.getElementById("asio-buffer").value = String(asioBuffer);
     document.getElementById("rate-pill").textContent = `${studioRate} Hz`;
+    document.getElementById("master-gain").value = master.gain || 1;
+    document.getElementById("master-mute").checked = !!master.mute;
+    const c = master.compressor || {};
+    document.getElementById("master-comp").checked = !!c.enabled;
+    document.getElementById("master-thresh").value = c.threshold ?? 0.5;
+    document.getElementById("master-ratio").value = c.ratio ?? 4;
+    document.getElementById("master-makeup").value = c.makeup ?? 1;
     updateAsioStatus(data);
   } catch (e) {
     /* keep defaults */
@@ -239,8 +248,9 @@ async function refreshTracks() {
         <option value="left" ${t.channel === "left" ? "selected" : ""}>Left</option>
         <option value="right" ${t.channel === "right" ? "selected" : ""}>Right</option>
       </select>
+      <input class="lvl" type="range" min="0" max="2" step="0.05" value="${t.gain || 1}" title="Level" />
       <button class="arm" data-id="${t.id}">${t.armed ? "Armed" : "Arm"}</button>
-      <button class="solo" data-id="${t.id}">${t.solo ? "Solo" : "Solo"}</button>
+      <button class="solo" data-id="${t.id}">${t.solo ? "Soloed" : "Solo"}</button>
       <button class="mute" data-id="${t.id}">${t.mute ? "Muted" : "Mute"}</button>
       <span class="dev">${t.device_label || "no device"}${idx}${scar}</span>
     `;
@@ -251,6 +261,12 @@ async function refreshTracks() {
         body: JSON.stringify({ channel: e.target.value }),
       });
       await refreshTracks();
+    };
+    row.querySelector(".lvl").onchange = async (e) => {
+      await api(`/api/audio/tracks/${t.id}`, {
+        method: "POST",
+        body: JSON.stringify({ gain: Number(e.target.value) }),
+      });
     };
     row.querySelector(".arm").onclick = async () => {
       const device = document.getElementById("audio-devices");
@@ -298,13 +314,14 @@ async function refreshClips() {
   list.innerHTML = "";
   for (const c of audioClips) {
     const div = document.createElement("div");
-    div.className = "clip" + (c.id === selectedClip ? " selected" : "");
+    div.className = "clip" + (c.id === selectedClip ? " selected" : "") + (c.mute ? " muted" : "");
     const tr = audioTracks.find((t) => t.id === c.track_id);
     const ch = tr ? tr.channel : "-";
     const asio = c.asio ? " ASIO" : "";
     const mix = c.mix ? " MIX" : "";
+    const muted = c.mute ? " MUTE" : "";
     const pos = c.position != null ? `@${c.position}s` : "";
-    div.textContent = `#${c.id} ${c.name} [T${c.track_id}/${ch}] ${pos} ${c.duration}s${asio}${mix}`;
+    div.textContent = `#${c.id} ${c.name} [T${c.track_id}/${ch}] ${pos} ${c.duration}s${asio}${mix}${muted}`;
     div.onclick = () => {
       selectedClip = c.id;
       document.getElementById("audio-clip-id").value = c.id;
@@ -322,6 +339,7 @@ async function refreshClips() {
   document.getElementById("audio-output").textContent = JSON.stringify({
     tracks: audioTracks,
     clips: audioClips,
+    master,
     sample_rate: studioRate,
     asio: asioEnabled,
     buffer: asioBuffer,
@@ -376,25 +394,36 @@ async function detectDevices() {
 
 // Settings
 document.getElementById("sample-rate").onchange = async (e) => {
-  try {
-    await pushSettings({ sample_rate: Number(e.target.value) });
-  } catch (err) {
-    alert(err.message);
-  }
+  try { await pushSettings({ sample_rate: Number(e.target.value) }); }
+  catch (err) { alert(err.message); }
 };
 document.getElementById("asio-enabled").onchange = async (e) => {
-  try {
-    await pushSettings({ asio: e.target.checked });
-  } catch (err) {
-    alert(err.message);
-  }
+  try { await pushSettings({ asio: e.target.checked }); }
+  catch (err) { alert(err.message); }
 };
 document.getElementById("asio-buffer").onchange = async (e) => {
+  try { await pushSettings({ buffer: Number(e.target.value) }); }
+  catch (err) { alert(err.message); }
+};
+
+// Master
+document.getElementById("master-apply").onclick = async () => {
   try {
-    await pushSettings({ buffer: Number(e.target.value) });
-  } catch (err) {
-    alert(err.message);
-  }
+    master = await api("/api/audio/master", {
+      method: "POST",
+      body: JSON.stringify({
+        gain: Number(document.getElementById("master-gain").value),
+        mute: document.getElementById("master-mute").checked,
+        compressor: {
+          enabled: document.getElementById("master-comp").checked,
+          threshold: Number(document.getElementById("master-thresh").value),
+          ratio: Number(document.getElementById("master-ratio").value),
+          makeup: Number(document.getElementById("master-makeup").value),
+        },
+      }),
+    });
+    document.getElementById("audio-transport-status").textContent = "Master updated";
+  } catch (e) { alert(e.message); }
 };
 
 // Music
@@ -591,6 +620,35 @@ document.getElementById("audio-gain-btn").onclick = () => audioEdit("gain");
 document.getElementById("audio-reverse").onclick = () => audioEdit("reverse");
 document.getElementById("audio-silence").onclick = () => audioEdit("silence");
 document.getElementById("audio-set-position").onclick = () => audioEdit("position");
+
+document.getElementById("audio-clip-mute").onclick = async () => {
+  const clip = audioClips.find((c) => c.id === selectedClip);
+  if (!clip) return;
+  try {
+    await api("/api/audio/clips/mute", {
+      method: "POST",
+      body: JSON.stringify({ clip_id: selectedClip, mute: !clip.mute }),
+    });
+    await refreshClips();
+  } catch (e) { alert(e.message); }
+};
+
+async function applyEffect(kind, params) {
+  try {
+    const clip = await api("/api/audio/clips/effect", {
+      method: "POST",
+      body: JSON.stringify({ clip_id: selectedClip, kind, params }),
+    });
+    selectedClip = clip.id;
+    await refreshClips();
+    document.getElementById("audio-transport-status").textContent = `${kind} applied to #${clip.id}`;
+  } catch (e) { alert(e.message); }
+}
+document.getElementById("fx-normalize").onclick = () => applyEffect("normalize", { target: 0.95 });
+document.getElementById("fx-compress").onclick = () =>
+  applyEffect("compress", { threshold: 0.5, ratio: 4, makeup: 1.2 });
+document.getElementById("fx-morph").onclick = () =>
+  applyEffect("morph", { points: [[0, 0.2], [0.25, 1], [0.5, 0.4], [0.75, 1], [1, 0.2]] });
 
 document.getElementById("audio-play").onclick = () => {
   const clip = audioClips.find((c) => c.id === selectedClip);
