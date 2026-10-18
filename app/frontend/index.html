@@ -62,8 +62,8 @@
         </label>
         <label>ASIO buffer
           <select id="asio-buffer">
-            <option value="64">64</option>
-            <option value="128" selected>128</option>
+            <option value="64" selected>64</option>
+            <option value="128">128</option>
             <option value="256">256</option>
             <option value="512">512</option>
             <option value="1024">1024</option>
@@ -71,6 +71,26 @@
         </label>
         <div id="asio-status" class="badge">ASIO off</div>
         <div id="scarlett-badge" class="badge">No Scarlett detected</div>
+        <hr />
+        <label>BPM<input id="bpm" type="number" value="120" min="40" max="220" /></label>
+        <div class="edit-row">
+          <button id="bpm-set">Set BPM</button>
+          <button id="bpm-detect">Detect</button>
+        </div>
+        <label>Instrument
+          <select id="instrument">
+            <option>kick</option><option>snare</option><option>hat</option>
+            <option>bass</option><option>lead</option><option>pad</option>
+          </select>
+        </label>
+        <label>Note (MIDI)<input id="note" type="number" value="60" min="0" max="127" /></label>
+        <button id="instrument-gen">Generate instrument</button>
+        <label>Loop style
+          <select id="loop-style">
+            <option>basic</option><option>syncopated</option><option>pad</option>
+          </select>
+        </label>
+        <button id="loop-gen">Generate loop</button>
         <hr />
         <label>Voice model<input id="audio-model" placeholder="openai/whisper-small" /></label>
         <label>Die<input id="audio-die" type="number" value="0" /></label>
@@ -102,7 +122,12 @@
           <button id="audio-record">Record</button>
           <span id="audio-transport-status">Ready</span>
           <span id="rate-pill">44100 Hz</span>
+          <span id="bpm-pill">120 BPM</span>
           <audio id="audio-player"></audio>
+        </div>
+        <div id="sequencer" class="sequencer"></div>
+        <div class="edit-row">
+          <button id="pattern-render">Render pattern</button>
         </div>
         <div id="track-list" class="track-list"></div>
         <canvas id="audio-wave" width="640" height="100"></canvas>
