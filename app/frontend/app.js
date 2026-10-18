@@ -61,7 +61,7 @@ function renderChat() {
 function showToolIndicator(data) {
   const el = document.getElementById("tool-indicator");
   const names = [];
-  if (data && data.tool) names.push(data.tool.name || "tool");
+  if (data && data.tool && data.tool.name) names.push(data.tool.name);
   if (data && Array.isArray(data.tools)) {
     for (const t of data.tools) {
       if (t && t.name) names.push(t.name);
@@ -91,12 +91,6 @@ function drawWave(clip) {
     const bh = Math.max(2, p * (h - 8));
     ctx.fillRect(i * barW + 1, (h - bh) / 2, barW - 2, bh);
   });
-  if (clip && clip.duration > 0) {
-    const x1 = (clip.start / clip.duration) * w;
-    const x2 = (clip.end / clip.duration) * w;
-    ctx.strokeStyle = "#fa0";
-    ctx.strokeRect(x1, 2, Math.max(2, x2 - x1), h - 4);
-  }
 }
 
 function drawLive(peaks) {
@@ -246,6 +240,7 @@ async function refreshTracks() {
         <option value="right" ${t.channel === "right" ? "selected" : ""}>Right</option>
       </select>
       <button class="arm" data-id="${t.id}">${t.armed ? "Armed" : "Arm"}</button>
+      <button class="solo" data-id="${t.id}">${t.solo ? "Solo" : "Solo"}</button>
       <button class="mute" data-id="${t.id}">${t.mute ? "Muted" : "Mute"}</button>
       <span class="dev">${t.device_label || "no device"}${idx}${scar}</span>
     `;
@@ -277,6 +272,13 @@ async function refreshTracks() {
         alert(e.message);
       }
     };
+    row.querySelector(".solo").onclick = async () => {
+      await api(`/api/audio/tracks/${t.id}`, {
+        method: "POST",
+        body: JSON.stringify({ solo: !t.solo }),
+      });
+      await refreshTracks();
+    };
     row.querySelector(".mute").onclick = async () => {
       await api(`/api/audio/tracks/${t.id}`, {
         method: "POST",
@@ -300,13 +302,16 @@ async function refreshClips() {
     const tr = audioTracks.find((t) => t.id === c.track_id);
     const ch = tr ? tr.channel : "-";
     const asio = c.asio ? " ASIO" : "";
-    div.textContent = `#${c.id} ${c.name} [T${c.track_id}/${ch}] [${c.start}→${c.end}s] ${c.sample_rate || ""}Hz${asio}`;
+    const mix = c.mix ? " MIX" : "";
+    const pos = c.position != null ? `@${c.position}s` : "";
+    div.textContent = `#${c.id} ${c.name} [T${c.track_id}/${ch}] ${pos} ${c.duration}s${asio}${mix}`;
     div.onclick = () => {
       selectedClip = c.id;
       document.getElementById("audio-clip-id").value = c.id;
       document.getElementById("audio-start").value = c.start;
       document.getElementById("audio-end").value = c.end;
       document.getElementById("audio-gain").value = c.gain;
+      document.getElementById("audio-position").value = c.position || 0;
       drawWave(c);
       refreshClips();
     };
@@ -572,16 +577,20 @@ async function audioEdit(action) {
     start: Number(document.getElementById("audio-start").value),
     end: Number(document.getElementById("audio-end").value),
     gain: Number(document.getElementById("audio-gain").value),
+    position: Number(document.getElementById("audio-position").value),
   };
   try {
-    await api("/api/audio/edit", { method: "POST", body: JSON.stringify(body) });
+    const clip = await api("/api/audio/edit", { method: "POST", body: JSON.stringify(body) });
+    selectedClip = clip.id;
     await refreshClips();
+    document.getElementById("audio-transport-status").textContent = `${action} applied to #${clip.id}`;
   } catch (e) { alert(e.message); }
 }
 document.getElementById("audio-trim").onclick = () => audioEdit("trim");
 document.getElementById("audio-gain-btn").onclick = () => audioEdit("gain");
 document.getElementById("audio-reverse").onclick = () => audioEdit("reverse");
 document.getElementById("audio-silence").onclick = () => audioEdit("silence");
+document.getElementById("audio-set-position").onclick = () => audioEdit("position");
 
 document.getElementById("audio-play").onclick = () => {
   const clip = audioClips.find((c) => c.id === selectedClip);
@@ -589,23 +598,39 @@ document.getElementById("audio-play").onclick = () => {
     document.getElementById("audio-transport-status").textContent = "No file on this clip";
     return;
   }
-  const track = audioTracks.find((t) => t.id === clip.track_id);
-  if (track && track.mute) {
-    document.getElementById("audio-transport-status").textContent = "Track is muted";
-    return;
-  }
   const player = document.getElementById("audio-player");
   player.src = `/api/audio/file/${clip.id}`;
-  player.currentTime = clip.start || 0;
-  const vol = Math.min(1, (clip.gain || 1) * (track ? track.gain : 1));
-  player.volume = vol;
+  player.currentTime = 0;
+  player.volume = Math.min(1, clip.gain || 1);
   player.play();
-  const asio = clip.asio ? ` ASIO/${clip.buffer || asioBuffer}` : "";
   document.getElementById("audio-transport-status").textContent =
-    `Playing #${clip.id} (${track ? track.channel : "stereo"}) @ ${clip.sample_rate || studioRate} Hz${asio}`;
-  player.ontimeupdate = () => {
-    if (clip.end && player.currentTime >= clip.end) player.pause();
-  };
+    `Playing #${clip.id} @ ${clip.sample_rate || studioRate} Hz`;
+};
+
+document.getElementById("audio-play-mix").onclick = async () => {
+  try {
+    const clip = await api("/api/audio/mix", { method: "POST" });
+    selectedClip = clip.id;
+    await refreshClips();
+    const player = document.getElementById("audio-player");
+    player.src = `/api/audio/file/${clip.id}`;
+    player.currentTime = 0;
+    player.volume = 1;
+    player.play();
+    document.getElementById("audio-transport-status").textContent = `Playing mix #${clip.id}`;
+  } catch (e) { alert(e.message); }
+};
+
+document.getElementById("audio-bounce").onclick = async () => {
+  try {
+    const clip = await api("/api/audio/bounce", {
+      method: "POST",
+      body: JSON.stringify({ name: "mix.wav" }),
+    });
+    selectedClip = clip.id;
+    await refreshClips();
+    document.getElementById("audio-transport-status").textContent = `Bounced to ${clip.name}`;
+  } catch (e) { alert(e.message); }
 };
 
 async function stopRecording() {
