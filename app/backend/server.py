@@ -470,7 +470,7 @@ def asio_start(body: AsioStartRequest) -> Dict[str, Any]:
     if track is None:
         raise HTTPException(status_code=404, detail="track not found")
     if not track.get("armed"):
-            raise HTTPException(status_code=400, detail="track is not armed")
+        raise HTTPException(status_code=400, detail="track is not armed")
     if _asio_recorder.recording:
         raise HTTPException(status_code=400, detail="already recording")
 
