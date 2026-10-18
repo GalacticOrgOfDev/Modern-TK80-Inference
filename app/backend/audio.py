@@ -1,4 +1,4 @@
-"""Audio studio helpers: upload storage, waveform peaks, clip state."""
+"""Audio studio helpers: tracks, clips, upload storage, waveform peaks."""
 
 from __future__ import annotations
 
@@ -10,11 +10,12 @@ from typing import Any, Dict, List, Optional
 UPLOAD_DIR = Path(os.environ.get("TK80_UPLOADS", "uploads/audio"))
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
+CHANNELS = ("stereo", "left", "right")
+
 
 def save_upload(filename: str, data: bytes) -> Path:
     safe = Path(filename).name
     dest = UPLOAD_DIR / safe
-    # Avoid overwrite
     if dest.exists():
         stem, suffix = dest.stem, dest.suffix
         i = 1
@@ -36,15 +37,12 @@ def wav_duration(path: Path) -> Optional[float]:
 
 
 def wav_peaks(path: Path, buckets: int = 64) -> List[float]:
-    """Simple peak envelope for WAV. Returns normalized 0-1 values."""
     try:
         with wave.open(str(path), "rb") as w:
             n = w.getnframes()
             if n == 0:
                 return [0.0] * buckets
-            sw = w.getsampwidth()
             raw = w.readframes(n)
-            # Use absolute byte magnitude as a rough envelope
             step = max(1, len(raw) // buckets)
             peaks = []
             for i in range(buckets):
@@ -52,14 +50,19 @@ def wav_peaks(path: Path, buckets: int = 64) -> List[float]:
                 if not chunk:
                     peaks.append(0.0)
                     continue
-                peak = max(chunk) / 255.0
-                peaks.append(round(peak, 3))
+                peaks.append(round(max(chunk) / 255.0, 3))
             return peaks
     except Exception:
         return [0.2] * buckets
 
 
-def make_clip(clip_id: int, name: str, path: Optional[Path] = None, duration: float = 0.0) -> Dict[str, Any]:
+def make_clip(
+    clip_id: int,
+    name: str,
+    path: Optional[Path] = None,
+    duration: float = 0.0,
+    track_id: Optional[int] = None,
+) -> Dict[str, Any]:
     dur = duration
     peaks: List[float] = []
     rel = ""
@@ -79,4 +82,21 @@ def make_clip(clip_id: int, name: str, path: Optional[Path] = None, duration: fl
         "end": round(dur, 3),
         "reversed": False,
         "peaks": peaks,
+        "track_id": track_id,
+    }
+
+
+def make_track(track_id: int, name: str, channel: str = "stereo") -> Dict[str, Any]:
+    if channel not in CHANNELS:
+        channel = "stereo"
+    return {
+        "id": track_id,
+        "name": name,
+        "channel": channel,
+        "gain": 1.0,
+        "mute": False,
+        "solo": False,
+        "armed": False,
+        "device_id": None,
+        "device_label": None,
     }
