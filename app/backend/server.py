@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from drivers.interconnector import Interconnector, InterconnectorError
 from drivers.interconnector.diefusion import DieFusionCore
+
+from .audio import UPLOAD_DIR, make_clip, save_upload
 
 log = logging.getLogger("tk80.app")
 
@@ -25,7 +29,6 @@ app.add_middleware(
 _ic: Optional[Interconnector] = None
 _fusion: Optional[DieFusionCore] = None
 
-# In-memory creator state (starter setup)
 _chat: List[Dict[str, str]] = []
 _audio_clips: List[Dict[str, Any]] = []
 _video_frames: List[Dict[str, Any]] = []
@@ -75,14 +78,14 @@ class ChatRequest(BaseModel):
 
 class AudioEditRequest(BaseModel):
     clip_id: int
-    action: str  # trim, gain, reverse, silence
+    action: str
     start: Optional[float] = None
     end: Optional[float] = None
     gain: Optional[float] = None
 
 
 class VideoEditRequest(BaseModel):
-    action: str  # add_frame, delete_frame, reorder, set_duration
+    action: str
     frame_id: Optional[int] = None
     prompt: Optional[str] = None
     duration: Optional[float] = None
@@ -91,14 +94,12 @@ class VideoEditRequest(BaseModel):
 
 @app.get("/api/status")
 def get_status() -> Dict[str, Any]:
-    ic = get_ic()
-    return ic.status()
+    return get_ic().status()
 
 
 @app.get("/api/advertise")
 def get_advertise() -> Dict[str, Any]:
-    ic = get_ic()
-    return ic.advertise()
+    return get_ic().advertise()
 
 
 @app.get("/api/fusion")
@@ -129,9 +130,8 @@ def fusion_deactivate() -> Dict[str, str]:
 
 @app.post("/api/load")
 def load_model(body: LoadRequest) -> Dict[str, str]:
-    ic = get_ic()
     try:
-        ic.load(
+        get_ic().load(
             body.model,
             backend=body.backend,
             modality=body.modality,
@@ -145,9 +145,8 @@ def load_model(body: LoadRequest) -> Dict[str, str]:
 
 @app.post("/api/unload")
 def unload_model(die: int) -> Dict[str, str]:
-    ic = get_ic()
     try:
-        ic.unload(die)
+        get_ic().unload(die)
     except InterconnectorError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     return {"ok": "unloaded"}
@@ -155,9 +154,8 @@ def unload_model(die: int) -> Dict[str, str]:
 
 @app.post("/api/generate")
 def generate(body: GenerateRequest) -> Dict[str, Any]:
-    ic = get_ic()
     try:
-        result = ic.generate(body.request, die=body.die)
+        result = get_ic().generate(body.request, die=body.die)
     except InterconnectorError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     if not isinstance(result, (str, dict, list, int, float, bool, type(None))):
@@ -167,18 +165,12 @@ def generate(body: GenerateRequest) -> Dict[str, Any]:
 
 @app.post("/api/chat")
 def chat(body: ChatRequest) -> Dict[str, Any]:
-    """Multi-turn chat. Stores history server-side."""
-    ic = get_ic()
     messages = [{"role": m.role, "content": m.content} for m in body.messages]
     _chat.clear()
     _chat.extend(messages)
     try:
-        result = ic.generate(
-            {
-                "messages": messages,
-                "max_tokens": body.max_tokens,
-                "temperature": body.temperature,
-            },
+        result = get_ic().generate(
+            {"messages": messages, "max_tokens": body.max_tokens, "temperature": body.temperature},
             die=body.die,
         )
     except InterconnectorError as e:
@@ -206,17 +198,28 @@ def list_clips() -> Dict[str, Any]:
 
 @app.post("/api/audio/clips")
 def add_clip(name: str, duration: float = 0.0, path: str = "") -> Dict[str, Any]:
-    clip = {
-        "id": len(_audio_clips),
-        "name": name,
-        "duration": duration,
-        "path": path,
-        "gain": 1.0,
-        "start": 0.0,
-        "end": duration,
-    }
+    clip = make_clip(len(_audio_clips), name, Path(path) if path else None, duration)
     _audio_clips.append(clip)
     return clip
+
+
+@app.post("/api/audio/upload")
+async def upload_audio(file: UploadFile = File(...)) -> Dict[str, Any]:
+    data = await file.read()
+    dest = save_upload(file.filename or "clip.wav", data)
+    clip = make_clip(len(_audio_clips), dest.name, dest)
+    _audio_clips.append(clip)
+    return clip
+
+
+@app.get("/api/audio/file/{clip_id}")
+def audio_file(clip_id: int):
+    if clip_id < 0 or clip_id >= len(_audio_clips):
+        raise HTTPException(status_code=404, detail="clip not found")
+    path = _audio_clips[clip_id].get("path")
+    if not path or not Path(path).exists():
+        raise HTTPException(status_code=404, detail="file missing")
+    return FileResponse(path)
 
 
 @app.post("/api/audio/edit")
@@ -226,12 +229,14 @@ def edit_audio(body: AudioEditRequest) -> Dict[str, Any]:
     clip = _audio_clips[body.clip_id]
     if body.action == "trim":
         if body.start is not None:
-            clip["start"] = body.start
+            clip["start"] = max(0.0, body.start)
         if body.end is not None:
-            clip["end"] = body.end
+            clip["end"] = min(clip["duration"], body.end)
+        if clip["end"] < clip["start"]:
+            clip["end"] = clip["start"]
     elif body.action == "gain":
         if body.gain is not None:
-            clip["gain"] = body.gain
+            clip["gain"] = max(0.0, body.gain)
     elif body.action == "reverse":
         clip["reversed"] = not clip.get("reversed", False)
     elif body.action == "silence":
@@ -249,11 +254,7 @@ def list_frames() -> Dict[str, Any]:
 @app.post("/api/video/edit")
 def edit_video(body: VideoEditRequest) -> Dict[str, Any]:
     if body.action == "add_frame":
-        frame = {
-            "id": len(_video_frames),
-            "prompt": body.prompt or "",
-            "duration": body.duration or 1.0,
-        }
+        frame = {"id": len(_video_frames), "prompt": body.prompt or "", "duration": body.duration or 1.0}
         _video_frames.append(frame)
         return {"frames": _video_frames}
     if body.action == "delete_frame" and body.frame_id is not None:
