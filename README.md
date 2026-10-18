@@ -15,7 +15,7 @@ The K80 is two independent 12 GB dies. Official support ended with CUDA 11.x and
 The primary interface is the custom app in [`app/`](./app/):
 
 - **Chat** — LLM or agent modality, with a tool indicator
-- **Mini audio studio** — layered tracks, ASIO recording, sequencer, instruments, loops
+- **Mini DAW** — layered tracks, ASIO recording, sequencer, instruments, loops, mix, bounce
 - **Mini video studio** — frame timeline (image models)
 - **DieFusionCore** — future dual-die unification
 
@@ -26,15 +26,19 @@ python -m app.launcher
 
 Opens a native window. Packaging notes for a Windows installer are in `app/packaging/`.
 
-## Audio studio
+## Mini DAW
 
-- Layered tracks with stereo / left / right channeling
+- Layered tracks with stereo / left / right channeling, mute, and solo
 - Arm a track for a detected ASIO input
 - Sample rate (default 44100 Hz) with Focusrite Scarlett 2i2 Gen 1/2 profile detection
 - Native ASIO path (sounddevice / PortAudio). Prefer 64-sample buffer at 44100 Hz (~1.5 ms)
 - Live waveform on the armed track while recording
 - Instrument generator (kick, snare, hat, bass, lead, pad)
 - 16-step sequencer, BPM detect/set, loop/sample generation
+- Clip edits rewrite the WAV: trim, reverse, gain, silence
+- Timeline position per clip
+- True 16-bit peaks for the waveform
+- Play mix and bounce the arrangement to a stereo WAV (respects mute, solo, gain, channel, position)
 
 ## Music tools
 
@@ -101,4 +105,4 @@ CUDA 11.8 is the last toolkit that can target `sm_37`. See [`cuda/`](./cuda/).
 
 ## Status
 
-Custom Windows app is in place with chat, mini audio studio (ASIO, Scarlett, sequencer, instruments, loops, live waveform), mini video studio, and DieFusionCore scaffolding. Agent tool-calling is wired. Packaging for a proper installer is next. Dual-die unification and full video models remain future work.
+Custom Windows app is in place with chat, mini DAW (ASIO, Scarlett, sequencer, instruments, loops, live waveform, real clip edits, timeline position, mix/bounce), mini video studio, and DieFusionCore scaffolding. Agent tool-calling is wired. Image/video studio expansion is next after the DAW is locked. Packaging for a proper installer comes after that.
