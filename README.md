@@ -13,8 +13,6 @@ This repository develops a modern inference engine optimized for the NVIDIA Tesl
 - **llama.cpp** (via llama-cpp-python) — GGUF models, CUDA build targeting `sm_37`
 - **PyTorch** — Hugging Face models (FP32 recommended)
 
-Patterns draw from PoliSim's `core.inference` engine/pool design, adapted for CUDA and dual K80 dies.
-
 ## Quick Start
 
 1. Install CUDA 11.8:
