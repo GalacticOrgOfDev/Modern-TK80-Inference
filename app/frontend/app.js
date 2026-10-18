@@ -7,6 +7,8 @@ let selectedTrack = 0;
 let mediaRecorder = null;
 let recordChunks = [];
 let studioRate = 44100;
+let asioEnabled = false;
+let asioBuffer = 128;
 
 async function api(path, opts = {}) {
   const res = await fetch(API + path, {
@@ -91,15 +93,50 @@ function updateScarlettBadge() {
   }
 }
 
+function updateAsioStatus(settings) {
+  const badge = document.getElementById("asio-status");
+  const probe = settings && settings.asio_probe;
+  const profile = settings && settings.asio_profile;
+  if (!asioEnabled) {
+    badge.className = "badge";
+    badge.textContent = "ASIO off";
+    badge.title = "";
+    return;
+  }
+  badge.className = "badge asio";
+  const host = probe && probe.available ? probe.host : "not detected";
+  const ms = profile ? profile.latency_ms : "?";
+  badge.textContent = `ASIO ${asioBuffer} @ ${studioRate} (${ms} ms)`;
+  badge.title = profile ? profile.notes : `Host: ${host}`;
+}
+
 async function loadAudioSettings() {
   try {
     const data = await api("/api/audio/settings");
     studioRate = data.sample_rate || 44100;
+    asioEnabled = !!data.asio;
+    asioBuffer = data.buffer || 128;
     document.getElementById("sample-rate").value = String(studioRate);
+    document.getElementById("asio-enabled").checked = asioEnabled;
+    document.getElementById("asio-buffer").value = String(asioBuffer);
     document.getElementById("rate-pill").textContent = `${studioRate} Hz`;
+    updateAsioStatus(data);
   } catch (e) {
-    /* keep default */
+    /* keep defaults */
   }
+}
+
+async function pushSettings(partial) {
+  const data = await api("/api/audio/settings", {
+    method: "POST",
+    body: JSON.stringify(partial),
+  });
+  studioRate = data.sample_rate;
+  asioEnabled = !!data.asio;
+  asioBuffer = data.buffer;
+  document.getElementById("rate-pill").textContent = `${studioRate} Hz`;
+  updateAsioStatus(data);
+  return data;
 }
 
 async function refreshTracks() {
@@ -133,17 +170,21 @@ async function refreshTracks() {
     row.querySelector(".arm").onclick = async () => {
       const device = document.getElementById("audio-devices");
       const opt = device.selectedOptions[0];
-      await api(`/api/audio/tracks/${t.id}`, {
-        method: "POST",
-        body: JSON.stringify({
-          armed: !t.armed,
-          device_id: opt ? opt.value : null,
-          device_label: opt ? opt.textContent : null,
-          sample_rate: studioRate,
-        }),
-      });
-      selectedTrack = t.id;
-      await refreshTracks();
+      try {
+        await api(`/api/audio/tracks/${t.id}`, {
+          method: "POST",
+          body: JSON.stringify({
+            armed: !t.armed,
+            device_id: opt ? opt.value : null,
+            device_label: opt ? opt.textContent : null,
+            sample_rate: studioRate,
+          }),
+        });
+        selectedTrack = t.id;
+        await refreshTracks();
+      } catch (e) {
+        alert(e.message);
+      }
     };
     row.querySelector(".mute").onclick = async () => {
       await api(`/api/audio/tracks/${t.id}`, {
@@ -167,7 +208,8 @@ async function refreshClips() {
     div.className = "clip" + (c.id === selectedClip ? " selected" : "");
     const tr = audioTracks.find((t) => t.id === c.track_id);
     const ch = tr ? tr.channel : "-";
-    div.textContent = `#${c.id} ${c.name} [T${c.track_id}/${ch}] [${c.start}→${c.end}s] ${c.sample_rate || ""}Hz`;
+    const asio = c.asio ? " ASIO" : "";
+    div.textContent = `#${c.id} ${c.name} [T${c.track_id}/${ch}] [${c.start}→${c.end}s] ${c.sample_rate || ""}Hz${asio}`;
     div.onclick = () => {
       selectedClip = c.id;
       document.getElementById("audio-clip-id").value = c.id;
@@ -181,7 +223,13 @@ async function refreshClips() {
   }
   const current = audioClips.find((c) => c.id === selectedClip) || audioClips[0];
   if (current) drawWave(current);
-  document.getElementById("audio-output").textContent = JSON.stringify({ tracks: audioTracks, clips: audioClips, sample_rate: studioRate }, null, 2);
+  document.getElementById("audio-output").textContent = JSON.stringify({
+    tracks: audioTracks,
+    clips: audioClips,
+    sample_rate: studioRate,
+    asio: asioEnabled,
+    buffer: asioBuffer,
+  }, null, 2);
 }
 
 async function refreshFrames() {
@@ -229,16 +277,24 @@ async function detectDevices() {
   }
 }
 
-// Sample rate
+// Settings
 document.getElementById("sample-rate").onchange = async (e) => {
-  const rate = Number(e.target.value);
   try {
-    const data = await api("/api/audio/settings", {
-      method: "POST",
-      body: JSON.stringify({ sample_rate: rate }),
-    });
-    studioRate = data.sample_rate;
-    document.getElementById("rate-pill").textContent = `${studioRate} Hz`;
+    await pushSettings({ sample_rate: Number(e.target.value) });
+  } catch (err) {
+    alert(err.message);
+  }
+};
+document.getElementById("asio-enabled").onchange = async (e) => {
+  try {
+    await pushSettings({ asio: e.target.checked });
+  } catch (err) {
+    alert(err.message);
+  }
+};
+document.getElementById("asio-buffer").onchange = async (e) => {
+  try {
+    await pushSettings({ buffer: Number(e.target.value) });
   } catch (err) {
     alert(err.message);
   }
@@ -388,8 +444,9 @@ document.getElementById("audio-play").onclick = () => {
   const vol = Math.min(1, (clip.gain || 1) * (track ? track.gain : 1));
   player.volume = vol;
   player.play();
+  const asio = asioEnabled ? ` ASIO/${asioBuffer}` : "";
   document.getElementById("audio-transport-status").textContent =
-    `Playing #${clip.id} (${track ? track.channel : "stereo"}) @ ${studioRate} Hz`;
+    `Playing #${clip.id} (${track ? track.channel : "stereo"}) @ ${studioRate} Hz${asio}`;
   player.ontimeupdate = () => {
     if (clip.end && player.currentTime >= clip.end) player.pause();
   };
@@ -416,6 +473,13 @@ document.getElementById("audio-record").onclick = async () => {
       channelCount: { ideal: track.channel === "stereo" ? 2 : 1 },
     };
     if (track.device_id) audio.deviceId = { exact: track.device_id };
+    // ASIO is Windows-only and native. The webview path still uses WASAPI,
+    // but we request the tighter constraints and stamp the clip with the preference.
+    if (asioEnabled) {
+      audio.echoCancellation = false;
+      audio.noiseSuppression = false;
+      audio.autoGainControl = false;
+    }
     const stream = await navigator.mediaDevices.getUserMedia({ audio });
     recordChunks = [];
     mediaRecorder = new MediaRecorder(stream);
@@ -430,15 +494,18 @@ document.getElementById("audio-record").onclick = async () => {
         const clip = await api("/api/audio/record", { method: "POST", body: fd });
         selectedClip = clip.id;
         await refreshClips();
-        document.getElementById("audio-transport-status").textContent = `Recorded to track ${track.id} @ ${studioRate} Hz`;
+        const asio = asioEnabled ? ` ASIO/${asioBuffer}` : "";
+        document.getElementById("audio-transport-status").textContent =
+          `Recorded to track ${track.id} @ ${studioRate} Hz${asio}`;
       } catch (e) {
         alert(e.message);
       }
     };
     mediaRecorder.start();
     const scar = track.scarlett ? ` [${track.scarlett.name}]` : "";
+    const asio = asioEnabled ? ` ASIO/${asioBuffer}` : "";
     document.getElementById("audio-transport-status").textContent =
-      `Recording on track ${track.id} (${track.channel}) @ ${studioRate} Hz${scar}`;
+      `Recording on track ${track.id} (${track.channel}) @ ${studioRate} Hz${asio}${scar}`;
   } catch (e) {
     alert("Could not start recording: " + e.message);
   }
