@@ -50,11 +50,12 @@ from .vst_ui import (
     export_project,
 )
 from .video import (
-    VFX_TYPES,
+    BUILTIN_VFX,
     apply_vfx,
     export_manifest,
     is_supported_video,
     make_clip as make_video_clip,
+    make_vfx,
     reorder,
     save_video,
 )
@@ -270,20 +271,24 @@ def _dispatch_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
             float(args.get("duration", 1.0)),
             vfx=str(args.get("vfx", "none")),
         )
+        if args.get("description"):
+            apply_vfx(clip, clip["vfx"], description=str(args.get("description")))
         _video_frames.append(clip)
         return {"ok": True, "name": name, "clip": clip}
 
     if name == "vfx_apply":
         frame_id = int(args.get("frame_id", -1))
         vfx = str(args.get("vfx", "none"))
+        desc = str(args.get("description", ""))
         for f in _video_frames:
             if f["id"] == frame_id:
-                try:
-                    apply_vfx(f, vfx, args.get("params"))
-                except ValueError as e:
-                    raise HTTPException(status_code=400, detail=str(e)) from e
+                apply_vfx(f, vfx, args.get("params"), desc)
                 return {"ok": True, "name": name, "clip": f}
         raise HTTPException(status_code=404, detail="frame not found")
+
+    if name == "vfx_make":
+        info = make_vfx(str(args.get("name", "custom")), str(args.get("description", "")))
+        return {"ok": True, "name": name, "vfx": info}
 
     raise HTTPException(status_code=400, detail=f"unknown tool: {name}")
 
@@ -1012,7 +1017,7 @@ def edit_audio(body: AudioEditRequest) -> Dict[str, Any]:
 
 @app.get("/api/video/frames")
 def list_frames() -> Dict[str, Any]:
-    return {"frames": _video_frames, "vfx_types": list(VFX_TYPES)}
+    return {"frames": _video_frames, "builtin_vfx": list(BUILTIN_VFX)}
 
 
 @app.post("/api/video/upload")
@@ -1065,10 +1070,7 @@ def edit_video(body: VideoEditRequest) -> Dict[str, Any]:
     if body.action == "set_vfx" and body.frame_id is not None and body.vfx:
         for f in _video_frames:
             if f["id"] == body.frame_id:
-                try:
-                    apply_vfx(f, body.vfx, body.params)
-                except ValueError as e:
-                    raise HTTPException(status_code=400, detail=str(e)) from e
+                apply_vfx(f, body.vfx, body.params, body.prompt or "")
                 break
         return {"frames": _video_frames}
     raise HTTPException(status_code=400, detail="unknown video action")

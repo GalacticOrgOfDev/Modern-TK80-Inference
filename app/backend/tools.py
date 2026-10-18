@@ -63,12 +63,16 @@ TOOLS: Dict[str, Dict[str, Any]] = {
         "args": {},
     },
     "vfx_add": {
-        "description": "Add a clip to the movie timeline with an optional VFX effect.",
-        "args": {"prompt": "string", "duration": "float", "vfx": "none|fade|zoom|pan|color_grade|overlay"},
+        "description": "Add a clip to the movie timeline. vfx can be a built-in or any custom name (tv_static, fire_hand, lightning, etc.).",
+        "args": {"prompt": "string", "duration": "float", "vfx": "string", "description": "string"},
     },
     "vfx_apply": {
-        "description": "Apply a VFX effect to an existing timeline clip.",
-        "args": {"frame_id": "int", "vfx": "none|fade|zoom|pan|color_grade|overlay"},
+        "description": "Apply a VFX effect to an existing timeline clip. Accepts any name.",
+        "args": {"frame_id": "int", "vfx": "string", "description": "string"},
+    },
+    "vfx_make": {
+        "description": "Create a custom VFX by name and write a starter stub (tv_static, fire_hand, lightning, etc.).",
+        "args": {"name": "string", "description": "string"},
     },
 }
 
@@ -160,12 +164,14 @@ def parse_intent(text: str) -> Optional[Dict[str, Any]]:
                 break
         return {"name": "make_vst", "args": {"name": "GeneratedPlugin", "effect": effect, "plugin_type": "effect"}}
 
-    if any(word in t for word in ("vfx", "fade", "zoom", "color grade")):
+    if any(word in t for word in ("vfx", "fade", "zoom", "static", "lightning", "fire")):
         vfx = "none"
-        for e in ("fade", "zoom", "pan", "color_grade", "overlay"):
+        for e in ("tv_static", "fire_hand", "lightning", "fade", "zoom", "pan", "color_grade", "overlay"):
             if e.replace("_", " ") in t or e in t:
                 vfx = e
                 break
+        if "make" in t or "create" in t:
+            return {"name": "vfx_make", "args": {"name": vfx, "description": text}}
         return {"name": "vfx_add", "args": {"prompt": text, "duration": 1.0, "vfx": vfx}}
 
     return None

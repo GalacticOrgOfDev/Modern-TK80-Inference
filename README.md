@@ -73,13 +73,14 @@ Models can add parameters and objects via tools. Users drag objects onto the can
 ## Movie / VFX Studio
 
 - Timeline of clips (prompt, duration, optional image or MP4 path)
-- VFX per clip: none, fade, zoom, pan, color grade, overlay
+- Built-in VFX: none, fade, zoom, pan, color grade, overlay
+- Custom VFX by name: models can invent effects such as tv_static, fire_hand, lightning, etc.
+- Each custom VFX writes a starter stub under `uploads/vfx/` so it can be expanded later
 - Load image model and generate frames
 - Upload MP4 (or mov/webm) and place it on the timeline
 - Reorder, set duration, apply VFX
-- Models can call `vfx_add` and `vfx_apply` to create and edit clips
+- Models can call `vfx_make`, `vfx_add`, and `vfx_apply`
 - Export timeline as a JSON manifest (full encode later)
-- Ready for further expansion (layers, transitions, encode)
 
 ## Music and VST tools
 
@@ -97,8 +98,9 @@ The model (or a direct chat command) can call:
 | `vst_add_object` | Place a knob, slider, button, or label on the VST canvas |
 | `vst_bind` | Bind a UI object to a parameter by name |
 | `vst_export` | Export the VST UI project to source plus layout JSON |
-| `vfx_add` | Add a clip to the movie timeline with an optional VFX effect |
-| `vfx_apply` | Apply a VFX effect to an existing timeline clip |
+| `vfx_add` | Add a clip with a built-in or custom VFX name |
+| `vfx_apply` | Apply any VFX name to an existing clip |
+| `vfx_make` | Create a custom VFX by name and write a starter stub |
 
 Chat routes by modality:
 
