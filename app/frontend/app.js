@@ -1039,6 +1039,16 @@ document.getElementById("video-upload").onclick = async () => {
     await refreshFrames();
   } catch (e) { alert(e.message); }
 };
+document.getElementById("video-split").onclick = async () => {
+  const frame = document.getElementById("video-frame-id").value || "0";
+  try {
+    const data = await api(`/api/video/frames`);
+    const clip = (data.frames || []).find((f) => String(f.id) === String(frame));
+    if (!clip || !clip.path) { alert("Select a clip with a video file"); return; }
+    const result = await api(`/api/video/split?path=${encodeURIComponent(clip.path)}`, { method: "POST" });
+    document.getElementById("video-output").textContent = JSON.stringify(result, null, 2);
+  } catch (e) { alert(e.message); }
+};
 document.getElementById("text-add").onclick = async () => {
   const content = document.getElementById("text-content").value || "text";
   const texture = document.getElementById("text-texture").value || "plain";

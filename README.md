@@ -83,7 +83,9 @@ Models can add parameters and objects via tools. Users drag objects onto the can
 - Custom VFX by name: models can invent effects such as tv_static, fire_hand, lightning, etc.
 - Each custom VFX writes a starter stub under `uploads/vfx/` so it can be expanded later
 - Load image model and generate frames
-- Upload MP4 (or mov/webm) and place it on the timeline
+- Video and audio tracks on the movie timeline
+- Split audio from a video clip (`POST /api/video/split`) via ffmpeg
+- ffmpeg installer: `scripts/install_ffmpeg.sh`
 - Reorder, set duration, apply VFX
 - Models can call `vfx_make`, `vfx_add`, and `vfx_apply`
 - Text objects: create text, set texture (stone, metal, etc.), position on the timeline, and attach VFX

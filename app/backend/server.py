@@ -69,6 +69,7 @@ from .video import (
     save_video,
     set_text_style,
     set_transition,
+    split_audio,
 )
 from .vst_press import press_vst, sdk_path
 from .music import (
@@ -104,6 +105,8 @@ _MAX_UNDO = 20
 _video_frames: List[Dict[str, Any]] = []
 _text_objects: List[Dict[str, Any]] = []
 _objects_3d: List[Dict[str, Any]] = []
+_video_tracks: List[Dict[str, Any]] = [{"id": 0, "name": "Video 1", "kind": "video"}]
+_video_audio_tracks: List[Dict[str, Any]] = [{"id": 0, "name": "Audio 1", "kind": "audio"}]
 _sample_rate: int = DEFAULT_SAMPLE_RATE
 _asio_enabled: bool = False
 _asio_buffer: int = DEFAULT_BUFFER
@@ -1178,6 +1181,20 @@ def edit_audio(body: AudioEditRequest) -> Dict[str, Any]:
     if body.action == "reverse":
         clip["reversed"] = not clip.get("reversed", False)
     return clip
+
+
+@app.get("/api/video/tracks")
+def list_video_tracks() -> Dict[str, Any]:
+    return {"video": _video_tracks, "audio": _video_audio_tracks}
+
+
+@app.post("/api/video/split")
+def split_video_audio(path: str) -> Dict[str, Any]:
+    """Split the audio track from a video file."""
+    try:
+        return split_audio(Path(path))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.get("/api/video/frames")

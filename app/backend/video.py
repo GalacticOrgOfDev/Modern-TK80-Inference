@@ -28,7 +28,26 @@ def is_supported_video(path: Path) -> bool:
     return is_video(path)
 
 
-def is_supported_model(path: Path) -> bool:
+def split_audio(path: Path) -> Dict[str, Any]:
+    """Split the audio track out of a video file via ffmpeg.
+
+    Returns the original video path and the extracted audio path.
+    """
+    import shutil
+    import subprocess
+    if not is_video(path):
+        raise ValueError("not a supported video file")
+    if not shutil.which("ffmpeg"):
+        raise ValueError("ffmpeg is required to split audio")
+    audio_path = path.with_suffix(".wav")
+    if audio_path.exists():
+        audio_path = path.with_name(f"{path.stem}_audio.wav")
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", str(path), "-vn", "-acodec", "pcm_s16le", str(audio_path)],
+        check=True,
+        capture_output=True,
+    )
+    return {"video": str(path), "audio": str(audio_path)}
     """True if the file is a 3D model we can store."""
     return is_model(path)
 
