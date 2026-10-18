@@ -16,20 +16,17 @@ The remastering layer lives in [`drivers/interconnector/`](./drivers/interconnec
 
 It provides:
 - Die discovery and tracking (never assumes unified 24 GB)
-- Translation of modern request formats (OpenAI-style messages or plain prompts)
+- Translation of modern request formats
 - Explicit dual-die split modes (`single`, `dual`, `layer`)
 - Hybrid cluster advertisement
 - Thermal and performance monitoring
+- Modality routing: LLM, image, voice, agent (video placeholder)
 
 ```bash
-# Status (includes metrics)
 python -m drivers.interconnector.cli --status
-
-# Load and generate
-python -m drivers.interconnector.cli --load ./model.gguf --die 0 --prompt "Hello from K80"
 ```
 
-See the interconnector README for the full Python API.
+See the interconnector README for the full Python API and modality examples.
 
 ## Drivers
 
@@ -43,6 +40,8 @@ CUDA 11.8 is the last toolkit that can target `sm_37`. See [`cuda/`](./cuda/).
 
 - llama.cpp (CUDA build for `sm_37`)
 - PyTorch (FP32, single die)
+- diffusers (image, optional)
+- transformers (voice, optional)
 
 ## Quick Start
 
@@ -52,4 +51,4 @@ CUDA 11.8 is the last toolkit that can target `sm_37`. See [`cuda/`](./cuda/).
 
 ## Status
 
-Interconnector includes translation layer, dual-die split support, hybrid cluster hooks, and thermal/performance monitoring.
+Single-die support for LLM, image, voice, and a basic agentic loop. Dual-die unification planned for later. Video remains a placeholder.
