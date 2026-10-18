@@ -959,9 +959,21 @@ document.getElementById("video-set-dur").onclick = async () => {
   });
   await refreshFrames();
 };
+document.getElementById("video-set-vfx").onclick = async () => {
+  const vfx = document.getElementById("video-vfx").value;
+  await api("/api/video/edit", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "set_vfx",
+      frame_id: Number(document.getElementById("video-frame-id").value),
+      vfx,
+    }),
+  });
+  await refreshFrames();
+};
 document.getElementById("video-export").onclick = async () => {
   try {
-    const data = await api("/api/video/export", { method: "POST" });
+    const data = await api("/api/video/export?name=timeline", { method: "POST" });
     document.getElementById("video-output").textContent = JSON.stringify(data, null, 2);
   } catch (e) { alert(e.message); }
 };

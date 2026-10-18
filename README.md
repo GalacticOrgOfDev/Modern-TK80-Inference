@@ -69,12 +69,14 @@ Drag-and-drop canvas for designing a plugin interface. Object types:
 
 Models can add parameters and objects via tools. Users drag objects onto the canvas, bind them to parameters (e.g. a knob to `input_level`, vertical sliders to frequencies), name the project, and press to VST. Export writes the source plus a layout JSON. Duplicate parameter names are rejected.
 
-## Mini Video Studio (staged)
+## Movie / VFX Studio
 
-- Frame timeline with prompt and duration
+- Timeline of clips (prompt, duration, optional image path)
+- VFX per clip: none, fade, zoom, pan, color grade, overlay
 - Load image model and generate frames
-- Export timeline (JSON stage; full encode later)
-- Ready for further expansion once the DAW is locked
+- Reorder, set duration, apply VFX
+- Export timeline as a JSON manifest (full encode later)
+- Ready for further expansion (layers, transitions, encode)
 
 ## Music and VST tools
 

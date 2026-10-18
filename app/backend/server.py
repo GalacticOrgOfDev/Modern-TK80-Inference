@@ -49,6 +49,7 @@ from .vst_ui import (
     default_project,
     export_project,
 )
+from .video import VFX_TYPES, apply_vfx, export_manifest, make_clip as make_video_clip, reorder
 from .music import (
     DEFAULT_BPM,
     INSTRUMENTS,
@@ -383,7 +384,11 @@ class VideoEditRequest(BaseModel):
     frame_id: Optional[int] = None
     prompt: Optional[str] = None
     duration: Optional[float] = None
+    path: Optional[str] = None
+    vfx: Optional[str] = None
+    params: Optional[Dict[str, Any]] = None
     new_order: Optional[List[int]] = None
+    name: Optional[str] = None
 
 
 @app.get("/api/status")
@@ -977,42 +982,51 @@ def edit_audio(body: AudioEditRequest) -> Dict[str, Any]:
 
 @app.get("/api/video/frames")
 def list_frames() -> Dict[str, Any]:
-    return {"frames": _video_frames}
+    return {"frames": _video_frames, "vfx_types": list(VFX_TYPES)}
 
 
 @app.post("/api/video/export")
-def export_timeline() -> Dict[str, Any]:
-    """Stage a simple timeline export (frame list as JSON for now)."""
+def export_timeline(name: str = "timeline") -> Dict[str, Any]:
+    """Export the movie timeline as a JSON manifest."""
     if not _video_frames:
         raise HTTPException(status_code=400, detail="no frames to export")
-    export = {
-        "frames": _video_frames,
-        "total_duration": sum(f.get("duration", 1.0) for f in _video_frames),
-        "note": "Timeline staged. Full video encode (ffmpeg) comes later.",
-    }
-    return export
+    return export_manifest(_video_frames, name)
 
 
 @app.post("/api/video/edit")
 def edit_video(body: VideoEditRequest) -> Dict[str, Any]:
     if body.action == "add_frame":
-        frame = {"id": len(_video_frames), "prompt": body.prompt or "", "duration": body.duration or 1.0}
-        _video_frames.append(frame)
+        clip = make_video_clip(
+            len(_video_frames),
+            body.prompt or "",
+            body.duration or 1.0,
+            body.path,
+            body.vfx or "none",
+        )
+        _video_frames.append(clip)
         return {"frames": _video_frames}
     if body.action == "delete_frame" and body.frame_id is not None:
         _video_frames[:] = [f for f in _video_frames if f["id"] != body.frame_id]
         return {"frames": _video_frames}
-    if body.action == "reorder" and body.new_order is not None:
-        by_id = {f["id"]: f for f in _video_frames}
-        _video_frames[:] = [by_id[i] for i in body.new_order if i in by_id]
+    if body.action == "reorder" and body.new_order:
+        _video_frames[:] = reorder(_video_frames, body.new_order)
         return {"frames": _video_frames}
     if body.action == "set_duration" and body.frame_id is not None and body.duration is not None:
         for f in _video_frames:
             if f["id"] == body.frame_id:
-                f["duration"] = body.duration
+                f["duration"] = max(0.1, body.duration)
                 break
         return {"frames": _video_frames}
-    raise HTTPException(status_code=400, detail="unknown or incomplete action")
+    if body.action == "set_vfx" and body.frame_id is not None and body.vfx:
+        for f in _video_frames:
+            if f["id"] == body.frame_id:
+                try:
+                    apply_vfx(f, body.vfx, body.params)
+                except ValueError as e:
+                    raise HTTPException(status_code=400, detail=str(e)) from e
+                break
+        return {"frames": _video_frames}
+    raise HTTPException(status_code=400, detail="unknown video action")
 
 
 @app.get("/api/health")

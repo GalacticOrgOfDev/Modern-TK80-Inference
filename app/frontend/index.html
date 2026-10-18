@@ -227,13 +227,24 @@
         <button id="video-export">Export timeline</button>
       </div>
       <div class="studio">
-        <h2>Mini Video Studio</h2>
+        <h2>Movie / VFX Studio</h2>
         <div class="preview" id="video-preview">Preview</div>
         <div id="video-timeline" class="timeline"></div>
         <div class="edit-row">
           <label>Frame #<input id="video-frame-id" type="number" value="0" /></label>
+          <label>VFX
+            <select id="video-vfx">
+              <option value="none">None</option>
+              <option value="fade">Fade</option>
+              <option value="zoom">Zoom</option>
+              <option value="pan">Pan</option>
+              <option value="color_grade">Color grade</option>
+              <option value="overlay">Overlay</option>
+            </select>
+          </label>
           <button id="video-delete">Delete</button>
           <button id="video-set-dur">Set duration</button>
+          <button id="video-set-vfx">Apply VFX</button>
         </div>
         <pre id="video-output"></pre>
       </div>
