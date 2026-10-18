@@ -3,6 +3,9 @@
 Low-latency recording path. Prefer 64-sample buffer at 44100 Hz
 (~1.5 ms) on the Focusrite USB ASIO driver. Raise the buffer only
 if the driver reports underruns.
+
+While recording, a rolling peak buffer is kept so the UI can draw
+a live waveform on the armed track without blocking the stream.
 """
 
 from __future__ import annotations
@@ -10,6 +13,7 @@ from __future__ import annotations
 import platform
 import threading
 import wave
+from collections import deque
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -17,6 +21,7 @@ DEFAULT_BUFFER = 64
 ASIO_BUFFERS = (64, 128, 256, 512, 1024)
 FOCUSRITE_ASIO_DRIVER = "Focusrite USB ASIO"
 LOW_LATENCY_RATE = 44100
+LEVEL_BUCKETS = 64
 
 
 def platform_supports_asio() -> bool:
@@ -135,10 +140,22 @@ class AsioRecorder:
         self.channels = 2
         self.buffer = DEFAULT_BUFFER
         self.error: Optional[str] = None
+        self._levels: deque[float] = deque(maxlen=LEVEL_BUCKETS)
+        self._peak: float = 0.0
 
     @property
     def recording(self) -> bool:
         return self._stream is not None
+
+    def levels(self) -> Dict[str, Any]:
+        with self._lock:
+            peaks = list(self._levels)
+            peak = self._peak
+        return {
+            "recording": self.recording,
+            "peaks": peaks,
+            "peak": round(peak, 3),
+        }
 
     def start(
         self,
@@ -174,9 +191,17 @@ class AsioRecorder:
         def callback(indata, frames, time_info, status) -> None:  # noqa: ARG001
             if status:
                 self.error = str(status)
+            # Peak of this block, normalized 0..1.
+            try:
+                peak = float(abs(indata).max()) / 32767.0
+            except Exception:
+                peak = 0.0
             with self._lock:
                 if self._wave is not None:
                     self._wave.writeframes(indata.tobytes())
+                self._levels.append(round(min(1.0, peak), 3))
+                if peak > self._peak:
+                    self._peak = peak
 
         stream = sd.InputStream(
             device=device["index"],
@@ -197,6 +222,9 @@ class AsioRecorder:
         self.channels = channels
         self.buffer = buffer
         self.error = None
+        with self._lock:
+            self._levels.clear()
+            self._peak = 0.0
         return {
             "ok": True,
             "device": device,
@@ -229,4 +257,5 @@ class AsioRecorder:
             "buffer": self.buffer,
             "channels": self.channels,
             "error": self.error,
+            "peak": round(self._peak, 3),
         }
