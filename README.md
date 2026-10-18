@@ -6,44 +6,49 @@ Modern NVIDIA Tesla K80 inference engine, drivers, and custom interconnector.
 
 This repository is remastering the Tesla K80 (Kepler, compute capability 3.7 / `sm_37`) so it can participate in modern inference.
 
-The K80 is two independent 12 GB dies. Official support ended with CUDA 11.x and the R470 driver branch. The goal is a custom interconnector that lets the K80 run modern model formats and runtimes while remaining compatible with the last supported official stack.
+The K80 is two independent 12 GB dies. Official support ended with CUDA 11.x and the R470 driver branch. The custom interconnector presents a modern interface while running on that baseline.
 
 **Hybrid use:** K80 dies serve as a dedicated backend; newer GPUs in the same cluster handle other workloads.
 
-## Current Goal
+## Interconnector
 
-K80 remastering via custom interconnector:
-- Baseline on last official R470 drivers + CUDA 11.8
-- Custom layer that presents a modern interface to the K80
-- Dual-die awareness and efficient use of the two independent GPUs
-- Path to hybrid cluster operation
+The remastering layer lives in [`drivers/interconnector/`](./drivers/interconnector/).
+
+It owns:
+- Die discovery and tracking (never assumes unified 24 GB)
+- Explicit model placement on a chosen die
+- Routing to llama.cpp or PyTorch backends
+- Status reporting for hybrid cluster use
+
+```bash
+# Status
+python -m drivers.interconnector.cli --status
+
+# Load and generate on die 0
+python -m drivers.interconnector.cli --load ./model.gguf --die 0 --prompt "Hello from K80"
+```
+
+See the interconnector README for the Python API.
 
 ## Drivers
 
-Last official support is the R470 branch (Kepler / Tesla K80).
-
-See [`drivers/`](./drivers/) for:
-- Official baseline notes and download pointers
-- Placeholder for the custom interconnector
+Last official support is the R470 branch. See [`drivers/`](./drivers/).
 
 ## CUDA Baseline
 
-CUDA 11.8 is the last toolkit that can target `sm_37`.
+CUDA 11.8 is the last toolkit that can target `sm_37`. See [`cuda/`](./cuda/).
 
-See [`cuda/`](./cuda/).
+## Backends
 
-## Backends (interim)
-
-While the interconnector is built:
 - llama.cpp (CUDA build for `sm_37`)
-- PyTorch (FP32, single-die)
+- PyTorch (FP32, single die)
 
-## Quick Start (baseline)
+## Quick Start
 
-1. Install last supported driver (R470) and CUDA 11.8.
-2. Build llama-cpp-python for the K80 (`./scripts/build_llama_cuda.sh`).
-3. Run `python main.py --status`.
+1. Install R470 driver and CUDA 11.8.
+2. Build llama-cpp-python: `./scripts/build_llama_cuda.sh`
+3. Use the interconnector CLI or Python API.
 
 ## Status
 
-Remastering phase. Custom interconnector is the active goal.
+Interconnector core (discovery, placement, routing, status) is implemented. Translation layer and hybrid cluster hooks are next.
