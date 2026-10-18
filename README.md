@@ -173,4 +173,4 @@ CUDA 11.8 is the last toolkit that can target `sm_37`. See [`cuda/`](./cuda/).
 
 ## Status
 
-Custom Windows app is in place with chat, mini DAW (ASIO, Scarlett, sequencer, instruments, loops, live waveform, real clip edits, timeline position, mix/bounce), mini video studio, and DieFusionCore scaffolding. Agent tool-calling is wired. Image/video studio expansion is next after the DAW is locked. Packaging for a proper installer comes after that.
+Custom Windows app is in place with chat, mini DAW (ASIO, Scarlett, sequencer, instruments, loops, live waveform, real clip edits, timeline position, mix/bounce, VST maker and UI builder), movie/VFX studio (frames, MP4, custom VFX, text, 3D objects, animation, transitions), and a dedicated exporter. Agent tool-calling is wired. Full encode and packaging come next.

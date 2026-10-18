@@ -93,20 +93,6 @@ def add_animation(
     return obj
 
 
-def export_animation(obj: Dict[str, Any], fmt: str = "json") -> Dict[str, Any]:
-    """Write an animation file for a 3D object. json is the native format;
-    other formats are staged as a note until a real exporter is added.
-    """
-    fmt = fmt if fmt in ANIM_FORMATS else "json"
-    name = _safe_name(obj.get("content") or obj.get("kind") or "anim")
-    dest = UPLOAD_DIR / f"{name}.{fmt}"
-    if fmt == "json":
-        dest.write_text(json.dumps(obj, indent=2), encoding="utf-8")
-    else:
-        dest.write_text(f"# staged {fmt} animation for {name}\n", encoding="utf-8")
-    return {"path": str(dest), "format": fmt, "name": name}
-
-
 def make_text(
     text_id: int,
     content: str,
@@ -264,16 +250,6 @@ def set_transition(clips: List[Dict[str, Any]], index: int, kind: str = "cut") -
 
 
 def export_manifest(clips: List[Dict[str, Any]], texts: Optional[List[Dict[str, Any]]] = None, name: str = "timeline") -> Dict[str, Any]:
-    """Write a JSON manifest of the current timeline, including text objects."""
-    total = sum(c.get("duration", 1.0) for c in clips)
-    manifest = {
-        "name": name,
-        "clips": clips,
-        "texts": texts or [],
-        "total_duration": round(total, 3),
-        "note": "Manifest staged. Full movie encode (ffmpeg) comes later.",
-    }
-    dest = UPLOAD_DIR / f"{name}.json"
-    dest.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    manifest["path"] = str(dest)
-    return manifest
+    """Deprecated. Use export.export_timeline instead."""
+    from .export import export_timeline
+    return export_timeline(clips, texts, name=name)

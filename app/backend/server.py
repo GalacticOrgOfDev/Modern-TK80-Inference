@@ -57,7 +57,6 @@ from .video import (
     add_animation,
     add_text_vfx,
     apply_vfx,
-    export_manifest,
     is_supported_video,
     make_3d,
     make_clip as make_video_clip,
