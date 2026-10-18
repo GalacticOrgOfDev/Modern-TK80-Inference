@@ -28,6 +28,8 @@ from .translate import translate_request
 
 log = logging.getLogger("tk80.interconnector")
 
+_IMAGE_KEYS = {"num_inference_steps", "guidance_scale", "height", "width", "negative_prompt", "num_images_per_prompt"}
+
 
 class InterconnectorError(Exception):
     """Base error for the interconnector."""
@@ -98,14 +100,12 @@ class Interconnector:
         if die is not None:
             free = [die] if die in free else []
 
-        # Layer split is only meaningful for a single llama instance across dies.
-        # Independent modalities (image/voice/agent) only support single or dual.
         if modality != "llm" and split == "layer":
             raise InterconnectorError("layer split is only supported for LLM modality")
 
         plan = plan_split(split, free, backend)
 
-        # For true layer split we load one model and mark both dies busy.
+        # Layer split: one llama instance, both dies marked busy.
         if plan["mode"] == "layer":
             primary = plan["dies"][0]
             if primary in self._models:
@@ -155,7 +155,6 @@ class Interconnector:
                 instance = VoiceBackend(model, device=device)
 
             elif modality == "agent":
-                # Agent wraps an LLM on the same die. Respect backend when possible.
                 if backend == "pytorch":
                     llm = create_backend("pytorch", model, device=device)
                 else:
@@ -239,7 +238,9 @@ class Interconnector:
 
         elif modality == "image":
             prompt = request if isinstance(request, str) else request.get("prompt", "")
-            extra = {k: v for k, v in (request.items() if isinstance(request, dict) else []) if k != "prompt"}
+            extra = {}
+            if isinstance(request, dict):
+                extra = {k: v for k, v in request.items() if k in _IMAGE_KEYS}
             result = backend.generate(prompt, **extra)
             approx = 1
 
