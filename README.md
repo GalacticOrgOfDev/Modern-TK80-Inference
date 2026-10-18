@@ -1,52 +1,49 @@
 # Modern-TK80-Inference
 
-Modern NVIDIA Tesla K80 inference engine and drivers.
+Modern NVIDIA Tesla K80 inference engine, drivers, and custom interconnector.
 
 ## Overview
 
-This repository develops a modern inference engine optimized for the NVIDIA Tesla K80 (Kepler, compute capability 3.7 / `sm_37`). The K80 presents as two independent 12 GB GPUs.
+This repository is remastering the Tesla K80 (Kepler, compute capability 3.7 / `sm_37`) so it can participate in modern inference.
 
-**Last CUDA Toolkit:** 11.8 (see [`cuda/`](./cuda/))
+The K80 is two independent 12 GB dies. Official support ended with CUDA 11.x and the R470 driver branch. The goal is a custom interconnector that lets the K80 run modern model formats and runtimes while remaining compatible with the last supported official stack.
 
-## Backends
+**Hybrid use:** K80 dies serve as a dedicated backend; newer GPUs in the same cluster handle other workloads.
 
-- **llama.cpp** (via llama-cpp-python) — GGUF models, CUDA build targeting `sm_37`
-- **PyTorch** — Hugging Face models (FP32 recommended)
+## Current Goal
 
-## Quick Start
+K80 remastering via custom interconnector:
+- Baseline on last official R470 drivers + CUDA 11.8
+- Custom layer that presents a modern interface to the K80
+- Dual-die awareness and efficient use of the two independent GPUs
+- Path to hybrid cluster operation
 
-1. Install CUDA 11.8:
-   ```bash
-   ./cuda/download_cuda_11.8.sh
-   # then run the installer
-   ```
+## Drivers
 
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   # PyTorch cu118:
-   pip install torch --index-url https://download.pytorch.org/whl/cu118
-   ```
+Last official support is the R470 branch (Kepler / Tesla K80).
 
-3. Build llama-cpp-python for K80:
-   ```bash
-   export CUDA_HOME=/usr/local/cuda-11.8
-   export PATH=$CUDA_HOME/bin:$PATH
-   ./scripts/build_llama_cuda.sh
-   ```
+See [`drivers/`](./drivers/) for:
+- Official baseline notes and download pointers
+- Placeholder for the custom interconnector
 
-4. Run:
-   ```bash
-   python main.py --status
-   python main.py --model /path/to/model.gguf --backend llama --prompt "Hello from K80"
-   ```
+## CUDA Baseline
 
-## Goals
+CUDA 11.8 is the last toolkit that can target `sm_37`.
 
-- Efficient inference on dual K80 dies
-- Modern model support (GGUF + HF) within 12 GB per die
-- Extensible for custom CUDA kernels
+See [`cuda/`](./cuda/).
+
+## Backends (interim)
+
+While the interconnector is built:
+- llama.cpp (CUDA build for `sm_37`)
+- PyTorch (FP32, single-die)
+
+## Quick Start (baseline)
+
+1. Install last supported driver (R470) and CUDA 11.8.
+2. Build llama-cpp-python for the K80 (`./scripts/build_llama_cuda.sh`).
+3. Run `python main.py --status`.
 
 ## Status
 
-Foundational engine with llama.cpp and PyTorch backends. Development ongoing.
+Remastering phase. Custom interconnector is the active goal.
