@@ -9,6 +9,7 @@ from .devices import K80Die, discover_dies
 from .translate import translate_request, messages_to_prompt
 from .cluster import advertise
 from .monitor import read_die_metrics, PerfTimer
+from .modalities import ImageBackend, VoiceBackend, AgentBackend
 
 __all__ = [
     "Interconnector",
@@ -20,4 +21,7 @@ __all__ = [
     "advertise",
     "read_die_metrics",
     "PerfTimer",
+    "ImageBackend",
+    "VoiceBackend",
+    "AgentBackend",
 ]
