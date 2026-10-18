@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Modern-TK80</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>Modern-TK80</h1>
+    <nav>
+      <button data-tab="llm" class="active">LLM</button>
+      <button data-tab="audio">Audio</button>
+      <button data-tab="video">Video</button>
+    </nav>
+    <span id="status-pill">connecting...</span>
+  </header>
+
+  <main>
+    <!-- LLM -->
+    <section id="llm" class="panel active">
+      <div class="sidebar">
+        <label>Model<input id="llm-model" placeholder="path or HF id" /></label>
+        <label>Backend
+          <select id="llm-backend"><option>llama</option><option>pytorch</option></select>
+        </label>
+        <label>Die<input id="llm-die" type="number" value="0" /></label>
+        <label>Split
+          <select id="llm-split"><option>single</option><option>dual</option><option>layer</option></select>
+        </label>
+        <button id="llm-load">Load</button>
+        <button id="llm-unload">Unload</button>
+        <pre id="llm-status"></pre>
+      </div>
+      <div class="chat">
+        <div id="llm-messages"></div>
+        <div class="composer">
+          <textarea id="llm-input" placeholder="Message"></textarea>
+          <button id="llm-send">Send</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Audio -->
+    <section id="audio" class="panel">
+      <div class="sidebar">
+        <label>Voice model<input id="audio-model" placeholder="openai/whisper-small" /></label>
+        <label>Die<input id="audio-die" type="number" value="0" /></label>
+        <button id="audio-load">Load voice model</button>
+        <label>Audio file<input id="audio-file" type="file" accept="audio/*" /></label>
+        <button id="audio-transcribe">Transcribe</button>
+      </div>
+      <div class="studio">
+        <h2>Mini Audio Studio</h2>
+        <div class="transport">
+          <button disabled>Play</button>
+          <button disabled>Stop</button>
+          <span>Waveform and transport controls come next.</span>
+        </div>
+        <pre id="audio-output"></pre>
+      </div>
+    </section>
+
+    <!-- Video -->
+    <section id="video" class="panel">
+      <div class="sidebar">
+        <label>Image model (for frames)<input id="video-model" placeholder="runwayml/stable-diffusion-v1-5" /></label>
+        <label>Die<input id="video-die" type="number" value="0" /></label>
+        <button id="video-load">Load image model</button>
+        <label>Prompt<input id="video-prompt" placeholder="frame description" /></label>
+        <button id="video-frame">Generate frame</button>
+      </div>
+      <div class="studio">
+        <h2>Mini Video Studio</h2>
+        <div class="preview" id="video-preview">Preview</div>
+        <div class="timeline">Timeline (frame-by-frame on one die). Full video models exceed 12 GB.</div>
+        <pre id="video-output"></pre>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
