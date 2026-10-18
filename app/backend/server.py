@@ -41,6 +41,14 @@ from .audio import (
 )
 from .effects import apply_effect
 from .vst import make_vst, PLUGIN_TYPES, EFFECT_PRESETS
+from .vst_ui import (
+    OBJECT_TYPES,
+    add_object,
+    add_parameter,
+    bind_object,
+    default_project,
+    export_project,
+)
 from .music import (
     DEFAULT_BPM,
     INSTRUMENTS,
@@ -78,6 +86,7 @@ _asio_track_id: Optional[int] = None
 _bpm: float = DEFAULT_BPM
 _pattern: Dict[str, List[int]] = make_pattern()
 _master: Dict[str, Any] = default_master()
+_vst_project: Dict[str, Any] = default_project()
 
 
 def get_ic() -> Interconnector:
@@ -206,6 +215,40 @@ def _dispatch_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
             plugin_type = "effect"
         result = make_vst(plugin_name, plugin_type, effect)
         result["name"] = "make_vst"
+        return result
+
+    if name == "vst_add_param":
+        pname = str(args.get("name", "param"))
+        default = float(args.get("default", 0.5))
+        param = add_parameter(_vst_project, pname, default)
+        return {"ok": True, "name": name, "parameter": param}
+
+    if name == "vst_add_object":
+        kind = str(args.get("kind", "knob"))
+        if kind not in OBJECT_TYPES:
+            raise HTTPException(status_code=400, detail=f"kind must be one of {OBJECT_TYPES}")
+        obj = add_object(
+            _vst_project,
+            kind,
+            x=float(args.get("x", 20)),
+            y=float(args.get("y", 20)),
+            w=float(args.get("w", 60)),
+            h=float(args.get("h", 60)),
+            label=str(args.get("label", kind)),
+            bind=args.get("bind"),
+        )
+        return {"ok": True, "name": name, "object": obj}
+
+    if name == "vst_bind":
+        try:
+            obj = bind_object(_vst_project, int(args.get("object_id", 0)), str(args.get("param", "")))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return {"ok": True, "name": name, "object": obj}
+
+    if name == "vst_export":
+        result = export_project(_vst_project)
+        result["name"] = "vst_export"
         return result
 
     raise HTTPException(status_code=400, detail=f"unknown tool: {name}")
@@ -640,6 +683,51 @@ def create_vst(body: VstRequest) -> Dict[str, Any]:
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     return result
+
+
+@app.get("/api/vst/ui")
+def get_vst_ui() -> Dict[str, Any]:
+    return _vst_project
+
+
+@app.post("/api/vst/ui/reset")
+def reset_vst_ui(name: str = "MyPlugin") -> Dict[str, Any]:
+    global _vst_project
+    _vst_project = default_project(name)
+    return _vst_project
+
+
+@app.post("/api/vst/ui/param")
+def vst_add_param(name: str, default: float = 0.5) -> Dict[str, Any]:
+    return add_parameter(_vst_project, name, default)
+
+
+@app.post("/api/vst/ui/object")
+def vst_add_object_endpoint(
+    kind: str,
+    x: float = 20,
+    y: float = 20,
+    w: float = 60,
+    h: float = 60,
+    label: str = "",
+    bind: Optional[str] = None,
+) -> Dict[str, Any]:
+    if kind not in OBJECT_TYPES:
+        raise HTTPException(status_code=400, detail=f"kind must be one of {OBJECT_TYPES}")
+    return add_object(_vst_project, kind, x, y, w, h, label, bind)
+
+
+@app.post("/api/vst/ui/bind")
+def vst_bind_endpoint(object_id: int, param: str) -> Dict[str, Any]:
+    try:
+        return bind_object(_vst_project, object_id, param)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.post("/api/vst/ui/export")
+def vst_export_endpoint() -> Dict[str, Any]:
+    return export_project(_vst_project)
 
 
 @app.get("/api/music/state")

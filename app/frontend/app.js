@@ -715,6 +715,87 @@ document.getElementById("vst-make").onclick = async () => {
   } catch (e) { alert(e.message); }
 };
 
+// VST UI Builder
+let vstProject = null;
+async function loadVstUI() {
+  try {
+    vstProject = await api("/api/vst/ui");
+    renderVstCanvas();
+  } catch (e) {}
+}
+function renderVstCanvas() {
+  const canvas = document.getElementById("vst-canvas");
+  if (!canvas || !vstProject) return;
+  canvas.innerHTML = "";
+  for (const o of vstProject.objects || []) {
+    const el = document.createElement("div");
+    el.className = "vst-obj " + o.kind;
+    el.style.left = o.x + "px";
+    el.style.top = o.y + "px";
+    el.style.width = o.w + "px";
+    el.style.height = o.h + "px";
+    el.textContent = o.label || o.kind;
+    el.title = o.bind ? `bound: ${o.bind}` : "unbound";
+    el.dataset.id = o.id;
+    el.draggable = true;
+    el.ondragstart = (e) => e.dataTransfer.setData("object-id", String(o.id));
+    canvas.appendChild(el);
+  }
+  const list = document.getElementById("vst-ui-list");
+  if (list) list.textContent = JSON.stringify({
+    name: vstProject.name,
+    parameters: vstProject.parameters,
+    objects: vstProject.objects,
+  }, null, 2);
+}
+document.getElementById("vst-ui-reset").onclick = async () => {
+  const name = document.getElementById("vst-ui-name").value.trim() || "MyPlugin";
+  vstProject = await api(`/api/vst/ui/reset?name=${encodeURIComponent(name)}`, { method: "POST" });
+  renderVstCanvas();
+};
+document.getElementById("vst-ui-export").onclick = async () => {
+  try {
+    const result = await api("/api/vst/ui/export", { method: "POST" });
+    document.getElementById("audio-transport-status").textContent = `Exported ${result.path}`;
+    document.getElementById("audio-output").textContent = JSON.stringify(result, null, 2);
+  } catch (e) { alert(e.message); }
+};
+document.getElementById("vst-bind").onclick = async () => {
+  const id = Number(document.getElementById("vst-bind-id").value);
+  const param = document.getElementById("vst-bind-param").value.trim();
+  if (!param) return;
+  try {
+    await api(`/api/vst/ui/bind?object_id=${id}&param=${encodeURIComponent(param)}`, { method: "POST" });
+    await loadVstUI();
+  } catch (e) { alert(e.message); }
+};
+const palette = document.getElementById("vst-palette");
+if (palette) {
+  palette.ondragstart = (e) => {
+    const kind = e.target.dataset.kind;
+    if (kind) e.dataTransfer.setData("kind", kind);
+  };
+}
+const canvas = document.getElementById("vst-canvas");
+if (canvas) {
+  canvas.ondragover = (e) => e.preventDefault();
+  canvas.ondrop = async (e) => {
+    e.preventDefault();
+    const kind = e.dataTransfer.getData("kind");
+    if (!kind) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const w = kind === "vslider" ? 28 : kind === "hslider" ? 120 : kind === "button" ? 80 : 60;
+    const h = kind === "hslider" ? 28 : kind === "vslider" ? 120 : kind === "button" ? 32 : 60;
+    try {
+      await api(`/api/vst/ui/object?kind=${kind}&x=${x}&y=${y}&w=${w}&h=${h}&label=${kind}`, { method: "POST" });
+      await loadVstUI();
+    } catch (err) { alert(err.message); }
+  };
+}
+loadVstUI();
+
 document.getElementById("audio-play").onclick = () => {
   const clip = audioClips.find((c) => c.id === selectedClip);
   if (!clip || !clip.path) {

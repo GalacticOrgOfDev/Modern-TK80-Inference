@@ -129,6 +129,27 @@
         </label>
         <button id="vst-make">Generate VST source</button>
         <hr />
+        <h3>VST UI Builder</h3>
+        <label>Project name<input id="vst-ui-name" placeholder="My Custom EQ" /></label>
+        <div class="edit-row">
+          <button id="vst-ui-reset">New project</button>
+          <button id="vst-ui-export">Press to VST</button>
+        </div>
+        <div id="vst-palette" class="vst-palette">
+          <div class="vst-item" data-kind="knob" draggable="true">Knob</div>
+          <div class="vst-item" data-kind="vslider" draggable="true">V Slider</div>
+          <div class="vst-item" data-kind="hslider" draggable="true">H Slider</div>
+          <div class="vst-item" data-kind="button" draggable="true">Button</div>
+          <div class="vst-item" data-kind="label" draggable="true">Label</div>
+        </div>
+        <div id="vst-canvas" class="vst-canvas"></div>
+        <div class="edit-row">
+          <label>Bind object #<input id="vst-bind-id" type="number" value="1" /></label>
+          <label>to param<input id="vst-bind-param" placeholder="input_level" /></label>
+          <button id="vst-bind">Bind</button>
+        </div>
+        <pre id="vst-ui-list"></pre>
+        <hr />
         <label>Voice model<input id="audio-model" placeholder="openai/whisper-small" /></label>
         <label>Die<input id="audio-die" type="number" value="0" /></label>
         <button id="audio-load">Load voice model</button>

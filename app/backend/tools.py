@@ -46,6 +46,22 @@ TOOLS: Dict[str, Dict[str, Any]] = {
             "plugin_type": "effect|instrument",
         },
     },
+    "vst_add_param": {
+        "description": "Add a parameter to the current VST UI project.",
+        "args": {"name": "string", "default": "float"},
+    },
+    "vst_add_object": {
+        "description": "Place a UI object (knob, vslider, hslider, button, label) on the VST canvas.",
+        "args": {"kind": "knob|vslider|hslider|button|label", "x": "float", "y": "float", "label": "string", "bind": "string"},
+    },
+    "vst_bind": {
+        "description": "Bind an existing UI object to a parameter by name.",
+        "args": {"object_id": "int", "param": "string"},
+    },
+    "vst_export": {
+        "description": "Export the current VST UI project to VST3 source plus layout.",
+        "args": {},
+    },
 }
 
 # Model emits: tool: name {"arg": value}
