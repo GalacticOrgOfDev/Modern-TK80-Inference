@@ -4,7 +4,7 @@ Modern-TK80 is a Windows desktop app. Audio I/O is native ASIO
 (PortAudio / Focusrite USB ASIO), not a browser media device.
 
 Clip edits rewrite the WAV. Mixdown respects mute, solo, gain, channel,
-and timeline position.
+timeline position, clip mute, and the master bus.
 """
 
 from __future__ import annotations
@@ -42,8 +42,15 @@ SCARLETT_PROFILES = {
 }
 
 
+def default_master() -> Dict[str, Any]:
+    return {
+        "gain": 1.0,
+        "mute": False,
+        "compressor": {"enabled": False, "threshold": 0.5, "ratio": 4.0, "makeup": 1.0},
+    }
+
+
 def detect_scarlett(label: str) -> Optional[Dict[str, Any]]:
-    """Return a Scarlett profile if the device label matches 2i2 Gen 1 or Gen 2."""
     if not label:
         return None
     text = label.lower()
@@ -75,7 +82,6 @@ def save_upload(filename: str, data: bytes) -> Path:
 
 
 def _read_wav(path: Path) -> Tuple[int, int, int, bytes]:
-    """Return rate, channels, sampwidth, frames."""
     with wave.open(str(path), "rb") as w:
         return w.getframerate(), w.getnchannels(), w.getsampwidth(), w.readframes(w.getnframes())
 
@@ -101,12 +107,10 @@ def wav_duration(path: Path) -> Optional[float]:
 
 
 def wav_peaks(path: Path, buckets: int = 64) -> List[float]:
-    """True 16-bit absolute peak per bucket, normalized 0..1."""
     try:
         rate, channels, width, raw = _read_wav(path)
         if width != 2 or not raw:
             return [0.0] * buckets
-        # Interleaved int16. Peak of the loudest sample in each bucket.
         frames = len(raw) // (2 * max(1, channels))
         if frames == 0:
             return [0.0] * buckets
@@ -125,6 +129,14 @@ def wav_peaks(path: Path, buckets: int = 64) -> List[float]:
         return peaks
     except Exception:
         return [0.0] * buckets
+
+
+def default_effects() -> Dict[str, Any]:
+    return {
+        "normalize": {"enabled": False, "target": 0.95},
+        "compress": {"enabled": False, "threshold": 0.5, "ratio": 4.0, "makeup": 1.0},
+        "morph": {"enabled": False, "points": [[0.0, 1.0], [1.0, 1.0]]},
+    }
 
 
 def make_clip(
@@ -151,6 +163,7 @@ def make_clip(
         "duration": round(dur, 3),
         "path": rel,
         "gain": 1.0,
+        "mute": False,
         "start": 0.0,
         "end": round(dur, 3),
         "position": round(max(0.0, position), 3),
@@ -158,6 +171,7 @@ def make_clip(
         "peaks": peaks,
         "track_id": track_id,
         "sample_rate": sample_rate,
+        "effects": default_effects(),
     }
 
 
@@ -203,7 +217,6 @@ def process_clip(
     gain: float = 1.0,
     out_name: str = "",
 ) -> Path:
-    """Rewrite a WAV for trim, reverse, or gain. Returns the new path."""
     rate, channels, width, raw = _read_wav(path)
     if width != 2:
         raise ValueError("only 16-bit WAV is supported")
@@ -239,21 +252,23 @@ def mix_arrangement(
     tracks: List[Dict[str, Any]],
     rate: int = DEFAULT_SAMPLE_RATE,
     out_name: str = "mix.wav",
+    master: Optional[Dict[str, Any]] = None,
 ) -> Path:
     """Bounce the arrangement to a stereo WAV.
 
-    Solo wins: if any track is solo, only solo tracks are mixed.
-    Muted tracks are skipped. Clip and track gain multiply.
-    Channel mode selects left, right, or both.
-    Clips are placed at their timeline position.
+    Solo wins. Muted tracks and muted clips are skipped.
+    Clip gain, track gain, and master gain multiply.
+    Master compressor is applied to the sum if enabled.
     """
+    master = master or default_master()
     track_by_id = {t["id"]: t for t in tracks}
     any_solo = any(t.get("solo") for t in tracks)
 
-    # Find arrangement length.
     length = 0.0
     active: List[Tuple[Dict[str, Any], Dict[str, Any]]] = []
     for clip in clips:
+        if clip.get("mute"):
+            continue
         track = track_by_id.get(clip.get("track_id"))
         if track is None:
             continue
@@ -268,14 +283,14 @@ def mix_arrangement(
             length = end
         active.append((clip, track))
 
-    if length <= 0 or not active:
-        # Empty mix.
+    if master.get("mute") or length <= 0 or not active:
         dest = UPLOAD_DIR / out_name
         return _write_wav(dest, b"", rate, 2)
 
     total = int(length * rate) + 1
     left = [0.0] * total
     right = [0.0] * total
+    master_gain = float(master.get("gain", 1.0))
 
     for clip, track in active:
         try:
@@ -304,13 +319,34 @@ def mix_arrangement(
             left[idx] += l
             right[idx] += r
 
+    # Master gain, then optional compressor on the sum.
+    comp = master.get("compressor") or {}
+    use_comp = bool(comp.get("enabled"))
+    thresh = float(comp.get("threshold", 0.5))
+    ratio = max(1.0, float(comp.get("ratio", 4.0)))
+    makeup = float(comp.get("makeup", 1.0))
+
     out = bytearray()
     for i in range(total):
-        ls = int(max(-1.0, min(1.0, left[i])) * 32767)
-        rs = int(max(-1.0, min(1.0, right[i])) * 32767)
+        l = left[i] * master_gain
+        r = right[i] * master_gain
+        if use_comp:
+            l = _compress_sample(l, thresh, ratio) * makeup
+            r = _compress_sample(r, thresh, ratio) * makeup
+        ls = int(max(-1.0, min(1.0, l)) * 32767)
+        rs = int(max(-1.0, min(1.0, r)) * 32767)
         out += struct.pack("<hh", ls, rs)
 
     dest = UPLOAD_DIR / out_name
     if dest.exists():
         dest = UPLOAD_DIR / f"mix_{total}.wav"
     return _write_wav(dest, bytes(out), rate, 2)
+
+
+def _compress_sample(v: float, thresh: float, ratio: float) -> float:
+    a = abs(v)
+    if a <= thresh:
+        return v
+    over = a - thresh
+    a = thresh + over / ratio
+    return a if v >= 0 else -a
