@@ -2,36 +2,56 @@
 
 Remastering layer that presents a modern interface to the Tesla K80 while running on the last supported R470 driver + CUDA 11.8 baseline.
 
-## What it does
+## Features
 
-- Discovers the two independent dies (never treats them as one 24 GB pool)
-- Places a model explicitly on one die
-- Routes generate calls to the chosen die/backend
-- Reports status for hybrid cluster use
+- Die discovery and tracking (two independent 12 GB dies)
+- Translation layer: OpenAI-style messages or plain prompts → backend
+- Explicit dual-die split modes: `single`, `dual`, `layer` (layer is experimental)
+- Hybrid cluster advertisement
+- Thermal and performance monitoring (memory, temp/util via pynvml if present, tokens/sec)
 
 ## Usage
 
 ```python
 from drivers.interconnector import Interconnector
 
-ic = Interconnector()                  # all dies
-# or Interconnector(die_indices=[0])   # only die 0
+ic = Interconnector()
 
-print(ic.status())
-
+# Modern request format
 ic.load("./model.gguf", backend="llama", die=0)
-ic.load("./other.gguf", backend="llama", die=1)  # second die
+result = ic.generate({
+    "messages": [
+        {"role": "user", "content": "Hello from K80"}
+    ],
+    "max_tokens": 64,
+    "temperature": 0.7,
+})
+print(result)
 
-print(ic.generate("Hello from K80", die=0))
+# Dual independent copies
+ic.load("./model.gguf", backend="llama", split="dual")
 
-ic.unload(0)
+# Cluster advertisement
+print(ic.advertise())
+
+# Full status (includes metrics + last performance)
+print(ic.status())
 ```
 
-## Backends
+## Split modes
 
-- `llama` — llama-cpp-python built for `sm_37` (see `scripts/build_llama_cuda.sh`)
-- `pytorch` — Hugging Face models, FP32, single die
+| Mode   | Behavior                                      |
+|--------|-----------------------------------------------|
+| single | Whole model on one free die (default)         |
+| dual   | Independent copy on each of two free dies     |
+| layer  | Experimental layer split (llama backend only) |
+
+## Monitoring
+
+- Memory: always via PyTorch when available
+- Temperature / utilization / power: requires `pynvml` (optional)
+- Performance: tokens/sec recorded on each generate call
 
 ## Status
 
-Core placement and routing implemented. Translation layer for modern request formats and hybrid cluster hooks come next.
+Translation, split planning, monitoring, and cluster advertisement are implemented.
