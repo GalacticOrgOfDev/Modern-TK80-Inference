@@ -25,6 +25,12 @@
         <label>Backend
           <select id="llm-backend"><option>llama</option><option>pytorch</option></select>
         </label>
+        <label>Modality
+          <select id="llm-modality">
+            <option value="llm">llm</option>
+            <option value="agent">agent</option>
+          </select>
+        </label>
         <label>Die<input id="llm-die" type="number" value="0" /></label>
         <label>Split
           <select id="llm-split"><option>single</option><option>dual</option><option>layer</option></select>
@@ -38,6 +44,7 @@
       </div>
       <div class="chat">
         <div id="llm-messages"></div>
+        <div id="tool-indicator" class="tool-indicator" hidden></div>
         <div class="composer">
           <textarea id="llm-input" placeholder="Message"></textarea>
           <button id="llm-send">Send</button>
