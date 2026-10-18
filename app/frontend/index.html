@@ -112,11 +112,22 @@
         <label>Plugin name<input id="vst-name" placeholder="MyPlugin" /></label>
         <label>Type
           <select id="vst-type">
-            <option value="instrument">Instrument</option>
             <option value="effect">Effect</option>
+            <option value="instrument">Instrument</option>
           </select>
         </label>
-        <button id="vst-make">Generate VST skeleton</button>
+        <label>Effect
+          <select id="vst-effect">
+            <option value="reverb">Reverb</option>
+            <option value="subpump">Subpump</option>
+            <option value="autotune">Autotune</option>
+            <option value="noise_suppression">Noise suppression</option>
+            <option value="delay">Delay</option>
+            <option value="distortion">Distortion</option>
+            <option value="custom">Custom</option>
+          </select>
+        </label>
+        <button id="vst-make">Generate VST source</button>
         <hr />
         <label>Voice model<input id="audio-model" placeholder="openai/whisper-small" /></label>
         <label>Die<input id="audio-die" type="number" value="0" /></label>

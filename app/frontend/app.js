@@ -703,13 +703,14 @@ document.getElementById("fx-morph").onclick = () =>
 document.getElementById("vst-make").onclick = async () => {
   const name = document.getElementById("vst-name").value.trim() || "MyPlugin";
   const plugin_type = document.getElementById("vst-type").value;
+  const effect = document.getElementById("vst-effect").value;
   try {
     const result = await api("/api/audio/vst", {
       method: "POST",
-      body: JSON.stringify({ name, plugin_type, channels: 2 }),
+      body: JSON.stringify({ name, plugin_type, effect, channels: 2 }),
     });
     document.getElementById("audio-transport-status").textContent =
-      `VST skeleton: ${result.path}`;
+      `VST source: ${result.path}`;
     document.getElementById("audio-output").textContent = JSON.stringify(result, null, 2);
   } catch (e) { alert(e.message); }
 };

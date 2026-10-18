@@ -40,7 +40,7 @@ from .audio import (
     save_upload,
 )
 from .effects import apply_effect
-from .vst import make_vst, PLUGIN_TYPES
+from .vst import make_vst, PLUGIN_TYPES, EFFECT_PRESETS
 from .music import (
     DEFAULT_BPM,
     INSTRUMENTS,
@@ -196,6 +196,18 @@ def _dispatch_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         result["name"] = name
         return result
 
+    if name == "make_vst":
+        plugin_name = str(args.get("name", "GeneratedPlugin"))
+        effect = str(args.get("effect", "custom"))
+        plugin_type = str(args.get("plugin_type", "effect"))
+        if effect not in EFFECT_PRESETS:
+            effect = "custom"
+        if plugin_type not in PLUGIN_TYPES:
+            plugin_type = "effect"
+        result = make_vst(plugin_name, plugin_type, effect)
+        result["name"] = "make_vst"
+        return result
+
     raise HTTPException(status_code=400, detail=f"unknown tool: {name}")
 
 
@@ -297,7 +309,8 @@ class BounceRequest(BaseModel):
 
 class VstRequest(BaseModel):
     name: str
-    plugin_type: str = "instrument"
+    plugin_type: str = "effect"
+    effect: str = "custom"
     channels: int = 2
     params: Dict[str, Any] = {}
 
@@ -617,11 +630,13 @@ def bounce_audio(body: BounceRequest) -> Dict[str, Any]:
 
 @app.post("/api/audio/vst")
 def create_vst(body: VstRequest) -> Dict[str, Any]:
-    """Generate a VST3 skeleton for the mini DAW."""
+    """Generate a VST3 source file for the mini DAW."""
     if body.plugin_type not in PLUGIN_TYPES:
         raise HTTPException(status_code=400, detail=f"plugin_type must be one of {PLUGIN_TYPES}")
+    if body.effect not in EFFECT_PRESETS:
+        raise HTTPException(status_code=400, detail=f"effect must be one of {EFFECT_PRESETS}")
     try:
-        result = make_vst(body.name, body.plugin_type, body.channels, body.params)
+        result = make_vst(body.name, body.plugin_type, body.effect, body.channels, body.params)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     return result

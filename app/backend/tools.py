@@ -38,6 +38,14 @@ TOOLS: Dict[str, Dict[str, Any]] = {
         "description": "Estimate BPM from a clip.",
         "args": {"clip_id": "int"},
     },
+    "make_vst": {
+        "description": "Generate a VST3 effect or instrument plugin source (reverb, subpump, autotune, noise_suppression, delay, distortion, custom).",
+        "args": {
+            "name": "string",
+            "effect": "reverb|subpump|autotune|noise_suppression|delay|distortion|custom",
+            "plugin_type": "effect|instrument",
+        },
+    },
 }
 
 # Model emits: tool: name {"arg": value}
@@ -119,5 +127,13 @@ def parse_intent(text: str) -> Optional[Dict[str, Any]]:
 
     if "detect bpm" in t or "bpm detect" in t:
         return {"name": "detect_bpm", "args": {}}
+
+    if any(word in t for word in ("vst", "plugin", "reverb", "subpump", "autotune", "noise")):
+        effect = "custom"
+        for e in ("reverb", "subpump", "autotune", "noise_suppression", "delay", "distortion"):
+            if e.replace("_", " ") in t or e in t:
+                effect = e
+                break
+        return {"name": "make_vst", "args": {"name": "GeneratedPlugin", "effect": effect, "plugin_type": "effect"}}
 
     return None
