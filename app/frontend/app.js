@@ -31,7 +31,8 @@ function setupTabs() {
       document.querySelectorAll("nav button").forEach((b) => b.classList.remove("active"));
       document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
       btn.classList.add("active");
-      document.getElementById(btn.dataset.tab).classList.add("active");
+      const panel = document.getElementById(btn.dataset.tab);
+      if (panel) panel.classList.add("active");
     });
   });
 }
@@ -39,11 +40,10 @@ function setupTabs() {
 async function refreshStatus() {
   try {
     const data = await api("/api/status");
-    document.getElementById("status-pill").textContent = `${data.dies.length} die(s)`;
-    document.getElementById("llm-status").textContent = JSON.stringify(data, null, 2);
+    const n = (data.dies || []).length;
+    document.getElementById("status-pill").textContent = n ? `${n} die(s)` : "no GPU";
   } catch (e) {
-    document.getElementById("status-pill").textContent = "offline";
-    document.getElementById("llm-status").textContent = String(e);
+    document.getElementById("status-pill").textContent = "no GPU";
   }
 }
 

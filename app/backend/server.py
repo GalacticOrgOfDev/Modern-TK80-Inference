@@ -576,7 +576,11 @@ def list_formats() -> Dict[str, Any]:
 
 @app.get("/api/status")
 def get_status() -> Dict[str, Any]:
-    return get_ic().status()
+    """Return die status. Works without a K80 installed."""
+    try:
+        return get_ic().status()
+    except Exception:
+        return {"dies": [], "note": "no accelerator detected", "ready": False}
 
 
 @app.get("/api/advertise")
