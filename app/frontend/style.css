@@ -41,16 +41,16 @@ main { flex: 1; display: flex; overflow: hidden; }
   gap: 10px;
   overflow: auto;
 }
-.sidebar label { display: flex; flex-direction: column; font-size: 12px; gap: 4px; }
-.sidebar input, .sidebar select, .sidebar button, textarea {
+.sidebar label, .edit-row label { display: flex; flex-direction: column; font-size: 12px; gap: 4px; }
+.sidebar input, .sidebar select, .sidebar button, textarea, .edit-row input, .edit-row select, .edit-row button {
   background: #222;
   color: #eee;
   border: 1px solid #444;
   padding: 6px;
   border-radius: 4px;
 }
-.sidebar button { cursor: pointer; }
-.chat, .studio { flex: 1; display: flex; flex-direction: column; padding: 16px; }
+.sidebar button, .edit-row button { cursor: pointer; }
+.chat, .studio { flex: 1; display: flex; flex-direction: column; padding: 16px; overflow: auto; }
 #llm-messages { flex: 1; overflow: auto; background: #0d0d0d; padding: 12px; border-radius: 4px; }
 .composer { display: flex; gap: 8px; margin-top: 8px; }
 .composer textarea { flex: 1; min-height: 60px; }
@@ -58,7 +58,7 @@ main { flex: 1; display: flex; overflow: hidden; }
 .msg.user { background: #1a2a1a; }
 .msg.assistant { background: #1a1a2a; }
 .preview {
-  height: 240px;
+  height: 200px;
   background: #000;
   border: 1px solid #333;
   display: flex;
@@ -68,13 +68,25 @@ main { flex: 1; display: flex; overflow: hidden; }
   margin-bottom: 12px;
 }
 .timeline {
-  height: 60px;
+  min-height: 60px;
   background: #1a1a1a;
   border: 1px solid #333;
   display: flex;
-  align-items: center;
-  padding: 0 12px;
-  color: #888;
-  font-size: 13px;
+  gap: 6px;
+  padding: 8px;
+  margin-bottom: 12px;
+  overflow-x: auto;
 }
+.frame, .clip {
+  background: #222;
+  border: 1px solid #444;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.clip-list { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
+.edit-row { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; margin: 8px 0; }
+.transport { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
 pre { white-space: pre-wrap; font-size: 12px; background: #0d0d0d; padding: 8px; border-radius: 4px; }
+hr { border: none; border-top: 1px solid #333; width: 100%; }
