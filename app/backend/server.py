@@ -34,6 +34,8 @@ from .audio import (
     detect_scarlett,
     make_clip,
     make_track,
+    mix_arrangement,
+    process_clip,
     save_upload,
 )
 from .music import (
@@ -104,6 +106,20 @@ def _validate_rate_for_track(track: Dict[str, Any], rate: int) -> None:
             status_code=400,
             detail=f"{scar['name']} does not support {rate} Hz",
         )
+
+
+def _refresh_clip(clip: Dict[str, Any], path: Path) -> None:
+    """Update a clip after a file rewrite."""
+    fresh = make_clip(
+        clip["id"],
+        path.name,
+        path,
+        track_id=clip.get("track_id"),
+        sample_rate=clip.get("sample_rate", _sample_rate),
+        position=clip.get("position", 0.0),
+    )
+    clip.update(fresh)
+    clip["id"] = fresh["id"]
 
 
 def _dispatch_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
@@ -212,6 +228,7 @@ class AudioEditRequest(BaseModel):
     start: Optional[float] = None
     end: Optional[float] = None
     gain: Optional[float] = None
+    position: Optional[float] = None
 
 
 class TrackUpdate(BaseModel):
@@ -260,6 +277,10 @@ class LoopRequest(BaseModel):
 class ToolRequest(BaseModel):
     name: str
     args: Dict[str, Any] = {}
+
+
+class BounceRequest(BaseModel):
+    name: str = "mix.wav"
 
 
 class VideoEditRequest(BaseModel):
@@ -345,7 +366,6 @@ def chat(body: ChatRequest) -> Dict[str, Any]:
     intent = parse_intent(last_user)
     tool_result: Optional[Dict[str, Any]] = None
 
-    # Direct command path: no model needed.
     if intent and not parse_tool_call(last_user):
         tool_result = _dispatch_tool(intent["name"], intent.get("args", {}))
         text = _tool_summary(tool_result)
@@ -359,7 +379,6 @@ def chat(body: ChatRequest) -> Dict[str, Any]:
         die = loaded[0] if loaded else None
     modality = ic.modality_of(die) if die is not None else None
 
-    # Agent path: model emits tool calls, studio runs them, result is fed back.
     if modality == "agent":
         result = ic.generate(
             {
@@ -391,7 +410,6 @@ def chat(body: ChatRequest) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(e)) from e
     text = result if isinstance(result, str) else str(result)
 
-    # LLM may emit a tool call in its reply. Run it once and append the result.
     call = parse_tool_call(text)
     if call:
         tool_result = _dispatch_tool(call["name"], call.get("args", {}))
@@ -519,6 +537,28 @@ def asio_stop() -> Dict[str, Any]:
     _audio_clips.append(clip)
     info["clip"] = clip
     return info
+
+
+@app.post("/api/audio/mix")
+def mix_audio() -> Dict[str, Any]:
+    """Bounce the arrangement to a stereo WAV and return the mix clip."""
+    path = mix_arrangement(_audio_clips, _audio_tracks, _sample_rate, "mix.wav")
+    clip = make_clip(len(_audio_clips), path.name, path, track_id=None, sample_rate=_sample_rate)
+    clip["mix"] = True
+    _audio_clips.append(clip)
+    return clip
+
+
+@app.post("/api/audio/bounce")
+def bounce_audio(body: BounceRequest) -> Dict[str, Any]:
+    name = Path(body.name).name or "mix.wav"
+    if not name.endswith(".wav"):
+        name += ".wav"
+    path = mix_arrangement(_audio_clips, _audio_tracks, _sample_rate, name)
+    clip = make_clip(len(_audio_clips), path.name, path, track_id=None, sample_rate=_sample_rate)
+    clip["mix"] = True
+    _audio_clips.append(clip)
+    return clip
 
 
 # ---- Music: BPM, sequencer, instruments, loops, tools ----
@@ -651,10 +691,24 @@ def list_clips() -> Dict[str, Any]:
 
 
 @app.post("/api/audio/clips")
-def add_clip(name: str, duration: float = 0.0, path: str = "", track_id: Optional[int] = None) -> Dict[str, Any]:
+def add_clip(
+    name: str,
+    duration: float = 0.0,
+    path: str = "",
+    track_id: Optional[int] = None,
+    position: float = 0.0,
+) -> Dict[str, Any]:
     if track_id is None:
         track_id = _ensure_track()
-    clip = make_clip(len(_audio_clips), name, Path(path) if path else None, duration, track_id, _sample_rate)
+    clip = make_clip(
+        len(_audio_clips),
+        name,
+        Path(path) if path else None,
+        duration,
+        track_id,
+        _sample_rate,
+        position,
+    )
     _audio_clips.append(clip)
     return clip
 
@@ -688,22 +742,36 @@ def edit_audio(body: AudioEditRequest) -> Dict[str, Any]:
     if body.clip_id < 0 or body.clip_id >= len(_audio_clips):
         raise HTTPException(status_code=404, detail="clip not found")
     clip = _audio_clips[body.clip_id]
-    if body.action == "trim":
-        if body.start is not None:
-            clip["start"] = max(0.0, body.start)
-        if body.end is not None:
-            clip["end"] = min(clip["duration"], body.end)
-        if clip["end"] < clip["start"]:
-            clip["end"] = clip["start"]
-    elif body.action == "gain":
-        if body.gain is not None:
-            clip["gain"] = max(0.0, body.gain)
-    elif body.action == "reverse":
+    path = clip.get("path")
+    if not path or not Path(path).exists():
+        raise HTTPException(status_code=400, detail="clip has no file")
+
+    if body.action == "position":
+        clip["position"] = max(0.0, body.position or 0.0)
+        return clip
+
+    try:
+        if body.action == "trim":
+            new_path = process_clip(
+                Path(path),
+                "trim",
+                start=body.start or 0.0,
+                end=body.end,
+            )
+        elif body.action == "gain":
+            new_path = process_clip(Path(path), "gain", gain=body.gain if body.gain is not None else 1.0)
+        elif body.action == "reverse":
+            new_path = process_clip(Path(path), "reverse")
+        elif body.action == "silence":
+            new_path = process_clip(Path(path), "silence")
+        else:
+            raise HTTPException(status_code=400, detail="unknown action")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    _refresh_clip(clip, new_path)
+    if body.action == "reverse":
         clip["reversed"] = not clip.get("reversed", False)
-    elif body.action == "silence":
-        clip["gain"] = 0.0
-    else:
-        raise HTTPException(status_code=400, detail="unknown action")
     return clip
 
 
