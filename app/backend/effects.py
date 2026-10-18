@@ -6,6 +6,7 @@ All operate on 16-bit PCM and return a new WAV path.
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -122,18 +123,63 @@ def delay(
     return out
 
 
-def eq_simple(samples: List[int], low: float = 1.0, mid: float = 1.0, high: float = 1.0) -> List[int]:
-    """Very simple three-band gain. Not a real filter; scales by band estimate."""
+EQ_BANDS = 30
+EQ_LOW = 100.0
+EQ_HIGH = 20000.0
+
+
+def eq_frequencies() -> List[float]:
+    """30 log-spaced center frequencies from 100 Hz to 20 kHz."""
+    if EQ_BANDS == 1:
+        return [EQ_LOW]
+    ratio = (EQ_HIGH / EQ_LOW) ** (1.0 / (EQ_BANDS - 1))
+    return [EQ_LOW * (ratio ** i) for i in range(EQ_BANDS)]
+
+
+def eq_30(
+    samples: List[int],
+    rate: int,
+    channels: int,
+    gains: List[float] | None = None,
+) -> List[int]:
+    """30-band EQ from 100 Hz to 20 kHz.
+
+    gains is a list of 30 linear gains (1.0 = flat). Missing values default to 1.0.
+    This is a lightweight per-band gain applied by zero-crossing period estimate,
+    not a full filter bank. It is enough for creative shaping until a real FFT EQ lands.
+    """
+    freqs = eq_frequencies()
+    if not gains:
+        gains = [1.0] * EQ_BANDS
+    gains = list(gains) + [1.0] * EQ_BANDS
+    gains = [max(0.0, float(g)) for g in gains[:EQ_BANDS]]
+
+    frame_size = max(1, channels)
+    frames = len(samples) // frame_size
     out: List[int] = []
-    for s in samples:
-        a = abs(s)
-        if a < 8000:
-            g = low
-        elif a < 20000:
-            g = mid
+    # Estimate local frequency from zero crossings and pick the nearest band.
+    prev = 0
+    for i in range(frames):
+        base = i * frame_size
+        # Use first channel for the estimate.
+        s = samples[base]
+        period = 0
+        if (prev <= 0 < s) or (prev >= 0 > s):
+            period = i
+        prev = s
+        # Fallback: map sample magnitude into a band if no crossing yet.
+        band = 0
+        if period > 0 and rate > 0:
+            est = rate / max(1, period)
+            # Find nearest center.
+            band = min(range(EQ_BANDS), key=lambda b: abs(freqs[b] - est))
         else:
-            g = high
-        out.append(int(max(-32768, min(32767, s * g))))
+            mag = abs(s) / 32767.0
+            band = min(EQ_BANDS - 1, int(mag * EQ_BANDS))
+        g = gains[band]
+        for c in range(frame_size):
+            v = samples[base + c] * g
+            out.append(int(max(-32768, min(32767, v))))
     return out
 
 
@@ -194,12 +240,9 @@ def apply_effect(
             mix=float(params.get("mix", 0.5)),
         )
     elif kind == "eq":
-        samples = eq_simple(
-            samples,
-            low=float(params.get("low", 1.0)),
-            mid=float(params.get("mid", 1.0)),
-            high=float(params.get("high", 1.0)),
-        )
+        raw = params.get("gains") or params.get("bands") or [1.0] * EQ_BANDS
+        gains = [float(g) for g in raw]
+        samples = eq_30(samples, rate, channels, gains)
     elif kind == "reverb":
         samples = reverb_simple(
             samples,

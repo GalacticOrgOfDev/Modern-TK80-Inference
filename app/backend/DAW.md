@@ -27,7 +27,7 @@ Applied per clip and written back to a new WAV:
 - compressor (threshold, ratio, makeup)
 - morph envelope (time/gain points)
 - delay (time, feedback, mix)
-- simple EQ (low / mid / high gain)
+- simple EQ: 30 bands, log-spaced from 100 Hz to 20 kHz (pass `gains` as a list of 30 linear values)
 - simple reverb (room, mix)
 
 ## Mix and bounce
