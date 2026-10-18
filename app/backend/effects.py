@@ -94,6 +94,34 @@ def _interp(points: List[Tuple[float, float]], t: float) -> float:
     return points[-1][1]
 
 
+def delay(
+    samples: List[int],
+    rate: int,
+    channels: int,
+    time: float = 0.25,
+    feedback: float = 0.4,
+    mix: float = 0.5,
+) -> List[int]:
+    """Simple delay. time in seconds, feedback and mix are 0..1."""
+    frame_size = max(1, channels)
+    delay_frames = max(1, int(time * rate))
+    buf = [0] * (delay_frames * frame_size)
+    out: List[int] = []
+    for i in range(0, len(samples), frame_size):
+        frame = samples[i : i + frame_size]
+        delayed = buf[:frame_size]
+        new_frame = []
+        for c in range(frame_size):
+            dry = frame[c] if c < len(frame) else 0
+            wet = delayed[c] if c < len(delayed) else 0
+            mixed = int(dry * (1 - mix) + wet * mix)
+            new_frame.append(max(-32768, min(32767, mixed)))
+            buf.append(int(dry + wet * feedback))
+        buf = buf[frame_size:]
+        out.extend(new_frame)
+    return out
+
+
 def apply_effect(
     path: Path,
     kind: str,
@@ -120,6 +148,15 @@ def apply_effect(
         raw_pts = params.get("points") or [(0.0, 1.0), (1.0, 1.0)]
         points = [(float(p[0]), float(p[1])) for p in raw_pts]
         samples = morph(samples, points, channels)
+    elif kind == "delay":
+        samples = delay(
+            samples,
+            rate,
+            channels,
+            time=float(params.get("time", 0.25)),
+            feedback=float(params.get("feedback", 0.4)),
+            mix=float(params.get("mix", 0.5)),
+        )
     else:
         raise ValueError(f"unknown effect: {kind}")
 

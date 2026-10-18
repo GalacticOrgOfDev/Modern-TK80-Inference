@@ -38,7 +38,9 @@ Opens a native window. Packaging notes for a Windows installer are in `app/packa
 - 16-step sequencer, BPM detect/set, loop/sample generation
 - Clip edits rewrite the WAV: trim, reverse, gain, silence
 - Per-clip level fader and mute toggle (inline on the clip list)
-- Per-clip effect channels: normalize, compressor, morphable envelope (time/gain points reshape the wave)
+- Per-clip effect channels: normalize, compressor, morphable envelope, delay
+- Undo stack restores the previous clip snapshot (20 steps)
+- Transitions carry kind and duration
 - Timeline position per clip
 - True 16-bit peaks for the waveform
 - Play mix and bounce the arrangement to a stereo WAV (respects track mute/solo/gain, clip mute/gain, channel, position, and master bus)

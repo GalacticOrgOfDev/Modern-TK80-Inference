@@ -130,10 +130,23 @@ def get_fusion() -> DieFusionCore:
 
 
 def _push_undo(kind: str, data: Dict[str, Any]) -> None:
-    """Keep a short undo stack for audio edits."""
-    _undo_stack.append({"kind": kind, "data": data})
+    """Keep a short undo stack for audio edits. Stores a snapshot."""
+    _undo_stack.append({"kind": kind, "data": dict(data)})
     if len(_undo_stack) > _MAX_UNDO:
         _undo_stack.pop(0)
+
+
+def _restore_undo(entry: Dict[str, Any]) -> None:
+    """Restore a clip from an undo snapshot."""
+    data = entry.get("data") or {}
+    clip_id = data.get("id")
+    if clip_id is None:
+        return
+    for i, c in enumerate(_audio_clips):
+        if c.get("id") == clip_id:
+            _audio_clips[i] = data
+            return
+    _audio_clips.append(data)
 
 
 def _ensure_track() -> int:
@@ -412,6 +425,7 @@ def _dispatch_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         if not _undo_stack:
             return {"ok": False, "name": name, "note": "nothing to undo"}
         entry = _undo_stack.pop()
+        _restore_undo(entry)
         return {"ok": True, "name": name, "undone": entry}
 
     raise HTTPException(status_code=400, detail=f"unknown tool: {name}")
@@ -1092,7 +1106,7 @@ def clip_effect(body: EffectRequest) -> Dict[str, Any]:
     path = clip.get("path")
     if not path or not Path(path).exists():
         raise HTTPException(status_code=400, detail="clip has no file")
-    if body.kind not in ("normalize", "compress", "morph"):
+    if body.kind not in ("normalize", "compress", "morph", "delay"):
         raise HTTPException(status_code=400, detail="unknown effect")
     try:
         new_path = apply_effect(Path(path), body.kind, body.params)

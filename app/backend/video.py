@@ -241,14 +241,14 @@ def reorder(clips: List[Dict[str, Any]], new_order: List[int]) -> List[Dict[str,
     return [by_id[i] for i in new_order if i in by_id]
 
 
-def set_transition(clips: List[Dict[str, Any]], index: int, kind: str = "cut") -> Dict[str, Any]:
+def set_transition(clips: List[Dict[str, Any]], index: int, kind: str = "cut", duration: float = 0.5) -> Dict[str, Any]:
     """Set the transition that plays after the clip at index."""
     if index < 0 or index >= len(clips):
         raise ValueError("clip index out of range")
     kind = _safe_name(kind)
     if kind not in TRANSITIONS:
         kind = "cut"
-    clips[index]["transition"] = kind
+    clips[index]["transition"] = {"kind": kind, "duration": max(0.0, float(duration))}
     return clips[index]
 
 
