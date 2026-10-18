@@ -48,7 +48,7 @@ def compress(
         if a <= thresh:
             v = s
         else:
-            over = a - thresh
+            over = float(a) - thresh
             a = thresh + over / ratio
             v = a if s >= 0 else -a
         v *= makeup

@@ -151,7 +151,7 @@ def render_pattern(
                 for i in range(hit_n):
                     if start + i >= total:
                         break
-                    mix[start + i] += struct.unpack_from("<h", hit, i * 2)[0] / 32767.0
+                    mix[start + i] += float(struct.unpack_from("<h", hit, i * 2)[0]) / 32767.0
 
     out = bytearray()
     for s in mix:

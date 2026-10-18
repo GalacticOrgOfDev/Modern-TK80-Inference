@@ -52,7 +52,7 @@ def translate_request(request: Union[str, Dict[str, Any]]) -> Dict[str, Any]:
 
     return {
         "prompt": prompt,
-        "max_tokens": int(request.get("max_tokens", request.get("max_new_tokens", 128))),
+        "max_tokens": int(request.get("max_tokens") or request.get("max_new_tokens") or 128),
         "temperature": float(request.get("temperature", 0.7)),
         "stop": request.get("stop"),
     }

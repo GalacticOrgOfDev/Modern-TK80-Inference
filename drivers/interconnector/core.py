@@ -141,26 +141,26 @@ class Interconnector:
                 raise InterconnectorError(f"Die {target} already has a model loaded")
 
             device = f"cuda:{target}"
-            instance: Any
+            loaded: Any = None
 
             if modality == "llm":
-                kwargs: Dict[str, Any] = {}
+                load_kwargs: Dict[str, Any] = {}
                 if backend == "llama":
-                    kwargs["main_gpu"] = target
-                    kwargs["n_gpu_layers"] = n_gpu_layers
-                    kwargs["n_ctx"] = n_ctx
-                    kwargs["split_mode"] = 0
+                    load_kwargs["main_gpu"] = target
+                    load_kwargs["n_gpu_layers"] = n_gpu_layers
+                    load_kwargs["n_ctx"] = n_ctx
+                    load_kwargs["split_mode"] = 0
                 elif backend == "pytorch":
-                    kwargs["device"] = device
+                    load_kwargs["device"] = device
                 else:
-                    raise InterconnectorError(f"Unknown backend: {backend}")
-                instance = create_backend(backend, model, **kwargs)
+                    raise InterconnectorError(f"unknown backend: {backend}")
+                loaded = create_backend(backend, model, **load_kwargs)
 
             elif modality == "image":
-                instance = ImageBackend(model, device=device)
+                loaded = ImageBackend(model, device=device)
 
             elif modality == "voice":
-                instance = VoiceBackend(model, device=device)
+                loaded = VoiceBackend(model, device=device)
 
             elif modality == "agent":
                 if backend == "pytorch":
@@ -174,13 +174,13 @@ class Interconnector:
                         n_ctx=n_ctx,
                         split_mode=0,
                     )
-                instance = AgentBackend(llm)
+                loaded = AgentBackend(llm)
 
             else:
                 raise InterconnectorError(f"Unknown modality: {modality}")
 
             log.info("Loading %s on die %d (modality=%s)", model, target, modality)
-            self._models[target] = instance
+            self._models[target] = loaded
             self._modality[target] = modality
 
             for d in self.dies:
