@@ -69,6 +69,7 @@ from .video import (
     set_text_style,
     set_transition,
 )
+from .vst_press import press_vst, sdk_path
 from .music import (
     DEFAULT_BPM,
     INSTRUMENTS,
@@ -870,6 +871,17 @@ def create_vst(body: VstRequest) -> Dict[str, Any]:
 @app.get("/api/vst/presets")
 def vst_presets() -> Dict[str, Any]:
     return list_presets()
+
+
+@app.get("/api/vst/sdk")
+def vst_sdk_status() -> Dict[str, Any]:
+    path = sdk_path()
+    return {"installed": path is not None, "path": str(path) if path else None}
+
+
+@app.post("/api/vst/press")
+def vst_press(source: str, name: str = "Plugin") -> Dict[str, Any]:
+    return press_vst(Path(source), name)
 
 
 @app.get("/api/vst/ui")

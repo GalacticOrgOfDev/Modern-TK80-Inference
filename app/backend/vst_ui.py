@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .vst import make_vst, EFFECT_PRESETS
+from .vst_press import press_vst
 
 UI_DIR = Path(os.environ.get("TK80_VST_UI", "uploads/vst_ui"))
 UI_DIR.mkdir(parents=True, exist_ok=True)
@@ -117,4 +118,5 @@ def export_project(project: Dict[str, Any]) -> Dict[str, Any]:
     result["layout"] = str(layout_path)
     result["object_count"] = len(project["objects"])
     result["parameter_count"] = len(project["parameters"])
+    result["press"] = press_vst(Path(result["path"]), project["name"])
     return result
