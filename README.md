@@ -38,8 +38,9 @@ Opens a native window. Packaging notes for a Windows installer are in `app/packa
 - 16-step sequencer, BPM detect/set, loop/sample generation
 - Clip edits rewrite the WAV: trim, reverse, gain, silence
 - Per-clip level fader and mute toggle (inline on the clip list)
-- Per-clip effect channels: normalize, compressor, morphable envelope, delay
-- Undo stack restores the previous clip snapshot (20 steps)
+- Per-clip effect channels: normalize, compressor, morphable envelope, delay, simple EQ, simple reverb
+- Undo stack restores the previous clip snapshot (20 steps) on every edit and effect
+- See [`app/backend/DAW.md`](./app/backend/DAW.md) for the full DAW reference
 - Transitions carry kind and duration
 - Timeline position per clip
 - True 16-bit peaks for the waveform

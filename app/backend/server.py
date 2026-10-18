@@ -1106,8 +1106,9 @@ def clip_effect(body: EffectRequest) -> Dict[str, Any]:
     path = clip.get("path")
     if not path or not Path(path).exists():
         raise HTTPException(status_code=400, detail="clip has no file")
-    if body.kind not in ("normalize", "compress", "morph", "delay"):
+    if body.kind not in ("normalize", "compress", "morph", "delay", "eq", "reverb"):
         raise HTTPException(status_code=400, detail="unknown effect")
+    _push_undo("effect", dict(clip))
     try:
         new_path = apply_effect(Path(path), body.kind, body.params)
     except ValueError as e:
@@ -1130,9 +1131,11 @@ def edit_audio(body: AudioEditRequest) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail="clip has no file")
 
     if body.action == "position":
+        _push_undo("position", dict(clip))
         clip["position"] = max(0.0, body.position or 0.0)
         return clip
 
+    _push_undo(body.action, dict(clip))
     try:
         if body.action == "trim":
             new_path = process_clip(Path(path), "trim", start=body.start or 0.0, end=body.end)
@@ -1192,6 +1195,9 @@ async def upload_video(
     clip = make_video_clip(len(_video_frames), prompt, duration, str(dest), vfx)
     _video_frames.append(clip)
     return clip
+
+
+@app.post("/api/video/export")
 def export_timeline(name: str = "timeline") -> Dict[str, Any]:
     """Export the movie timeline as a JSON manifest."""
     if not _video_frames:

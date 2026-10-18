@@ -122,6 +122,42 @@ def delay(
     return out
 
 
+def eq_simple(samples: List[int], low: float = 1.0, mid: float = 1.0, high: float = 1.0) -> List[int]:
+    """Very simple three-band gain. Not a real filter; scales by band estimate."""
+    out: List[int] = []
+    for s in samples:
+        a = abs(s)
+        if a < 8000:
+            g = low
+        elif a < 20000:
+            g = mid
+        else:
+            g = high
+        out.append(int(max(-32768, min(32767, s * g))))
+    return out
+
+
+def reverb_simple(samples: List[int], rate: int, channels: int, room: float = 0.4, mix: float = 0.3) -> List[int]:
+    """Short comb-style reverb stub."""
+    frame_size = max(1, channels)
+    delay = max(1, int(0.03 * rate))
+    buf = [0] * (delay * frame_size)
+    out: List[int] = []
+    for i in range(0, len(samples), frame_size):
+        frame = samples[i : i + frame_size]
+        wet = buf[:frame_size]
+        new_frame = []
+        for c in range(frame_size):
+            dry = frame[c] if c < len(frame) else 0
+            w = wet[c] if c < len(wet) else 0
+            mixed = int(dry * (1 - mix) + w * mix * room)
+            new_frame.append(max(-32768, min(32767, mixed)))
+            buf.append(int(dry * 0.5 + w * 0.5))
+        buf = buf[frame_size:]
+        out.extend(new_frame)
+    return out
+
+
 def apply_effect(
     path: Path,
     kind: str,
@@ -156,6 +192,21 @@ def apply_effect(
             time=float(params.get("time", 0.25)),
             feedback=float(params.get("feedback", 0.4)),
             mix=float(params.get("mix", 0.5)),
+        )
+    elif kind == "eq":
+        samples = eq_simple(
+            samples,
+            low=float(params.get("low", 1.0)),
+            mid=float(params.get("mid", 1.0)),
+            high=float(params.get("high", 1.0)),
+        )
+    elif kind == "reverb":
+        samples = reverb_simple(
+            samples,
+            rate,
+            channels,
+            room=float(params.get("room", 0.4)),
+            mix=float(params.get("mix", 0.3)),
         )
     else:
         raise ValueError(f"unknown effect: {kind}")
