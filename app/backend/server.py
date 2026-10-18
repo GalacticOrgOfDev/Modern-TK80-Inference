@@ -50,12 +50,16 @@ from .vst_ui import (
     export_project,
 )
 from .video import (
+    ANIM_FORMATS,
     BUILTIN_VFX,
     TRANSITIONS,
+    add_animation,
     add_text_vfx,
     apply_vfx,
+    export_animation,
     export_manifest,
     is_supported_video,
+    make_3d,
     make_clip as make_video_clip,
     make_text,
     make_text_scene,
@@ -95,6 +99,7 @@ _audio_tracks: List[Dict[str, Any]] = []
 _audio_clips: List[Dict[str, Any]] = []
 _video_frames: List[Dict[str, Any]] = []
 _text_objects: List[Dict[str, Any]] = []
+_objects_3d: List[Dict[str, Any]] = []
 _sample_rate: int = DEFAULT_SAMPLE_RATE
 _asio_enabled: bool = False
 _asio_buffer: int = DEFAULT_BUFFER
@@ -354,6 +359,46 @@ def _dispatch_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
                 )
                 return {"ok": True, "name": name, "text": t}
         raise HTTPException(status_code=404, detail="text not found")
+
+    if name == "make_3d":
+        obj = make_3d(
+            len(_objects_3d),
+            str(args.get("kind", "text")),
+            str(args.get("content", "")),
+            str(args.get("model_path", "")),
+            float(args.get("position", 0.0)),
+            float(args.get("duration", 2.0)),
+        )
+        _objects_3d.append(obj)
+        return {"ok": True, "name": name, "object": obj}
+
+    if name == "add_animation":
+        target = str(args.get("target", "3d"))
+        obj_id = int(args.get("id", -1))
+        pool = _objects_3d if target == "3d" else _text_objects
+        for o in pool:
+            if o["id"] == obj_id:
+                add_animation(
+                    o,
+                    str(args.get("name", "anim")),
+                    float(args.get("start", 0.0)),
+                    float(args.get("end", 1.0)),
+                    str(args.get("format", "json")),
+                )
+                return {"ok": True, "name": name, "object": o}
+        raise HTTPException(status_code=404, detail="object not found")
+
+    if name == "export_anim":
+        target = str(args.get("target", "3d"))
+        obj_id = int(args.get("id", -1))
+        fmt = str(args.get("format", "json"))
+        pool = _objects_3d if target == "3d" else _text_objects
+        for o in pool:
+            if o["id"] == obj_id:
+                result = export_animation(o, fmt)
+                result["name"] = name
+                return result
+        raise HTTPException(status_code=404, detail="object not found")
 
     raise HTTPException(status_code=400, detail=f"unknown tool: {name}")
 
@@ -1082,7 +1127,13 @@ def edit_audio(body: AudioEditRequest) -> Dict[str, Any]:
 
 @app.get("/api/video/frames")
 def list_frames() -> Dict[str, Any]:
-    return {"frames": _video_frames, "texts": _text_objects, "builtin_vfx": list(BUILTIN_VFX)}
+    return {
+        "frames": _video_frames,
+        "texts": _text_objects,
+        "objects_3d": _objects_3d,
+        "builtin_vfx": list(BUILTIN_VFX),
+        "anim_formats": list(ANIM_FORMATS),
+    }
 
 
 @app.post("/api/video/text")

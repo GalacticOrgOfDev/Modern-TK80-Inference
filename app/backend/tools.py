@@ -94,6 +94,18 @@ TOOLS: Dict[str, Dict[str, Any]] = {
         "description": "Set size, color, and alignment on a text object.",
         "args": {"text_id": "int", "size": "float", "color": "string", "align": "left|center|right"},
     },
+    "make_3d": {
+        "description": "Create a 3D text or model object on the timeline.",
+        "args": {"kind": "text|model", "content": "string", "model_path": "string"},
+    },
+    "add_animation": {
+        "description": "Add an animation clip to a 3D or text object.",
+        "args": {"target": "3d|text", "id": "int", "name": "string", "start": "float", "end": "float", "format": "json|gltf|fbx|bvh"},
+    },
+    "export_anim": {
+        "description": "Export an animation file for a 3D or text object.",
+        "args": {"target": "3d|text", "id": "int", "format": "json|gltf|fbx|bvh"},
+    },
 }
 
 # Model emits: tool: name {"arg": value}

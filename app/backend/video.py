@@ -21,7 +21,9 @@ VFX_DIR.mkdir(parents=True, exist_ok=True)
 
 BUILTIN_VFX = ("none", "fade", "zoom", "pan", "color_grade", "overlay")
 TRANSITIONS = ("none", "cut", "crossfade", "wipe", "dissolve")
+ANIM_FORMATS = ("json", "gltf", "fbx", "bvh")
 SUPPORTED_VIDEO = (".mp4", ".mov", ".webm")
+SUPPORTED_MODELS = (".obj", ".gltf", ".glb", ".fbx")
 
 
 def is_supported_video(path: Path) -> bool:
@@ -45,6 +47,64 @@ def save_video(filename: str, data: bytes) -> Path:
             i += 1
     dest.write_bytes(data)
     return dest
+
+
+def make_3d(
+    obj_id: int,
+    kind: str = "text",
+    content: str = "",
+    model_path: str = "",
+    position: float = 0.0,
+    duration: float = 2.0,
+) -> Dict[str, Any]:
+    """Create a 3D object. kind is 'text' or 'model'.
+
+    Text becomes a 3D text mesh. Model references an uploaded .obj/.gltf/.glb/.fbx.
+    """
+    kind = kind if kind in ("text", "model") else "text"
+    return {
+        "id": obj_id,
+        "type": "3d",
+        "kind": kind,
+        "content": content,
+        "model_path": model_path,
+        "position": max(0.0, float(position)),
+        "duration": max(0.1, float(duration)),
+        "animation": [],
+    }
+
+
+def add_animation(
+    obj: Dict[str, Any],
+    name: str,
+    start: float = 0.0,
+    end: float = 1.0,
+    fmt: str = "json",
+) -> Dict[str, Any]:
+    """Attach an animation clip to a 3D object or text object."""
+    fmt = fmt if fmt in ANIM_FORMATS else "json"
+    entry = {
+        "name": _safe_name(name),
+        "start": max(0.0, float(start)),
+        "end": max(float(start), float(end)),
+        "format": fmt,
+    }
+    obj.setdefault("animation", []).append(entry)
+    return obj
+
+
+def export_animation(obj: Dict[str, Any], fmt: str = "json") -> Dict[str, Any]:
+    """Write an animation file for a 3D object. json is the native format;
+    other formats are staged as a note until a real exporter is added.
+    """
+    fmt = fmt if fmt in ANIM_FORMATS else "json"
+    name = _safe_name(obj.get("content") or obj.get("kind") or "anim")
+    dest = UPLOAD_DIR / f"{name}.{fmt}"
+    if fmt == "json":
+        dest.write_text(json.dumps(obj, indent=2), encoding="utf-8")
+    else:
+        dest.write_text(f"# staged {fmt} animation for {name}\n", encoding="utf-8")
+    return {"path": str(dest), "format": fmt, "name": name}
 
 
 def make_text(
@@ -85,6 +145,9 @@ def set_text_style(
     text_obj["color"] = color or "#ffffff"
     text_obj["align"] = align if align in ("left", "center", "right") else "center"
     return text_obj
+
+
+def add_text_vfx(text_obj: Dict[str, Any], vfx: str, description: str = "") -> Dict[str, Any]:
     """Attach a VFX (built-in or custom) to a text object."""
     safe = _safe_name(vfx)
     entry = {"name": safe, "description": description}

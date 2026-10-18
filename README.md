@@ -84,8 +84,11 @@ Models can add parameters and objects via tools. Users drag objects onto the can
 - `text_scene` builds a text object and applies a sequence of VFX in one call (e.g. stone text that falls, impacts with rubble, then is wrapped in lightning)
 - Clip transitions: cut, crossfade, wipe, dissolve (model tool `video_transition`)
 - Text styling: size, color, and alignment (`text_style`)
+- 3D objects: turn text into a 3D object or place a model file (.obj, .gltf, .glb, .fbx)
+- Animation clips on 3D and text objects (`add_animation`)
+- Animation export formats: json, gltf, fbx, bvh (`export_anim`)
 - Audio fades: linear fade-in and fade-out helper on clips
-- Export timeline as a JSON manifest that includes clips, text objects, and transitions (full encode later)
+- Export timeline as a JSON manifest that includes clips, text objects, 3D objects, and transitions (full encode later)
 
 ## Music and VST tools
 
@@ -111,6 +114,9 @@ The model (or a direct chat command) can call:
 | `text_vfx` | Attach a VFX to an existing text object |
 | `video_transition` | Set the transition after a clip (cut, crossfade, wipe, dissolve) |
 | `text_style` | Set size, color, and alignment on a text object |
+| `make_3d` | Create a 3D text or model object |
+| `add_animation` | Add an animation clip to a 3D or text object |
+| `export_anim` | Export an animation file (json, gltf, fbx, bvh) |
 
 Chat routes by modality:
 
