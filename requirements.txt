@@ -9,6 +9,11 @@ llama-cpp-python>=0.3.0
 # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 torch>=2.0.0
 
+# Custom app (Windows 10+)
+fastapi
+uvicorn
+pywebview
+
 # Optional modality support (single-die, smaller models)
 # diffusers          # image (SD 1.5-class)
 # transformers       # voice (Whisper-small class) and some LLM paths
