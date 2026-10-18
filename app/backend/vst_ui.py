@@ -20,7 +20,18 @@ from .vst import make_vst, EFFECT_PRESETS
 UI_DIR = Path(os.environ.get("TK80_VST_UI", "uploads/vst_ui"))
 UI_DIR.mkdir(parents=True, exist_ok=True)
 
-OBJECT_TYPES = ("knob", "vslider", "hslider", "button", "label")
+OBJECT_TYPES = ("knob", "vslider", "hslider", "button", "label", "meter", "xy")
+
+
+def list_presets() -> Dict[str, Any]:
+    """Return the full preset and category catalog for the UI and models."""
+    from .vst import EFFECT_CATEGORIES, EFFECT_PRESETS, PLUGIN_TYPES
+    return {
+        "types": list(PLUGIN_TYPES),
+        "presets": list(EFFECT_PRESETS),
+        "categories": {k: list(v) for k, v in EFFECT_CATEGORIES.items()},
+        "objects": list(OBJECT_TYPES),
+    }
 
 
 def default_project(name: str = "MyPlugin") -> Dict[str, Any]:

@@ -25,8 +25,27 @@ EFFECT_PRESETS = (
     "noise_suppression",
     "delay",
     "distortion",
+    "eq",
+    "compressor",
+    "chorus",
+    "flanger",
+    "phaser",
+    "limiter",
+    "gate",
+    "filter",
+    "bitcrush",
+    "tremolo",
     "custom",
 )
+EFFECT_CATEGORIES = {
+    "space": ("reverb", "delay"),
+    "dynamics": ("compressor", "limiter", "gate", "subpump"),
+    "tone": ("eq", "filter", "distortion", "bitcrush"),
+    "modulation": ("chorus", "flanger", "phaser", "tremolo"),
+    "pitch": ("autotune",),
+    "cleanup": ("noise_suppression",),
+    "custom": ("custom",),
+}
 
 
 def make_vst(
@@ -82,6 +101,16 @@ def _fill_preset_params(effect: str, params: Dict[str, Any]) -> Dict[str, Any]:
         "noise_suppression": {"threshold": 0.2, "reduction": 0.6, "mix": 1.0},
         "delay": {"time": 0.3, "feedback": 0.4, "mix": 0.5},
         "distortion": {"drive": 0.5, "tone": 0.5, "mix": 1.0},
+        "eq": {"low": 1.0, "mid": 1.0, "high": 1.0},
+        "compressor": {"threshold": 0.5, "ratio": 0.4, "makeup": 1.0},
+        "chorus": {"rate": 0.3, "depth": 0.5, "mix": 0.5},
+        "flanger": {"rate": 0.2, "depth": 0.6, "feedback": 0.4},
+        "phaser": {"rate": 0.3, "depth": 0.5, "mix": 0.5},
+        "limiter": {"ceiling": 0.95, "release": 0.3},
+        "gate": {"threshold": 0.2, "attack": 0.1, "release": 0.3},
+        "filter": {"cutoff": 0.5, "resonance": 0.3, "mix": 1.0},
+        "bitcrush": {"bits": 0.5, "rate": 0.5, "mix": 1.0},
+        "tremolo": {"rate": 0.4, "depth": 0.6, "mix": 1.0},
         "custom": {"gain": 1.0},
     }
     base = presets.get(effect, {"gain": 1.0})

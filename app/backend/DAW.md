@@ -50,8 +50,23 @@ Applied per clip and written back to a new WAV:
 
 ## VST
 
-- VST maker generates VST3/JUCE source for reverb, subpump, autotune, noise suppression, delay, distortion, or custom
-- VST UI builder: drag-and-drop knobs, sliders, buttons, labels; bind to parameters; export source plus layout
+Extensive VST3/JUCE source generator and UI builder.
+
+Presets (by category):
+
+- Space: reverb, delay
+- Dynamics: compressor, limiter, gate, subpump
+- Tone: eq, filter, distortion, bitcrush
+- Modulation: chorus, flanger, phaser, tremolo
+- Pitch: autotune
+- Cleanup: noise suppression
+- Custom
+
+Each preset writes a `.cpp` with parameters and a starter DSP stub. Compile against the Steinberg VST3 SDK or a JUCE AudioPlugin project.
+
+UI builder objects: knob, vertical slider, horizontal slider, button, label, meter, xy pad. Models can add parameters and objects; users bind objects to parameters and export source plus layout.
+
+Catalog endpoint: `GET /api/vst/presets`.
 
 ## Recording
 

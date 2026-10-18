@@ -48,6 +48,7 @@ from .vst_ui import (
     bind_object,
     default_project,
     export_project,
+    list_presets,
 )
 from .export import export_animation, export_timeline as export_full_timeline
 from .video import (
@@ -864,6 +865,11 @@ def create_vst(body: VstRequest) -> Dict[str, Any]:
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     return result
+
+
+@app.get("/api/vst/presets")
+def vst_presets() -> Dict[str, Any]:
+    return list_presets()
 
 
 @app.get("/api/vst/ui")
