@@ -234,6 +234,10 @@ async function pushSettings(partial) {
 async function refreshTracks() {
   const data = await api("/api/audio/tracks");
   audioTracks = data.tracks;
+  if (!audioTracks.length) {
+    await api("/api/audio/tracks?name=Audio%201&channel=stereo", { method: "POST" });
+    return refreshTracks();
+  }
   const list = document.getElementById("track-list");
   list.innerHTML = "";
   for (const t of audioTracks) {
@@ -398,6 +402,11 @@ function drawArrange() {
     div.textContent = c.name || ("#" + c.id);
     div.onclick = () => selectClip(c);
     area.appendChild(div);
+  }
+  const seq = document.getElementById("sequencer");
+  if (seq) {
+    const t = audioTracks.find((x) => x.id === selectedTrack);
+    seq.style.display = t && t.type === "instrument" ? "flex" : "none";
   }
 }
 
@@ -610,7 +619,9 @@ document.getElementById("llm-send").onclick = async () => {
 };
 
 // Tracks and devices
-document.getElementById("audio-new-track").onclick = async () => {
+document.getElementById("toggle-settings").onclick = () => {
+  document.getElementById("settings-drawer").classList.toggle("open");
+};
   const name = document.getElementById("track-name").value || "Track";
   const channel = document.getElementById("track-channel").value;
   const t = await api(`/api/audio/tracks?name=${encodeURIComponent(name)}&channel=${channel}`, { method: "POST" });
