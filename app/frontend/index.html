@@ -53,172 +53,88 @@
     </section>
 
     <section id="audio" class="panel">
-      <div class="daw-toolbar">
-        <button id="audio-new-track">+ Track</button>
-        <button id="audio-del-track">− Track</button>
-        <button id="toggle-settings">Settings</button>
-        <span id="scarlett-badge" class="badge">No Scarlett</span>
-        <span id="asio-status" class="badge">ASIO off</span>
-      </div>
-      <div id="settings-drawer" class="settings-drawer">
-        <label>Sample rate
-          <select id="sample-rate">
-            <option value="44100" selected>44100</option>
-            <option value="48000">48000</option>
-            <option value="88200">88200</option>
-            <option value="96000">96000</option>
-            <option value="176400">176400</option>
-            <option value="192000">192000</option>
-          </select>
-        </label>
-        <label class="check"><input type="checkbox" id="asio-enabled" /> ASIO</label>
-        <label>Buffer
-          <select id="asio-buffer">
-            <option value="64">64</option>
-            <option value="128" selected>128</option>
-            <option value="256">256</option>
-            <option value="512">512</option>
-          </select>
-        </label>
-        <label>BPM<input id="bpm" type="number" value="120" min="40" max="220" /></label>
-        <button id="bpm-set">Set</button>
-        <hr />
-        <label>Track name<input id="track-name" value="Track" /></label>
-        <label>Channel
-          <select id="track-channel">
-            <option value="stereo">Stereo</option>
-            <option value="left">Left</option>
-            <option value="right">Right</option>
-          </select>
-        </label>
-        <label>Type
-          <select id="track-type">
-            <option value="audio">Audio</option>
-            <option value="instrument">Instrument</option>
-          </select>
-        </label>
-        <label>ASIO device<select id="audio-devices"><option value="">(detecting...)</option></select></label>
-        <button id="audio-refresh-devices">Refresh devices</button>
-        <label>Audio file<input id="audio-file" type="file" accept="audio/*,.wav" /></label>
-        <button id="audio-upload">Upload</button>
-      </div>
-        <label>Master level<input id="master-gain" type="range" min="0" max="2" step="0.05" value="1" /></label>
-        <label class="check"><input type="checkbox" id="master-mute" /> Master mute</label>
-        <label class="check"><input type="checkbox" id="master-comp" /> Master compressor</label>
-        <label>Threshold<input id="master-thresh" type="number" value="0.5" step="0.05" min="0" max="1" /></label>
-        <label>Ratio<input id="master-ratio" type="number" value="4" step="0.5" min="1" /></label>
-        <label>Makeup<input id="master-makeup" type="number" value="1" step="0.1" min="0" /></label>
-        <button id="master-apply">Apply master</button>
-        <hr />
-        <label>BPM<input id="bpm" type="number" value="120" min="40" max="220" /></label>
-        <div class="edit-row">
-          <button id="bpm-set">Set BPM</button>
+      <div class="daw">
+        <div class="daw-toolbar">
+          <button id="audio-play">Play</button>
+          <button id="audio-play-mix">Mix</button>
+          <button id="audio-stop">Stop</button>
+          <button id="audio-record">Rec</button>
+          <button id="audio-bounce">Bounce</button>
+          <button id="audio-new-track">+ Track</button>
+          <button id="audio-del-track">- Track</button>
+          <button id="toggle-settings">Settings</button>
+          <span id="audio-transport-status">Ready</span>
+          <span id="rate-pill">44100 Hz</span>
+          <span id="bpm-pill">120 BPM</span>
+          <span id="scarlett-badge" class="badge">No Scarlett</span>
+          <span id="asio-status" class="badge">ASIO off</span>
+          <audio id="audio-player"></audio>
+        </div>
+        <div id="settings-drawer" class="settings-drawer">
+          <label>Sample rate
+            <select id="sample-rate">
+              <option value="44100" selected>44100</option>
+              <option value="48000">48000</option>
+              <option value="88200">88200</option>
+              <option value="96000">96000</option>
+              <option value="176400">176400</option>
+              <option value="192000">192000</option>
+            </select>
+          </label>
+          <label class="check"><input type="checkbox" id="asio-enabled" /> ASIO</label>
+          <label>Buffer
+            <select id="asio-buffer">
+              <option value="64">64</option>
+              <option value="128" selected>128</option>
+              <option value="256">256</option>
+              <option value="512">512</option>
+            </select>
+          </label>
+          <label>BPM<input id="bpm" type="number" value="120" min="40" max="220" /></label>
+          <button id="bpm-set">Set</button>
           <button id="bpm-detect">Detect</button>
-        </div>
-        <label>Instrument
-          <select id="instrument">
-            <option>kick</option><option>snare</option><option>hat</option>
-            <option>bass</option><option>lead</option><option>pad</option>
-          </select>
-        </label>
-        <label>Note (MIDI)<input id="note" type="number" value="60" min="0" max="127" /></label>
-        <button id="instrument-gen">Generate instrument</button>
-        <label>Loop style
-          <select id="loop-style">
-            <option>basic</option><option>syncopated</option><option>pad</option>
-          </select>
-        </label>
-        <button id="loop-gen">Generate loop</button>
-        <hr />
-        <h3>VST Maker</h3>
-        <label>Plugin name<input id="vst-name" placeholder="MyPlugin" /></label>
-        <label>Type
-          <select id="vst-type">
-            <option value="effect">Effect</option>
-            <option value="instrument">Instrument</option>
-          </select>
-        </label>
-        <label>Effect
-          <select id="vst-effect">
-            <option value="reverb">Reverb</option>
-            <option value="delay">Delay</option>
-            <option value="eq">EQ</option>
-            <option value="compressor">Compressor</option>
-            <option value="limiter">Limiter</option>
-            <option value="gate">Gate</option>
-            <option value="distortion">Distortion</option>
-            <option value="chorus">Chorus</option>
-            <option value="flanger">Flanger</option>
-            <option value="phaser">Phaser</option>
-            <option value="filter">Filter</option>
-            <option value="bitcrush">Bitcrush</option>
-            <option value="tremolo">Tremolo</option>
-            <option value="subpump">Subpump</option>
-            <option value="autotune">Autotune</option>
-            <option value="noise_suppression">Noise suppression</option>
-            <option value="custom">Custom</option>
-          </select>
-        </label>
-        <button id="vst-make">Generate VST source</button>
-        <hr />
-        <h3>VST UI Builder</h3>
-        <label>Project name<input id="vst-ui-name" placeholder="My Custom EQ" /></label>
-        <div class="edit-row">
-          <button id="vst-ui-reset">New project</button>
-          <button id="vst-ui-export">Press to VST</button>
-        </div>
-        <div id="vst-palette" class="vst-palette">
-          <div class="vst-item" data-kind="knob" draggable="true">Knob</div>
-          <div class="vst-item" data-kind="vslider" draggable="true">V Slider</div>
-          <div class="vst-item" data-kind="hslider" draggable="true">H Slider</div>
-          <div class="vst-item" data-kind="button" draggable="true">Button</div>
-          <div class="vst-item" data-kind="label" draggable="true">Label</div>
-        </div>
-        <div id="vst-canvas" class="vst-canvas"></div>
-        <div class="edit-row">
-          <label>Bind object #<input id="vst-bind-id" type="number" value="1" /></label>
-          <label>to param<input id="vst-bind-param" placeholder="input_level" /></label>
-          <button id="vst-bind">Bind</button>
-        </div>
-        <pre id="vst-ui-list"></pre>
-        <hr />
-        <label>Voice model<input id="audio-model" placeholder="openai/whisper-small" /></label>
-        <label>Die<input id="audio-die" type="number" value="0" /></label>
-        <button id="audio-load">Load voice model</button>
-        <hr />
-        <button id="audio-new-track">New track</button>
-        <button id="audio-del-track">Delete track</button>
-        <label>Track name<input id="track-name" value="Track" /></label>
-        <label>Channel
-          <select id="track-channel">
-            <option value="stereo">Stereo</option>
-            <option value="left">Left</option>
-            <option value="right">Right</option>
-          </select>
-        </label>
-        <label>ASIO device
-          <select id="audio-devices"><option value="">(detecting...)</option></select>
-        </label>
-        <button id="audio-refresh-devices">Refresh ASIO devices</button>
-        <hr />
-        <label>Audio file<input id="audio-file" type="file" accept="audio/*,.wav" /></label>
-        <button id="audio-upload">Upload to selected track</button>
-        <button id="audio-transcribe">Transcribe</button>
-      </div>
-      <div class="studio daw">
-        <div class="daw-top">
-          <div class="transport">
-            <button id="audio-play">Play</button>
-            <button id="audio-play-mix">Play mix</button>
-            <button id="audio-stop">Stop</button>
-            <button id="audio-record">Record</button>
-            <button id="audio-bounce">Bounce</button>
-            <span id="audio-transport-status">Ready</span>
-            <span id="rate-pill">44100 Hz</span>
-            <span id="bpm-pill">120 BPM</span>
-            <span id="time-pill">00:00.000</span>
-            <audio id="audio-player"></audio>
-          </div>
+          <hr />
+          <label>Track name<input id="track-name" value="Track" /></label>
+          <label>Channel
+            <select id="track-channel">
+              <option value="stereo">Stereo</option>
+              <option value="left">Left</option>
+              <option value="right">Right</option>
+            </select>
+          </label>
+          <label>Type
+            <select id="track-type">
+              <option value="audio">Audio</option>
+              <option value="instrument">Instrument</option>
+            </select>
+          </label>
+          <label>ASIO device<select id="audio-devices"><option value="">(detecting...)</option></select></label>
+          <button id="audio-refresh-devices">Refresh devices</button>
+          <label>Audio file<input id="audio-file" type="file" accept="audio/*,.wav" /></label>
+          <button id="audio-upload">Upload</button>
+          <hr />
+          <label>Master level<input id="master-gain" type="range" min="0" max="2" step="0.05" value="1" /></label>
+          <label class="check"><input type="checkbox" id="master-mute" /> Mute</label>
+          <label class="check"><input type="checkbox" id="master-comp" /> Compressor</label>
+          <label>Threshold<input id="master-thresh" type="number" value="0.5" step="0.05" /></label>
+          <label>Ratio<input id="master-ratio" type="number" value="4" step="0.5" /></label>
+          <label>Makeup<input id="master-makeup" type="number" value="1" step="0.1" /></label>
+          <button id="master-apply">Apply master</button>
+          <hr />
+          <label>Instrument
+            <select id="instrument">
+              <option>kick</option><option>snare</option><option>hat</option>
+              <option>bass</option><option>lead</option><option>pad</option>
+            </select>
+          </label>
+          <label>Note<input id="note" type="number" value="60" /></label>
+          <button id="instrument-gen">Generate instrument</button>
+          <label>Loop
+            <select id="loop-style">
+              <option>basic</option><option>syncopated</option><option>pad</option>
+            </select>
+          </label>
+          <button id="loop-gen">Generate loop</button>
         </div>
         <div class="daw-body">
           <div class="daw-headers">
@@ -244,7 +160,6 @@
               <option value="compress">Compress</option>
               <option value="delay">Delay</option>
               <option value="reverb">Reverb</option>
-              <option value="vst">VST plugin</option>
             </select>
             <button id="fx-add-btn">Add</button>
             <button id="fx-close">Close</button>
@@ -259,33 +174,18 @@
         <div id="sequencer" class="sequencer"></div>
         <div class="edit-row">
           <button id="pattern-render">Render pattern</button>
-        </div>
-        <canvas id="audio-wave" width="640" height="80"></canvas>
-        <div class="edit-row">
           <label>Clip #<input id="audio-clip-id" type="number" value="0" /></label>
-          <label>Trim start<input id="audio-start" type="number" value="0" step="0.1" /></label>
-          <label>Trim end<input id="audio-end" type="number" value="5" step="0.1" /></label>
-          <label>Gain<input id="audio-gain" type="number" value="1" step="0.1" /></label>
-          <label>Position<input id="audio-position" type="number" value="0" step="0.1" /></label>
           <button id="audio-trim">Trim</button>
-          <button id="audio-gain-btn">Set gain</button>
+          <button id="audio-gain-btn">Gain</button>
           <button id="audio-reverse">Reverse</button>
           <button id="audio-silence">Silence</button>
-          <button id="audio-set-position">Set position</button>
+          <button id="audio-set-position">Position</button>
           <button id="audio-clip-mute">Mute clip</button>
-        </div>
-        <div class="edit-row">
           <button id="fx-normalize">Normalize</button>
           <button id="fx-compress">Compress</button>
-          <button id="fx-morph">Morph wave</button>
-          <button id="fx-eq">Apply EQ</button>
+          <button id="fx-morph">Morph</button>
         </div>
-          <button id="fx-eq">Apply EQ</button>
-        </div>
-        <div id="eq-panel" class="eq-panel">
-          <div id="eq-sliders" class="eq-sliders"></div>
-          <div id="eq-tip" class="eq-tip">Hover a slider</div>
-        </div>
+        <canvas id="audio-wave" width="640" height="60"></canvas>
         <pre id="audio-output" hidden></pre>
       </div>
     </section>

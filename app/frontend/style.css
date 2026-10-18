@@ -80,20 +80,17 @@ main { flex: 1; display: flex; overflow: hidden; }
 .clip .clip-mute { padding: 2px 8px; font-size: 12px; }
 .clip.muted { opacity: 0.45; }
 .clip-list { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
-.daw-toolbar { display: flex; gap: 8px; align-items: center; padding: 6px; background: #1a1a1a; border-bottom: 1px solid #333; }
-.settings-drawer {
-  display: none; position: absolute; top: 80px; left: 8px; z-index: 20;
-  background: #1a1a1a; border: 1px solid #444; padding: 12px; width: 260px;
-  max-height: 70vh; overflow: auto; border-radius: 4px;
+.panel.active { display: flex; flex-direction: column; }
+.daw { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.daw-toolbar {
+  display: flex; gap: 6px; align-items: center; padding: 6px 8px;
+  background: #1a1a1a; border-bottom: 1px solid #333; flex-wrap: wrap;
 }
-.settings-drawer.open { display: block; }
-.daw-body { display: flex; border: 1px solid #333; min-height: 220px; background: #111; }
-.daw-headers { width: 180px; border-right: 1px solid #333; display: flex; flex-direction: column; }
-.daw-ruler-spacer { height: 24px; background: #1a1a1a; border-bottom: 1px solid #333; font-size: 11px; padding: 4px 6px; color: #888; }
-.daw-arrange { flex: 1; overflow-x: auto; position: relative; }
-.daw-ruler { height: 24px; background: #1a1a1a; border-bottom: 1px solid #333; position: relative; min-width: 800px; }
-.daw-ruler span { position: absolute; top: 4px; font-size: 10px; color: #888; }
-.daw-clips { position: relative; min-height: 180px; min-width: 800px; }
+.daw-body { display: flex; flex: 1; min-height: 240px; border-bottom: 1px solid #333; background: #111; }
+.daw-headers { width: 200px; border-right: 1px solid #333; display: flex; flex-direction: column; background: #161616; }
+.daw-arrange { flex: 1; overflow: auto; position: relative; background: #0e0e0e; }
+.daw-ruler { height: 22px; background: #1a1a1a; border-bottom: 1px solid #333; position: sticky; top: 0; min-width: 900px; }
+.daw-clips { position: relative; min-height: 300px; min-width: 900px; background-image: linear-gradient(to right, #222 1px, transparent 1px); background-size: 60px 100%; }
 .daw-clip {
   position: absolute; height: 28px; background: #0a7; color: #fff;
   font-size: 11px; padding: 4px 6px; border-radius: 2px; overflow: hidden; cursor: pointer;
