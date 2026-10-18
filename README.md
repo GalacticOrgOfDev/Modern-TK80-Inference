@@ -14,21 +14,22 @@ The K80 is two independent 12 GB dies. Official support ended with CUDA 11.x and
 
 The remastering layer lives in [`drivers/interconnector/`](./drivers/interconnector/).
 
-It owns:
+It provides:
 - Die discovery and tracking (never assumes unified 24 GB)
-- Explicit model placement on a chosen die
-- Routing to llama.cpp or PyTorch backends
-- Status reporting for hybrid cluster use
+- Translation of modern request formats (OpenAI-style messages or plain prompts)
+- Explicit dual-die split modes (`single`, `dual`, `layer`)
+- Hybrid cluster advertisement
+- Thermal and performance monitoring
 
 ```bash
-# Status
+# Status (includes metrics)
 python -m drivers.interconnector.cli --status
 
-# Load and generate on die 0
+# Load and generate
 python -m drivers.interconnector.cli --load ./model.gguf --die 0 --prompt "Hello from K80"
 ```
 
-See the interconnector README for the Python API.
+See the interconnector README for the full Python API.
 
 ## Drivers
 
@@ -51,4 +52,4 @@ CUDA 11.8 is the last toolkit that can target `sm_37`. See [`cuda/`](./cuda/).
 
 ## Status
 
-Interconnector core (discovery, placement, routing, status) is implemented. Translation layer and hybrid cluster hooks are next.
+Interconnector includes translation layer, dual-die split support, hybrid cluster hooks, and thermal/performance monitoring.
