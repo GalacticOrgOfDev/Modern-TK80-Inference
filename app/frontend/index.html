@@ -47,6 +47,18 @@
 
     <section id="audio" class="panel">
       <div class="sidebar">
+        <label>Sample rate
+          <select id="sample-rate">
+            <option value="44100" selected>44100</option>
+            <option value="48000">48000</option>
+            <option value="88200">88200</option>
+            <option value="96000">96000</option>
+            <option value="176400">176400</option>
+            <option value="192000">192000</option>
+          </select>
+        </label>
+        <div id="scarlett-badge" class="badge">No Scarlett detected</div>
+        <hr />
         <label>Voice model<input id="audio-model" placeholder="openai/whisper-small" /></label>
         <label>Die<input id="audio-die" type="number" value="0" /></label>
         <button id="audio-load">Load voice model</button>
@@ -76,6 +88,7 @@
           <button id="audio-stop">Stop</button>
           <button id="audio-record">Record</button>
           <span id="audio-transport-status">Ready</span>
+          <span id="rate-pill">44100 Hz</span>
           <audio id="audio-player"></audio>
         </div>
         <div id="track-list" class="track-list"></div>
