@@ -28,7 +28,8 @@ Opens a native window. Packaging notes for a Windows installer are in `app/packa
 
 ## Mini DAW
 
-- Layered tracks with stereo / left / right channeling, mute, and solo
+- Layered tracks with stereo / left / right channeling, per-track level faders, mute, and solo
+- Master bus with level, mute, and compressor (threshold / ratio / makeup)
 - Arm a track for a detected ASIO input
 - Sample rate (default 44100 Hz) with Focusrite Scarlett 2i2 Gen 1/2 profile detection
 - Native ASIO path (sounddevice / PortAudio). Prefer 64-sample buffer at 44100 Hz (~1.5 ms)
@@ -36,9 +37,11 @@ Opens a native window. Packaging notes for a Windows installer are in `app/packa
 - Instrument generator (kick, snare, hat, bass, lead, pad)
 - 16-step sequencer, BPM detect/set, loop/sample generation
 - Clip edits rewrite the WAV: trim, reverse, gain, silence
+- Per-clip level fader and mute toggle (inline on the clip list)
+- Per-clip effect channels: normalize, compressor, morphable envelope (time/gain points reshape the wave)
 - Timeline position per clip
 - True 16-bit peaks for the waveform
-- Play mix and bounce the arrangement to a stereo WAV (respects mute, solo, gain, channel, position)
+- Play mix and bounce the arrangement to a stereo WAV (respects track mute/solo/gain, clip mute/gain, channel, position, and master bus)
 
 ## Music tools
 

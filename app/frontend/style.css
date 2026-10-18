@@ -69,7 +69,15 @@ main { flex: 1; display: flex; overflow: hidden; }
   background: #222; border: 1px solid #444; padding: 6px 10px;
   border-radius: 4px; font-size: 12px; white-space: nowrap; cursor: pointer;
 }
-.clip.selected { border-color: #0a7; }
+.clip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.clip .clip-label { flex: 1 1 200px; cursor: pointer; }
+.clip .clip-lvl { width: 90px; }
+.clip .clip-mute { padding: 2px 8px; font-size: 12px; }
 .clip.muted { opacity: 0.45; }
 .clip-list { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
 .track-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }

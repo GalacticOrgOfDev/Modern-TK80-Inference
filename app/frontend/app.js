@@ -321,17 +321,56 @@ async function refreshClips() {
     const mix = c.mix ? " MIX" : "";
     const muted = c.mute ? " MUTE" : "";
     const pos = c.position != null ? `@${c.position}s` : "";
-    div.textContent = `#${c.id} ${c.name} [T${c.track_id}/${ch}] ${pos} ${c.duration}s${asio}${mix}${muted}`;
-    div.onclick = () => {
-      selectedClip = c.id;
-      document.getElementById("audio-clip-id").value = c.id;
-      document.getElementById("audio-start").value = c.start;
-      document.getElementById("audio-end").value = c.end;
-      document.getElementById("audio-gain").value = c.gain;
-      document.getElementById("audio-position").value = c.position || 0;
-      drawWave(c);
-      refreshClips();
+
+    const label = document.createElement("span");
+    label.className = "clip-label";
+    label.textContent = `#${c.id} ${c.name} [T${c.track_id}/${ch}] ${pos} ${c.duration}s${asio}${mix}${muted}`;
+    label.onclick = () => selectClip(c);
+
+    const lvl = document.createElement("input");
+    lvl.type = "range";
+    lvl.className = "clip-lvl";
+    lvl.min = "0";
+    lvl.max = "2";
+    lvl.step = "0.05";
+    lvl.value = String(c.gain || 1);
+    lvl.title = "Clip level";
+    lvl.onchange = async (e) => {
+      e.stopPropagation();
+      try {
+        await api("/api/audio/edit", {
+          method: "POST",
+          body: JSON.stringify({
+            action: "gain",
+            clip_id: c.id,
+            gain: Number(e.target.value),
+          }),
+        });
+        await refreshClips();
+      } catch (err) {
+        alert(err.message);
+      }
     };
+
+    const muteBtn = document.createElement("button");
+    muteBtn.className = "clip-mute";
+    muteBtn.textContent = c.mute ? "Unmute" : "Mute";
+    muteBtn.onclick = async (e) => {
+      e.stopPropagation();
+      try {
+        await api("/api/audio/clips/mute", {
+          method: "POST",
+          body: JSON.stringify({ clip_id: c.id, mute: !c.mute }),
+        });
+        await refreshClips();
+      } catch (err) {
+        alert(err.message);
+      }
+    };
+
+    div.appendChild(label);
+    div.appendChild(lvl);
+    div.appendChild(muteBtn);
     list.appendChild(div);
   }
   const current = audioClips.find((c) => c.id === selectedClip) || audioClips[0];
@@ -345,6 +384,17 @@ async function refreshClips() {
     buffer: asioBuffer,
     bpm,
   }, null, 2);
+}
+
+function selectClip(c) {
+  selectedClip = c.id;
+  document.getElementById("audio-clip-id").value = c.id;
+  document.getElementById("audio-start").value = c.start;
+  document.getElementById("audio-end").value = c.end;
+  document.getElementById("audio-gain").value = c.gain;
+  document.getElementById("audio-position").value = c.position || 0;
+  drawWave(c);
+  refreshClips();
 }
 
 async function refreshFrames() {
