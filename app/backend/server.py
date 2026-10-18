@@ -1,4 +1,8 @@
-"""FastAPI server wrapping the K80 interconnector and DieFusionCore."""
+"""FastAPI server wrapping the K80 interconnector and DieFusionCore.
+
+Modern-TK80 is a Windows desktop app. Audio devices are native ASIO
+(PortAudio indices), not browser media device ids.
+"""
 
 from __future__ import annotations
 
@@ -129,7 +133,7 @@ class TrackUpdate(BaseModel):
     mute: Optional[bool] = None
     solo: Optional[bool] = None
     armed: Optional[bool] = None
-    device_id: Optional[str] = None
+    asio_index: Optional[int] = None
     device_label: Optional[str] = None
     sample_rate: Optional[int] = None
 
@@ -245,7 +249,6 @@ def chat_clear() -> Dict[str, str]:
     return {"ok": "cleared"}
 
 
-# ---- Studio audio settings ----
 @app.get("/api/audio/settings")
 def audio_settings() -> Dict[str, Any]:
     return {
@@ -312,6 +315,7 @@ def asio_start(body: AsioStartRequest) -> Dict[str, Any]:
             sample_rate=rate,
             buffer=_asio_buffer,
             channels=channels,
+            device_index=track.get("asio_index"),
         )
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -341,12 +345,12 @@ def asio_stop() -> Dict[str, Any]:
     )
     clip["asio"] = True
     clip["buffer"] = info.get("buffer")
+    clip["device"] = info.get("device")
     _audio_clips.append(clip)
     info["clip"] = clip
     return info
 
 
-# ---- Tracks ----
 @app.get("/api/audio/tracks")
 def list_tracks() -> Dict[str, Any]:
     return {"tracks": _audio_tracks}
@@ -392,7 +396,6 @@ def update_track(track_id: int, body: TrackUpdate) -> Dict[str, Any]:
     return track
 
 
-# ---- Clips ----
 @app.get("/api/audio/clips")
 def list_clips() -> Dict[str, Any]:
     return {"clips": _audio_clips}
@@ -417,26 +420,6 @@ async def upload_audio(
     data = await file.read()
     dest = save_upload(file.filename or "clip.wav", data)
     clip = make_clip(len(_audio_clips), dest.name, dest, track_id=track_id, sample_rate=_sample_rate)
-    _audio_clips.append(clip)
-    return clip
-
-
-@app.post("/api/audio/record")
-async def save_recording(
-    file: UploadFile = File(...),
-    track_id: int = Form(...),
-) -> Dict[str, Any]:
-    track = next((t for t in _audio_tracks if t["id"] == track_id), None)
-    if track is None:
-        raise HTTPException(status_code=404, detail="track not found")
-    if not track.get("armed"):
-        raise HTTPException(status_code=400, detail="track is not armed")
-    data = await file.read()
-    dest = save_upload(file.filename or "recording.webm", data)
-    rate = track.get("sample_rate") or _sample_rate
-    clip = make_clip(len(_audio_clips), dest.name, dest, track_id=track_id, sample_rate=rate)
-    clip["asio"] = False
-    clip["buffer"] = None
     _audio_clips.append(clip)
     return clip
 
