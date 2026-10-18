@@ -9,10 +9,7 @@ expanded later.
 
 from __future__ import annotations
 
-import json
-import os
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from .formats import ANIM_FORMATS, MODEL_STORE, VIDEO_STORE, is_model, is_video
 
 UPLOAD_DIR = Path(os.environ.get("TK80_VIDEO", "uploads/video"))
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -21,14 +18,19 @@ VFX_DIR.mkdir(parents=True, exist_ok=True)
 
 BUILTIN_VFX = ("none", "fade", "zoom", "pan", "color_grade", "overlay")
 TRANSITIONS = ("none", "cut", "crossfade", "wipe", "dissolve")
-ANIM_FORMATS = ("json", "gltf", "fbx", "bvh")
-SUPPORTED_VIDEO = (".mp4", ".mov", ".webm", ".avi", ".mkv", ".mpeg")
-SUPPORTED_MODELS = (".obj", ".gltf", ".glb", ".fbx")
+ANIM_FORMATS = ANIM_FORMATS
+SUPPORTED_VIDEO = VIDEO_STORE
+SUPPORTED_MODELS = MODEL_STORE
 
 
 def is_supported_video(path: Path) -> bool:
-    """True if the file is an MP4 (or related) we can store."""
-    return path.suffix.lower() in SUPPORTED_VIDEO
+    """True if the file is a video format we can store."""
+    return is_video(path)
+
+
+def is_supported_model(path: Path) -> bool:
+    """True if the file is a 3D model we can store."""
+    return is_model(path)
 
 
 def _safe_name(name: str) -> str:

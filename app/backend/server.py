@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from drivers.interconnector import Interconnector, InterconnectorError
 from drivers.interconnector.diefusion import DieFusionCore
 
+from .formats import catalog as format_catalog
 from .asio import (
     ASIO_BUFFERS,
     DEFAULT_BUFFER,
@@ -564,6 +565,11 @@ class VideoEditRequest(BaseModel):
     params: Optional[Dict[str, Any]] = None
     new_order: Optional[List[int]] = None
     name: Optional[str] = None
+
+
+@app.get("/api/formats")
+def list_formats() -> Dict[str, Any]:
+    return format_catalog()
 
 
 @app.get("/api/status")

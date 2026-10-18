@@ -9,11 +9,7 @@ timeline position, clip mute, and the master bus.
 
 from __future__ import annotations
 
-import os
-import struct
-import wave
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from .formats import AUDIO_PROCESS, AUDIO_STORE, is_audio, is_processable_audio
 
 UPLOAD_DIR = Path(os.environ.get("TK80_UPLOADS", "uploads/audio"))
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -21,8 +17,8 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 CHANNELS = ("stereo", "left", "right")
 DEFAULT_SAMPLE_RATE = 44100
 COMMON_RATES = (44100, 48000, 88200, 96000, 176400, 192000)
-AUDIO_FORMATS = (".wav", ".mp3", ".flac", ".ogg", ".aiff", ".m4a", ".aac")
-PROCESSABLE = (".wav",)
+AUDIO_FORMATS = AUDIO_STORE
+PROCESSABLE = AUDIO_PROCESS
 
 SCARLETT_PROFILES = {
     "scarlett_2i2_gen1": {
@@ -86,12 +82,12 @@ def save_upload(filename: str, data: bytes) -> Path:
 
 def is_supported_audio(path: Path) -> bool:
     """True if the file is a format we can store."""
-    return path.suffix.lower() in AUDIO_FORMATS
+    return is_audio(path)
 
 
 def is_processable(path: Path) -> bool:
     """True if the file can be edited and mixed (WAV only for now)."""
-    return path.suffix.lower() in PROCESSABLE
+    return is_processable_audio(path)
 
 
 def clamp_gain(value: float) -> float:

@@ -16,8 +16,15 @@ The Modern-TK80 mini DAW is a native Windows desktop studio. Audio I/O is ASIO (
 - Edits rewrite the WAV: trim, reverse, gain, silence
 - Per-clip level fader and mute toggle
 - True 16-bit peaks for the waveform
-- Formats accepted for storage: WAV, MP3, FLAC, OGG, AIFF, M4A, AAC
-- Only WAV is processable for edits and mix
+## Formats
+
+Shared catalog in `formats.py`. Endpoint: `GET /api/formats`.
+
+- Audio store: WAV, MP3, FLAC, OGG, AIFF, M4A, AAC, WMA
+- Audio process: WAV only
+- Video store: MP4, MOV, WebM, AVI, MKV, MPEG, WMV
+- Model store: OBJ, glTF, GLB, FBX
+- Animation: json, gltf, fbx, bvh
 
 ## Effects
 
