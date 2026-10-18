@@ -17,13 +17,16 @@ from drivers.interconnector.diefusion import DieFusionCore
 from .asio import (
     ASIO_BUFFERS,
     DEFAULT_BUFFER,
+    AsioRecorder,
     asio_profile,
+    list_asio_devices,
     probe_asio,
 )
 from .audio import (
     COMMON_RATES,
     DEFAULT_SAMPLE_RATE,
     SCARLETT_PROFILES,
+    UPLOAD_DIR,
     detect_scarlett,
     make_clip,
     make_track,
@@ -50,6 +53,8 @@ _video_frames: List[Dict[str, Any]] = []
 _sample_rate: int = DEFAULT_SAMPLE_RATE
 _asio_enabled: bool = False
 _asio_buffer: int = DEFAULT_BUFFER
+_asio_recorder = AsioRecorder()
+_asio_track_id: Optional[int] = None
 
 
 def get_ic() -> Interconnector:
@@ -76,7 +81,6 @@ def _ensure_track() -> int:
 
 
 def _validate_rate_for_track(track: Dict[str, Any], rate: int) -> None:
-    """Reject a rate the armed Scarlett cannot do."""
     scar = track.get("scarlett")
     if scar and rate not in scar.get("rates", []):
         raise HTTPException(
@@ -134,6 +138,10 @@ class AudioSettingsRequest(BaseModel):
     sample_rate: Optional[int] = None
     asio: Optional[bool] = None
     buffer: Optional[int] = None
+
+
+class AsioStartRequest(BaseModel):
+    track_id: int
 
 
 class VideoEditRequest(BaseModel):
@@ -250,6 +258,7 @@ def audio_settings() -> Dict[str, Any]:
         "buffers": list(ASIO_BUFFERS),
         "asio_probe": probe_asio(),
         "asio_profile": asio_profile(_sample_rate, _asio_buffer),
+        "asio_recording": _asio_recorder.recording,
     }
 
 
@@ -271,7 +280,70 @@ def set_audio_settings(body: AudioSettingsRequest) -> Dict[str, Any]:
         "asio": _asio_enabled,
         "buffer": _asio_buffer,
         "asio_profile": asio_profile(_sample_rate, _asio_buffer),
+        "asio_probe": probe_asio(),
     }
+
+
+@app.get("/api/audio/asio/devices")
+def asio_devices() -> Dict[str, Any]:
+    return {"devices": list_asio_devices(), "probe": probe_asio()}
+
+
+@app.post("/api/audio/asio/start")
+def asio_start(body: AsioStartRequest) -> Dict[str, Any]:
+    global _asio_track_id
+    if not _asio_enabled:
+        raise HTTPException(status_code=400, detail="ASIO is not enabled")
+    track = next((t for t in _audio_tracks if t["id"] == body.track_id), None)
+    if track is None:
+        raise HTTPException(status_code=404, detail="track not found")
+    if not track.get("armed"):
+        raise HTTPException(status_code=400, detail="track is not armed")
+    if _asio_recorder.recording:
+        raise HTTPException(status_code=400, detail="already recording")
+
+    rate = track.get("sample_rate") or _sample_rate
+    _validate_rate_for_track(track, rate)
+    channels = 2 if track.get("channel") == "stereo" else 1
+    path = UPLOAD_DIR / f"asio_track{track['id']}.wav"
+    try:
+        info = _asio_recorder.start(
+            path,
+            sample_rate=rate,
+            buffer=_asio_buffer,
+            channels=channels,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    _asio_track_id = track["id"]
+    return info
+
+
+@app.post("/api/audio/asio/stop")
+def asio_stop() -> Dict[str, Any]:
+    global _asio_track_id
+    if not _asio_recorder.recording:
+        raise HTTPException(status_code=400, detail="not recording")
+    try:
+        info = _asio_recorder.stop()
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    track_id = _asio_track_id
+    _asio_track_id = None
+    path = Path(info["path"]) if info.get("path") else None
+    clip = make_clip(
+        len(_audio_clips),
+        path.name if path else "asio.wav",
+        path,
+        track_id=track_id,
+        sample_rate=info.get("sample_rate", _sample_rate),
+    )
+    clip["asio"] = True
+    clip["buffer"] = info.get("buffer")
+    _audio_clips.append(clip)
+    info["clip"] = clip
+    return info
 
 
 # ---- Tracks ----
@@ -298,7 +370,6 @@ def update_track(track_id: int, body: TrackUpdate) -> Dict[str, Any]:
     if "sample_rate" in data and data["sample_rate"] not in COMMON_RATES:
         raise HTTPException(status_code=400, detail="unsupported sample rate")
 
-    # Apply non-arm fields first so Scarlett detection sees the new label
     arming = data.pop("armed", None)
     track.update(data)
     label = track.get("device_label") or ""
@@ -364,8 +435,8 @@ async def save_recording(
     dest = save_upload(file.filename or "recording.webm", data)
     rate = track.get("sample_rate") or _sample_rate
     clip = make_clip(len(_audio_clips), dest.name, dest, track_id=track_id, sample_rate=rate)
-    clip["asio"] = _asio_enabled
-    clip["buffer"] = _asio_buffer if _asio_enabled else None
+    clip["asio"] = False
+    clip["buffer"] = None
     _audio_clips.append(clip)
     return clip
 
