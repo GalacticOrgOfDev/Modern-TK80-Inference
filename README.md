@@ -80,6 +80,8 @@ Models can add parameters and objects via tools. Users drag objects onto the can
 - Upload MP4 (or mov/webm) and place it on the timeline
 - Reorder, set duration, apply VFX
 - Models can call `vfx_make`, `vfx_add`, and `vfx_apply`
+- Text objects: create text, set texture (stone, metal, etc.), position on the timeline, and attach VFX
+- `text_scene` builds a text object and applies a sequence of VFX in one call (e.g. stone text that falls, impacts with rubble, then is wrapped in lightning)
 - Export timeline as a JSON manifest (full encode later)
 
 ## Music and VST tools
@@ -101,6 +103,9 @@ The model (or a direct chat command) can call:
 | `vfx_add` | Add a clip with a built-in or custom VFX name |
 | `vfx_apply` | Apply any VFX name to an existing clip |
 | `vfx_make` | Create a custom VFX by name and write a starter stub |
+| `text_add` | Create a text object with texture and timeline position |
+| `text_scene` | Create text and apply a sequence of VFX steps |
+| `text_vfx` | Attach a VFX to an existing text object |
 
 Chat routes by modality:
 

@@ -46,6 +46,63 @@ def save_video(filename: str, data: bytes) -> Path:
     return dest
 
 
+def make_text(
+    text_id: int,
+    content: str,
+    position: float = 0.0,
+    duration: float = 2.0,
+    texture: str = "plain",
+    x: float = 0.5,
+    y: float = 0.5,
+) -> Dict[str, Any]:
+    """Create a text object that lives on the timeline.
+
+    texture can be plain, stone, metal, wood, fire, or any custom name.
+    x/y are normalized 0..1 positions on the frame.
+    """
+    return {
+        "id": text_id,
+        "type": "text",
+        "content": content,
+        "position": max(0.0, float(position)),
+        "duration": max(0.1, float(duration)),
+        "texture": _safe_name(texture) if texture else "plain",
+        "x": max(0.0, min(1.0, float(x))),
+        "y": max(0.0, min(1.0, float(y))),
+        "vfx": [],
+    }
+
+
+def add_text_vfx(text_obj: Dict[str, Any], vfx: str, description: str = "") -> Dict[str, Any]:
+    """Attach a VFX (built-in or custom) to a text object."""
+    safe = _safe_name(vfx)
+    entry = {"name": safe, "description": description}
+    if safe not in BUILTIN_VFX:
+        info = make_vfx(safe, description)
+        entry["path"] = info["path"]
+    text_obj.setdefault("vfx", []).append(entry)
+    return text_obj
+
+
+def make_text_scene(
+    text_id: int,
+    content: str,
+    texture: str = "plain",
+    steps: Optional[List[str]] = None,
+    position: float = 0.0,
+    duration: float = 3.0,
+) -> Dict[str, Any]:
+    """Build a text object and apply a sequence of VFX steps.
+
+    Example steps: ["fall", "impact_rubble", "lightning_wrap"].
+    Each step becomes a custom VFX stub attached in order.
+    """
+    obj = make_text(text_id, content, position, duration, texture)
+    for step in steps or []:
+        add_text_vfx(obj, step, f"{content} {step}")
+    return obj
+
+
 def make_clip(
     clip_id: int,
     prompt: str = "",

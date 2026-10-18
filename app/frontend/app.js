@@ -401,14 +401,16 @@ async function refreshFrames() {
   const data = await api("/api/video/frames");
   const tl = document.getElementById("video-timeline");
   tl.innerHTML = "";
-  for (const f of data.frames) {
+  for (const f of data.frames || []) {
     const div = document.createElement("div");
     div.className = "frame";
-    div.textContent = `#${f.id} ${f.duration}s`;
-    div.title = f.prompt;
+    div.textContent = `#${f.id} ${f.duration}s ${f.vfx || ""}`;
+    div.title = f.prompt || "";
     tl.appendChild(div);
   }
-  document.getElementById("video-output").textContent = JSON.stringify(data.frames, null, 2);
+  const texts = document.getElementById("text-list");
+  if (texts) texts.textContent = JSON.stringify(data.texts || [], null, 2);
+  document.getElementById("video-output").textContent = JSON.stringify(data, null, 2);
 }
 
 async function refreshFusion() {
@@ -987,6 +989,15 @@ document.getElementById("video-upload").onclick = async () => {
   fd.append("vfx", document.getElementById("video-vfx").value || "none");
   try {
     await api("/api/video/upload", { method: "POST", body: fd });
+    await refreshFrames();
+  } catch (e) { alert(e.message); }
+};
+document.getElementById("text-add").onclick = async () => {
+  const content = document.getElementById("text-content").value || "text";
+  const texture = document.getElementById("text-texture").value || "plain";
+  const position = document.getElementById("text-pos").value || "0";
+  try {
+    await api(`/api/video/text?content=${encodeURIComponent(content)}&texture=${encodeURIComponent(texture)}&position=${position}`, { method: "POST" });
     await refreshFrames();
   } catch (e) { alert(e.message); }
 };

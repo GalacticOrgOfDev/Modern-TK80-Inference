@@ -51,10 +51,13 @@ from .vst_ui import (
 )
 from .video import (
     BUILTIN_VFX,
+    add_text_vfx,
     apply_vfx,
     export_manifest,
     is_supported_video,
     make_clip as make_video_clip,
+    make_text,
+    make_text_scene,
     make_vfx,
     reorder,
     save_video,
@@ -88,6 +91,7 @@ _chat: List[Dict[str, str]] = []
 _audio_tracks: List[Dict[str, Any]] = []
 _audio_clips: List[Dict[str, Any]] = []
 _video_frames: List[Dict[str, Any]] = []
+_text_objects: List[Dict[str, Any]] = []
 _sample_rate: int = DEFAULT_SAMPLE_RATE
 _asio_enabled: bool = False
 _asio_buffer: int = DEFAULT_BUFFER
@@ -289,6 +293,42 @@ def _dispatch_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
     if name == "vfx_make":
         info = make_vfx(str(args.get("name", "custom")), str(args.get("description", "")))
         return {"ok": True, "name": name, "vfx": info}
+
+    if name == "text_add":
+        obj = make_text(
+            len(_text_objects),
+            str(args.get("content", "text")),
+            float(args.get("position", 0.0)),
+            float(args.get("duration", 2.0)),
+            str(args.get("texture", "plain")),
+            float(args.get("x", 0.5)),
+            float(args.get("y", 0.5)),
+        )
+        _text_objects.append(obj)
+        return {"ok": True, "name": name, "text": obj}
+
+    if name == "text_scene":
+        steps = args.get("steps") or []
+        if isinstance(steps, str):
+            steps = [s.strip() for s in steps.split(",") if s.strip()]
+        obj = make_text_scene(
+            len(_text_objects),
+            str(args.get("content", "text")),
+            str(args.get("texture", "plain")),
+            steps,
+            float(args.get("position", 0.0)),
+            float(args.get("duration", 3.0)),
+        )
+        _text_objects.append(obj)
+        return {"ok": True, "name": name, "text": obj}
+
+    if name == "text_vfx":
+        text_id = int(args.get("text_id", -1))
+        for t in _text_objects:
+            if t["id"] == text_id:
+                add_text_vfx(t, str(args.get("vfx", "none")), str(args.get("description", "")))
+                return {"ok": True, "name": name, "text": t}
+        raise HTTPException(status_code=404, detail="text not found")
 
     raise HTTPException(status_code=400, detail=f"unknown tool: {name}")
 
@@ -1017,7 +1057,19 @@ def edit_audio(body: AudioEditRequest) -> Dict[str, Any]:
 
 @app.get("/api/video/frames")
 def list_frames() -> Dict[str, Any]:
-    return {"frames": _video_frames, "builtin_vfx": list(BUILTIN_VFX)}
+    return {"frames": _video_frames, "texts": _text_objects, "builtin_vfx": list(BUILTIN_VFX)}
+
+
+@app.post("/api/video/text")
+def add_text_endpoint(
+    content: str,
+    texture: str = "plain",
+    position: float = 0.0,
+    duration: float = 2.0,
+) -> Dict[str, Any]:
+    obj = make_text(len(_text_objects), content, position, duration, texture)
+    _text_objects.append(obj)
+    return obj
 
 
 @app.post("/api/video/upload")

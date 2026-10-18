@@ -74,6 +74,18 @@ TOOLS: Dict[str, Dict[str, Any]] = {
         "description": "Create a custom VFX by name and write a starter stub (tv_static, fire_hand, lightning, etc.).",
         "args": {"name": "string", "description": "string"},
     },
+    "text_add": {
+        "description": "Create a text object on the timeline with optional texture and position.",
+        "args": {"content": "string", "texture": "string", "position": "float", "duration": "float"},
+    },
+    "text_scene": {
+        "description": "Create a text object and apply a sequence of VFX steps (e.g. fall, impact_rubble, lightning_wrap).",
+        "args": {"content": "string", "texture": "string", "steps": "list of strings"},
+    },
+    "text_vfx": {
+        "description": "Attach a VFX to an existing text object.",
+        "args": {"text_id": "int", "vfx": "string", "description": "string"},
+    },
 }
 
 # Model emits: tool: name {"arg": value}
@@ -173,5 +185,17 @@ def parse_intent(text: str) -> Optional[Dict[str, Any]]:
         if "make" in t or "create" in t:
             return {"name": "vfx_make", "args": {"name": vfx, "description": text}}
         return {"name": "vfx_add", "args": {"prompt": text, "duration": 1.0, "vfx": vfx}}
+
+    if "text" in t and ("stone" in t or "lightning" in t or "impact" in t or "generate" in t):
+        texture = "stone" if "stone" in t else "plain"
+        steps = []
+        if "fall" in t:
+            steps.append("fall")
+        if "impact" in t or "rubble" in t:
+            steps.append("impact_rubble")
+        if "lightning" in t:
+            steps.append("lightning_wrap")
+        content = "paynmusic" if "paynmusic" in t else "text"
+        return {"name": "text_scene", "args": {"content": content, "texture": texture, "steps": steps}}
 
     return None
