@@ -57,6 +57,14 @@ class Interconnector:
         for d in self.dies:
             log.info("  %s", d)
 
+    def loaded_dies(self) -> List[int]:
+        """Indices of dies that currently have a model."""
+        return list(self._models.keys())
+
+    def modality_of(self, die: int) -> Optional[str]:
+        """Return the modality loaded on a die, or None."""
+        return self._modality.get(die)
+
     def status(self) -> Dict[str, Any]:
         """Return a snapshot suitable for hybrid cluster monitoring."""
         metrics = read_all_metrics([d.index for d in self.dies])
