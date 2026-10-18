@@ -246,5 +246,3 @@ def _dsp_for(effect: str) -> str:
         float g = gain ? *gain : 1.0f;
         buffer.applyGain(g);
 '''
-"""
-file_path="/workspace/artifacts/Modern-TK80-Inference/app/backend/vst.py"

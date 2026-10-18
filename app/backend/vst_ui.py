@@ -10,6 +10,7 @@ generated processor can read.
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -34,7 +35,10 @@ def default_project(name: str = "MyPlugin") -> Dict[str, Any]:
 
 
 def add_parameter(project: Dict[str, Any], name: str, default: float = 0.5) -> Dict[str, Any]:
-    """Add a parameter the UI can bind to."""
+    """Add a parameter the UI can bind to. Rejects duplicate names."""
+    name = name.strip() or "param"
+    if any(p["name"] == name for p in project["parameters"]):
+        raise ValueError(f"parameter '{name}' already exists")
     pid = project["next_id"]
     project["next_id"] = pid + 1
     param = {"id": pid, "name": name, "default": float(default)}
@@ -98,11 +102,8 @@ def export_project(project: Dict[str, Any]) -> Dict[str, Any]:
         "objects": project["objects"],
     }
     layout_path = UI_DIR / f"{project['name']}_layout.json"
-    import json
     layout_path.write_text(json.dumps(layout, indent=2), encoding="utf-8")
     result["layout"] = str(layout_path)
     result["object_count"] = len(project["objects"])
     result["parameter_count"] = len(project["parameters"])
     return result
-"""
-file_path="/workspace/artifacts/Modern-TK80-Inference/app/backend/vst_ui.py"

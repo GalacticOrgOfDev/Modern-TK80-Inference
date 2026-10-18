@@ -39,11 +39,35 @@ Opens a native window. Packaging notes for a Windows installer are in `app/packa
 - Clip edits rewrite the WAV: trim, reverse, gain, silence
 - Per-clip level fader and mute toggle (inline on the clip list)
 - Per-clip effect channels: normalize, compressor, morphable envelope (time/gain points reshape the wave)
-- VST maker: generate VST3 source that targets the Steinberg VST3 SDK / JUCE. Models can call `make_vst` to produce reverb, subpump, autotune, noise suppression, delay, distortion, or custom effects. Output is a `.cpp` file with a starter DSP stub ready to compile.
-- VST UI builder: drag-and-drop canvas for knobs, vertical sliders, horizontal sliders, buttons, and labels. Models can add parameters and objects; users bind objects to parameters and export the project to VST source plus layout.
 - Timeline position per clip
 - True 16-bit peaks for the waveform
 - Play mix and bounce the arrangement to a stereo WAV (respects track mute/solo/gain, clip mute/gain, channel, position, and master bus)
+
+### VST Maker
+
+Generates VST3 source that targets the Steinberg VST3 SDK or a JUCE AudioPlugin project. Models can call `make_vst` (or the user can use the sidebar) to produce:
+
+- reverb
+- subpump
+- autotune
+- noise suppression
+- delay
+- distortion
+- custom
+
+Output is a `.cpp` file with parameters wired and a starter DSP stub in `processBlock`. Full binary compilation still requires the VST3 SDK on the machine.
+
+### VST UI Builder
+
+Drag-and-drop canvas for designing a plugin interface. Object types:
+
+- knob
+- vertical slider
+- horizontal slider
+- button
+- label
+
+Models can add parameters and objects via tools. Users drag objects onto the canvas, bind them to parameters (e.g. a knob to `input_level`, vertical sliders to frequencies), name the project, and press to VST. Export writes the source plus a layout JSON. Duplicate parameter names are rejected.
 
 ## Mini Video Studio (staged)
 
@@ -52,7 +76,7 @@ Opens a native window. Packaging notes for a Windows installer are in `app/packa
 - Export timeline (JSON stage; full encode later)
 - Ready for further expansion once the DAW is locked
 
-## Music tools
+## Music and VST tools
 
 The model (or a direct chat command) can call:
 
@@ -64,14 +88,14 @@ The model (or a direct chat command) can call:
 | `render_pattern` | Bounce the step pattern to a clip |
 | `detect_bpm` | Estimate BPM from a clip |
 | `make_vst` | Generate VST3 source for reverb, subpump, autotune, noise_suppression, delay, distortion, or custom |
-| `vst_add_param` | Add a parameter to the current VST UI project |
+| `vst_add_param` | Add a parameter to the current VST UI project (rejects duplicates) |
 | `vst_add_object` | Place a knob, slider, button, or label on the VST canvas |
-| `vst_bind` | Bind a UI object to a parameter |
-| `vst_export` | Export the VST UI project to source plus layout |
+| `vst_bind` | Bind a UI object to a parameter by name |
+| `vst_export` | Export the VST UI project to source plus layout JSON |
 
 Chat routes by modality:
 
-- Direct command (“make a kick”) runs immediately, no model required
+- Direct command (“make a kick”, “make a reverb vst”) runs immediately, no model required
 - Agent modality runs a tool loop: model emits `tool: name {json}`, studio runs it, result is fed back (up to 4 steps)
 - LLM modality runs a single tool call if the reply contains one
 

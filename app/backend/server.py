@@ -220,7 +220,10 @@ def _dispatch_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
     if name == "vst_add_param":
         pname = str(args.get("name", "param"))
         default = float(args.get("default", 0.5))
-        param = add_parameter(_vst_project, pname, default)
+        try:
+            param = add_parameter(_vst_project, pname, default)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
         return {"ok": True, "name": name, "parameter": param}
 
     if name == "vst_add_object":
@@ -699,7 +702,10 @@ def reset_vst_ui(name: str = "MyPlugin") -> Dict[str, Any]:
 
 @app.post("/api/vst/ui/param")
 def vst_add_param(name: str, default: float = 0.5) -> Dict[str, Any]:
-    return add_parameter(_vst_project, name, default)
+    try:
+        return add_parameter(_vst_project, name, default)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.post("/api/vst/ui/object")
