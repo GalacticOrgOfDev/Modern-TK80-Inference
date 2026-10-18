@@ -4,7 +4,7 @@ Modern NVIDIA Tesla K80 inference engine, drivers, and custom interconnector.
 
 ## Overview
 
-This repository is remastering the Tesla K80 (Kepler, compute capability 3.7 / `sm_37`) so it can participate in modern inference.
+This repository remasters the Tesla K80 (Kepler, compute capability 3.7 / `sm_37`) so it can participate in modern inference.
 
 The K80 is two independent 12 GB dies. Official support ended with CUDA 11.x and the R470 driver branch. The custom interconnector presents a modern interface while running on that baseline.
 
@@ -14,9 +14,10 @@ The K80 is two independent 12 GB dies. Official support ended with CUDA 11.x and
 
 The primary interface is the custom app in [`app/`](./app/):
 
-- **LLM** studio
-- **Mini audio** studio
-- **Mini video** studio
+- **Chat** — LLM or agent modality, with a tool indicator
+- **Mini audio studio** — layered tracks, ASIO recording, sequencer, instruments, loops
+- **Mini video studio** — frame timeline (image models)
+- **DieFusionCore** — future dual-die unification
 
 ```bash
 pip install fastapi uvicorn pywebview
@@ -24,6 +25,36 @@ python -m app.launcher
 ```
 
 Opens a native window. Packaging notes for a Windows installer are in `app/packaging/`.
+
+## Audio studio
+
+- Layered tracks with stereo / left / right channeling
+- Arm a track for a detected ASIO input
+- Sample rate (default 44100 Hz) with Focusrite Scarlett 2i2 Gen 1/2 profile detection
+- Native ASIO path (sounddevice / PortAudio). Prefer 64-sample buffer at 44100 Hz (~1.5 ms)
+- Live waveform on the armed track while recording
+- Instrument generator (kick, snare, hat, bass, lead, pad)
+- 16-step sequencer, BPM detect/set, loop/sample generation
+
+## Music tools
+
+The model (or a direct chat command) can call:
+
+| Tool | Purpose |
+|------|---------|
+| `set_bpm` | Set studio BPM (40–220) |
+| `generate_instrument` | Render a hit or tone to a clip |
+| `generate_loop` | Generate a short loop at the current BPM |
+| `render_pattern` | Bounce the step pattern to a clip |
+| `detect_bpm` | Estimate BPM from a clip |
+
+Chat routes by modality:
+
+- Direct command (“make a kick”) runs immediately, no model required
+- Agent modality runs a tool loop: model emits `tool: name {json}`, studio runs it, result is fed back (up to 4 steps)
+- LLM modality runs a single tool call if the reply contains one
+
+The chat pane shows the tool that just ran.
 
 ## Other entry points
 
@@ -38,12 +69,14 @@ The Tkinter GUI in `gui/` is deprecated in favor of the custom app.
 Lives in [`drivers/interconnector/`](./drivers/interconnector/).
 
 It provides:
+
 - Die discovery and tracking (never assumes unified 24 GB)
 - Translation of modern request formats
 - Explicit dual-die split modes (`single`, `dual`, `layer`)
 - Hybrid cluster advertisement
 - Thermal and performance monitoring
 - Modality routing: LLM, image, voice, agent (video placeholder)
+- Tool-calling loop for the agent modality
 
 ## Drivers
 
@@ -68,4 +101,4 @@ CUDA 11.8 is the last toolkit that can target `sm_37`. See [`cuda/`](./cuda/).
 
 ## Status
 
-Custom Windows-oriented app (LLM + mini audio + mini video) is in place. Packaging for a proper installer is next. Dual-die unification and full video models remain future work.
+Custom Windows app is in place with chat, mini audio studio (ASIO, Scarlett, sequencer, instruments, loops, live waveform), mini video studio, and DieFusionCore scaffolding. Agent tool-calling is wired. Packaging for a proper installer is next. Dual-die unification and full video models remain future work.
