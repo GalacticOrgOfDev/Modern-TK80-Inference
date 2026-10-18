@@ -15,7 +15,14 @@ log = logging.getLogger("tk80.backends")
 class LlamaCppBackend:
     """llama-cpp-python backend compiled for CUDA / sm_37."""
 
-    def __init__(self, model_path: str, n_gpu_layers: int = -1, n_ctx: int = 2048, main_gpu: int = 0):
+    def __init__(
+        self,
+        model_path: str,
+        n_gpu_layers: int = -1,
+        n_ctx: int = 2048,
+        main_gpu: int = 0,
+        split_mode: int = 0,
+    ):
         try:
             from llama_cpp import Llama
         except ImportError as exc:
@@ -25,13 +32,19 @@ class LlamaCppBackend:
             ) from exc
 
         self.model_path = model_path
-        log.info("Loading GGUF via llama.cpp (CUDA): %s (gpu_layers=%s, main_gpu=%s)", model_path, n_gpu_layers, main_gpu)
+        log.info(
+            "Loading GGUF via llama.cpp (CUDA): %s (gpu_layers=%s, main_gpu=%s, split_mode=%s)",
+            model_path,
+            n_gpu_layers,
+            main_gpu,
+            split_mode,
+        )
         self.llm = Llama(
             model_path=model_path,
             n_gpu_layers=n_gpu_layers,
             n_ctx=n_ctx,
             main_gpu=main_gpu,
-            split_mode=0,  # LLAMA_SPLIT_MODE_NONE — whole model on one die
+            split_mode=split_mode,
             verbose=False,
         )
 
