@@ -58,6 +58,24 @@ function renderChat() {
   box.scrollTop = box.scrollHeight;
 }
 
+function showToolIndicator(data) {
+  const el = document.getElementById("tool-indicator");
+  const names = [];
+  if (data && data.tool) names.push(data.tool.name || "tool");
+  if (data && Array.isArray(data.tools)) {
+    for (const t of data.tools) {
+      if (t && t.name) names.push(t.name);
+    }
+  }
+  if (!names.length) {
+    el.hidden = true;
+    el.textContent = "";
+    return;
+  }
+  el.hidden = false;
+  el.textContent = "Tool: " + names.join(", ");
+}
+
 function drawWave(clip) {
   const canvas = document.getElementById("audio-wave");
   const ctx = canvas.getContext("2d");
@@ -439,7 +457,7 @@ document.getElementById("llm-load").onclick = async () => {
       body: JSON.stringify({
         model: document.getElementById("llm-model").value,
         backend: document.getElementById("llm-backend").value,
-        modality: "llm",
+        modality: document.getElementById("llm-modality").value,
         die: Number(document.getElementById("llm-die").value),
         split: document.getElementById("llm-split").value,
       }),
@@ -457,6 +475,7 @@ document.getElementById("llm-clear").onclick = async () => {
   await api("/api/chat/clear", { method: "POST" });
   chatHistory = [];
   renderChat();
+  showToolIndicator(null);
 };
 document.getElementById("llm-send").onclick = async () => {
   const input = document.getElementById("llm-input");
@@ -477,13 +496,15 @@ document.getElementById("llm-send").onclick = async () => {
     });
     chatHistory = data.history;
     renderChat();
-    if (data.tool) {
+    showToolIndicator(data);
+    if (data.tool || (data.tools && data.tools.length)) {
       await refreshClips();
       await loadMusic();
     }
   } catch (e) {
     chatHistory.push({ role: "assistant", content: "Error: " + e.message });
     renderChat();
+    showToolIndicator(null);
   }
 };
 
