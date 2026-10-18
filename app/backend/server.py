@@ -62,6 +62,7 @@ from .video import (
     make_vfx,
     reorder,
     save_video,
+    set_text_style,
     set_transition,
 )
 from .music import (
@@ -340,6 +341,19 @@ def _dispatch_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         return {"ok": True, "name": name, "clip": clip}
+
+    if name == "text_style":
+        text_id = int(args.get("text_id", -1))
+        for t in _text_objects:
+            if t["id"] == text_id:
+                set_text_style(
+                    t,
+                    float(args.get("size", 48)),
+                    str(args.get("color", "#ffffff")),
+                    str(args.get("align", "center")),
+                )
+                return {"ok": True, "name": name, "text": t}
+        raise HTTPException(status_code=404, detail="text not found")
 
     raise HTTPException(status_code=400, detail=f"unknown tool: {name}")
 

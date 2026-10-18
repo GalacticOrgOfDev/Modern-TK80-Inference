@@ -74,7 +74,17 @@ def make_text(
     }
 
 
-def add_text_vfx(text_obj: Dict[str, Any], vfx: str, description: str = "") -> Dict[str, Any]:
+def set_text_style(
+    text_obj: Dict[str, Any],
+    size: float = 48.0,
+    color: str = "#ffffff",
+    align: str = "center",
+) -> Dict[str, Any]:
+    """Set simple style fields on a text object."""
+    text_obj["size"] = max(8.0, float(size))
+    text_obj["color"] = color or "#ffffff"
+    text_obj["align"] = align if align in ("left", "center", "right") else "center"
+    return text_obj
     """Attach a VFX (built-in or custom) to a text object."""
     safe = _safe_name(vfx)
     entry = {"name": safe, "description": description}

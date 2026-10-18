@@ -83,6 +83,8 @@ Models can add parameters and objects via tools. Users drag objects onto the can
 - Text objects: create text, set texture (stone, metal, etc.), position on the timeline, and attach VFX
 - `text_scene` builds a text object and applies a sequence of VFX in one call (e.g. stone text that falls, impacts with rubble, then is wrapped in lightning)
 - Clip transitions: cut, crossfade, wipe, dissolve (model tool `video_transition`)
+- Text styling: size, color, and alignment (`text_style`)
+- Audio fades: linear fade-in and fade-out helper on clips
 - Export timeline as a JSON manifest that includes clips, text objects, and transitions (full encode later)
 
 ## Music and VST tools
@@ -108,6 +110,7 @@ The model (or a direct chat command) can call:
 | `text_scene` | Create text and apply a sequence of VFX steps |
 | `text_vfx` | Attach a VFX to an existing text object |
 | `video_transition` | Set the transition after a clip (cut, crossfade, wipe, dissolve) |
+| `text_style` | Set size, color, and alignment on a text object |
 
 Chat routes by modality:
 

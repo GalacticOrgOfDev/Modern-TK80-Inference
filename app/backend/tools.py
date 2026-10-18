@@ -90,6 +90,10 @@ TOOLS: Dict[str, Dict[str, Any]] = {
         "description": "Set the transition after a clip (cut, crossfade, wipe, dissolve).",
         "args": {"index": "int", "kind": "cut|crossfade|wipe|dissolve"},
     },
+    "text_style": {
+        "description": "Set size, color, and alignment on a text object.",
+        "args": {"text_id": "int", "size": "float", "color": "string", "align": "left|center|right"},
+    },
 }
 
 # Model emits: tool: name {"arg": value}

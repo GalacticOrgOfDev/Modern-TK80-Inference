@@ -92,6 +92,25 @@ def clamp_gain(value: float) -> float:
     return max(0.0, min(4.0, float(value)))
 
 
+def apply_fade(samples: List[int], rate: int, channels: int, fade_in: float = 0.0, fade_out: float = 0.0) -> List[int]:
+    """Apply linear fade-in and fade-out in seconds. Returns new samples."""
+    frame_size = max(1, channels)
+    frames = len(samples) // frame_size
+    in_frames = int(max(0.0, fade_in) * rate)
+    out_frames = int(max(0.0, fade_out) * rate)
+    out: List[int] = []
+    for i in range(frames):
+        gain = 1.0
+        if in_frames and i < in_frames:
+            gain *= i / max(1, in_frames)
+        if out_frames and i > frames - out_frames:
+            gain *= max(0.0, (frames - i) / max(1, out_frames))
+        base = i * frame_size
+        for c in range(frame_size):
+            out.append(int(max(-32768, min(32767, samples[base + c] * gain))))
+    return out
+
+
 def _read_wav(path: Path) -> Tuple[int, int, int, bytes]:
     with wave.open(str(path), "rb") as w:
         return w.getframerate(), w.getnchannels(), w.getsampwidth(), w.readframes(w.getnframes())
