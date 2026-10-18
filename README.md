@@ -10,18 +10,28 @@ The K80 is two independent 12 GB dies. Official support ended with CUDA 11.x and
 
 **Hybrid use:** K80 dies serve as a dedicated backend; newer GPUs in the same cluster handle other workloads.
 
-## Entry points
+## Custom App (Windows 10+)
+
+The primary interface is the custom app in [`app/`](./app/):
+
+- **LLM** studio
+- **Mini audio** studio
+- **Mini video** studio
+
+```bash
+pip install fastapi uvicorn pywebview
+python -m app.launcher
+```
+
+Opens a native window. Packaging notes for a Windows installer are in `app/packaging/`.
+
+## Other entry points
 
 - `python main.py` — CLI over the interconnector
 - `python -m drivers.interconnector.cli` — same surface
-- `python -m gui.app` — Tkinter GUI
 - Python API: `from drivers.interconnector import Interconnector`
 
-```bash
-python main.py --status
-python main.py --load ./model.gguf --die 0 --prompt "Hello from K80"
-python -m gui.app
-```
+The Tkinter GUI in `gui/` is deprecated in favor of the custom app.
 
 ## Interconnector
 
@@ -34,10 +44,6 @@ It provides:
 - Hybrid cluster advertisement
 - Thermal and performance monitoring
 - Modality routing: LLM, image, voice, agent (video placeholder)
-
-## GUI
-
-Tkinter interface in [`gui/`](./gui/). Shows dies, loads models, and runs generate.
 
 ## Drivers
 
@@ -58,8 +64,8 @@ CUDA 11.8 is the last toolkit that can target `sm_37`. See [`cuda/`](./cuda/).
 
 1. Install R470 driver and CUDA 11.8.
 2. Build llama-cpp-python: `./scripts/build_llama_cuda.sh`
-3. Run via `main.py`, the interconnector CLI, or the GUI.
+3. Launch the custom app: `python -m app.launcher`
 
 ## Status
 
-Single-die support for LLM, image, voice, and a basic agentic loop. Dual-die unification planned for later. Video remains a placeholder. GUI is available.
+Custom Windows-oriented app (LLM + mini audio + mini video) is in place. Packaging for a proper installer is next. Dual-die unification and full video models remain future work.
