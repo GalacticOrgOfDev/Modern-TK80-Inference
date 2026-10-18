@@ -1,10 +1,8 @@
-"""ASIO compatibility for the Modern-TK80 audio studio.
+"""ASIO compatibility for the Modern-TK80 Windows app.
 
-ASIO is a Windows-only low-latency path (Steinberg). The Scarlett 2i2
-Gen 1 and Gen 2 use the Focusrite USB ASIO driver.
-
-This module probes for a native ASIO host (PortAudio via sounddevice)
-and can open an input stream on the Focusrite driver to record WAV.
+Low-latency recording path. Prefer 64-sample buffer at 44100 Hz
+(~1.5 ms) on the Focusrite USB ASIO driver. Raise the buffer only
+if the driver reports underruns.
 """
 
 from __future__ import annotations
@@ -15,9 +13,10 @@ import wave
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-DEFAULT_BUFFER = 128
+DEFAULT_BUFFER = 64
 ASIO_BUFFERS = (64, 128, 256, 512, 1024)
 FOCUSRITE_ASIO_DRIVER = "Focusrite USB ASIO"
+LOW_LATENCY_RATE = 44100
 
 
 def platform_supports_asio() -> bool:
@@ -25,7 +24,6 @@ def platform_supports_asio() -> bool:
 
 
 def _sd():
-    """Import sounddevice or return None."""
     try:
         import sounddevice as sd  # type: ignore
 
@@ -35,7 +33,6 @@ def _sd():
 
 
 def probe_asio() -> Dict[str, Any]:
-    """Report whether a native ASIO host is importable. Does not open a device."""
     if not platform_supports_asio():
         return {
             "available": False,
@@ -73,7 +70,6 @@ def probe_asio() -> Dict[str, Any]:
 
 
 def list_asio_devices() -> List[Dict[str, Any]]:
-    """List input devices on the ASIO host. Empty if ASIO is not present."""
     sd = _sd()
     if sd is None or not platform_supports_asio():
         return []
@@ -100,7 +96,6 @@ def list_asio_devices() -> List[Dict[str, Any]]:
 
 
 def find_focusrite(devices: Optional[List[Dict[str, Any]]] = None) -> Optional[Dict[str, Any]]:
-    """Prefer a device whose name contains Focusrite or Scarlett."""
     items = devices if devices is not None else list_asio_devices()
     for d in items:
         name = str(d.get("name", "")).lower()
@@ -118,10 +113,11 @@ def asio_profile(sample_rate: int, buffer: int) -> Dict[str, Any]:
         "sample_rate": sample_rate,
         "buffer": buffer,
         "latency_ms": latency_ms,
+        "low_latency": buffer <= 64 and sample_rate in (44100, 48000),
         "notes": (
-            "Install the Focusrite driver. Select ASIO and "
-            "'Focusrite USB ASIO'. 128 samples at 44100 Hz is a safe start. "
-            "Raise the buffer if you hear clicks."
+            "Prefer 64 samples at 44100 Hz (~1.5 ms) for tracking. "
+            "Raise to 128 if the Focusrite driver clicks. "
+            "Keep the app window light; audio runs on its own stream."
         ),
     }
 
@@ -135,7 +131,7 @@ class AsioRecorder:
         self._lock = threading.Lock()
         self.path: Optional[Path] = None
         self.device: Optional[Dict[str, Any]] = None
-        self.sample_rate = 44100
+        self.sample_rate = LOW_LATENCY_RATE
         self.channels = 2
         self.buffer = DEFAULT_BUFFER
         self.error: Optional[str] = None
@@ -172,7 +168,7 @@ class AsioRecorder:
         path.parent.mkdir(parents=True, exist_ok=True)
         wf = wave.open(str(path), "wb")
         wf.setnchannels(channels)
-        wf.setsampwidth(2)  # 16-bit PCM
+        wf.setsampwidth(2)
         wf.setframerate(sample_rate)
 
         def callback(indata, frames, time_info, status) -> None:  # noqa: ARG001
@@ -189,6 +185,7 @@ class AsioRecorder:
             blocksize=buffer,
             dtype="int16",
             callback=callback,
+            latency="low",
         )
         stream.start()
 
@@ -206,6 +203,7 @@ class AsioRecorder:
             "sample_rate": sample_rate,
             "buffer": buffer,
             "channels": channels,
+            "latency_ms": round((buffer / float(sample_rate)) * 1000.0, 2),
             "path": str(path),
         }
 
