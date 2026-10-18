@@ -21,9 +21,9 @@ python-multipart
 sounddevice
 
 # Optional modality support (single-die, smaller models)
-# diffusers          # image (SD 1.5-class)
-# transformers       # voice (Whisper-small class) and some LLM paths
-# pynvml             # thermal / utilization monitoring
+diffusers
+transformers
+pynvml
 
 # Utilities
 numpy

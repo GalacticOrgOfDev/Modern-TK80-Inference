@@ -36,8 +36,8 @@ class ImageBackend:
 
     def __init__(self, model_name_or_path: str, device: str = "cuda:0"):
         try:
-            import torch  # type: ignore[import-not-found]
-            from diffusers import StableDiffusionPipeline  # type: ignore[import-not-found]
+            import torch
+            from diffusers import StableDiffusionPipeline
         except ImportError as exc:
             raise RuntimeError("diffusers + torch required for image backend") from exc
 
