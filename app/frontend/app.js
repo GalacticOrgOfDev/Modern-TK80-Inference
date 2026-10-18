@@ -6,8 +6,10 @@ let selectedClip = 0;
 let selectedTrack = 0;
 let studioRate = 44100;
 let asioEnabled = false;
-let asioBuffer = 128;
+let asioBuffer = 64;
 let asioRecording = false;
+let bpm = 120;
+let pattern = {};
 
 async function api(path, opts = {}) {
   const res = await fetch(API + path, {
@@ -109,12 +111,52 @@ function updateAsioStatus(settings) {
   badge.title = profile ? profile.notes : `Host: ${host}`;
 }
 
+function renderSequencer() {
+  const box = document.getElementById("sequencer");
+  box.innerHTML = "";
+  const names = Object.keys(pattern);
+  for (const name of names) {
+    const row = document.createElement("div");
+    row.className = "seq-row";
+    const label = document.createElement("span");
+    label.textContent = name;
+    row.appendChild(label);
+    pattern[name].forEach((on, i) => {
+      const step = document.createElement("div");
+      step.className = "step" + (on ? " on" : "");
+      step.onclick = async () => {
+        pattern[name][i] = on ? 0 : 1;
+        await api("/api/music/pattern", {
+          method: "POST",
+          body: JSON.stringify({ pattern }),
+        });
+        renderSequencer();
+      };
+      row.appendChild(step);
+    });
+    box.appendChild(row);
+  }
+}
+
+async function loadMusic() {
+  try {
+    const data = await api("/api/music/state");
+    bpm = data.bpm || 120;
+    pattern = data.pattern || {};
+    document.getElementById("bpm").value = bpm;
+    document.getElementById("bpm-pill").textContent = `${bpm} BPM`;
+    renderSequencer();
+  } catch (e) {
+    /* keep defaults */
+  }
+}
+
 async function loadAudioSettings() {
   try {
     const data = await api("/api/audio/settings");
     studioRate = data.sample_rate || 44100;
     asioEnabled = !!data.asio;
-    asioBuffer = data.buffer || 128;
+    asioBuffer = data.buffer || 64;
     asioRecording = !!data.asio_recording;
     document.getElementById("sample-rate").value = String(studioRate);
     document.getElementById("asio-enabled").checked = asioEnabled;
@@ -231,6 +273,7 @@ async function refreshClips() {
     sample_rate: studioRate,
     asio: asioEnabled,
     buffer: asioBuffer,
+    bpm,
   }, null, 2);
 }
 
@@ -300,6 +343,63 @@ document.getElementById("asio-buffer").onchange = async (e) => {
   } catch (err) {
     alert(err.message);
   }
+};
+
+// Music
+document.getElementById("bpm-set").onclick = async () => {
+  try {
+    const data = await api("/api/music/bpm", {
+      method: "POST",
+      body: JSON.stringify({ bpm: Number(document.getElementById("bpm").value) }),
+    });
+    bpm = data.bpm;
+    document.getElementById("bpm-pill").textContent = `${bpm} BPM`;
+  } catch (e) { alert(e.message); }
+};
+document.getElementById("bpm-detect").onclick = async () => {
+  try {
+    const data = await api(`/api/music/bpm/detect?clip_id=${selectedClip}`, { method: "POST" });
+    bpm = data.applied;
+    document.getElementById("bpm").value = bpm;
+    document.getElementById("bpm-pill").textContent = `${bpm} BPM`;
+    document.getElementById("audio-transport-status").textContent =
+      `Detected ${data.bpm} BPM (confidence ${data.confidence})`;
+  } catch (e) { alert(e.message); }
+};
+document.getElementById("instrument-gen").onclick = async () => {
+  try {
+    const clip = await api("/api/music/instrument", {
+      method: "POST",
+      body: JSON.stringify({
+        instrument: document.getElementById("instrument").value,
+        note: Number(document.getElementById("note").value),
+        track_id: selectedTrack,
+      }),
+    });
+    selectedClip = clip.id;
+    await refreshClips();
+  } catch (e) { alert(e.message); }
+};
+document.getElementById("loop-gen").onclick = async () => {
+  try {
+    const clip = await api("/api/music/loop", {
+      method: "POST",
+      body: JSON.stringify({
+        style: document.getElementById("loop-style").value,
+        bars: 1,
+        track_id: selectedTrack,
+      }),
+    });
+    selectedClip = clip.id;
+    await refreshClips();
+  } catch (e) { alert(e.message); }
+};
+document.getElementById("pattern-render").onclick = async () => {
+  try {
+    const clip = await api(`/api/music/render?track_id=${selectedTrack}&bars=1`, { method: "POST" });
+    selectedClip = clip.id;
+    await refreshClips();
+  } catch (e) { alert(e.message); }
 };
 
 // Chat
@@ -590,6 +690,7 @@ document.getElementById("fusion-refresh").onclick = refreshFusion;
 
 setupTabs();
 loadAudioSettings();
+loadMusic();
 refreshStatus();
 refreshTracks();
 refreshClips();
