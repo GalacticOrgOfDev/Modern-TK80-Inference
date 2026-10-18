@@ -31,6 +31,7 @@ from .audio import (
     DEFAULT_SAMPLE_RATE,
     SCARLETT_PROFILES,
     UPLOAD_DIR,
+    default_master,
     detect_scarlett,
     make_clip,
     make_track,
@@ -38,6 +39,7 @@ from .audio import (
     process_clip,
     save_upload,
 )
+from .effects import apply_effect
 from .music import (
     DEFAULT_BPM,
     INSTRUMENTS,
@@ -74,6 +76,7 @@ _asio_recorder = AsioRecorder()
 _asio_track_id: Optional[int] = None
 _bpm: float = DEFAULT_BPM
 _pattern: Dict[str, List[int]] = make_pattern()
+_master: Dict[str, Any] = default_master()
 
 
 def get_ic() -> Interconnector:
@@ -109,21 +112,29 @@ def _validate_rate_for_track(track: Dict[str, Any], rate: int) -> None:
 
 
 def _refresh_clip(clip: Dict[str, Any], path: Path) -> None:
-    """Update a clip after a file rewrite."""
+    kept = {
+        "mute": clip.get("mute", False),
+        "effects": clip.get("effects"),
+        "gain": clip.get("gain", 1.0),
+        "position": clip.get("position", 0.0),
+        "track_id": clip.get("track_id"),
+    }
     fresh = make_clip(
         clip["id"],
         path.name,
         path,
-        track_id=clip.get("track_id"),
+        track_id=kept["track_id"],
         sample_rate=clip.get("sample_rate", _sample_rate),
-        position=clip.get("position", 0.0),
+        position=kept["position"],
     )
+    fresh["mute"] = kept["mute"]
+    if kept["effects"]:
+        fresh["effects"] = kept["effects"]
+    clip.clear()
     clip.update(fresh)
-    clip["id"] = fresh["id"]
 
 
 def _dispatch_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
-    """Run a music tool and return its result. Shared by chat and the tool endpoint."""
     global _bpm
     track_id = args.get("track_id")
     if track_id is None:
@@ -281,6 +292,23 @@ class ToolRequest(BaseModel):
 
 class BounceRequest(BaseModel):
     name: str = "mix.wav"
+
+
+class MasterRequest(BaseModel):
+    gain: Optional[float] = None
+    mute: Optional[bool] = None
+    compressor: Optional[Dict[str, Any]] = None
+
+
+class EffectRequest(BaseModel):
+    clip_id: int
+    kind: str
+    params: Dict[str, Any] = {}
+
+
+class ClipMuteRequest(BaseModel):
+    clip_id: int
+    mute: bool
 
 
 class VideoEditRequest(BaseModel):
@@ -444,6 +472,7 @@ def audio_settings() -> Dict[str, Any]:
         "asio_profile": asio_profile(_sample_rate, _asio_buffer),
         "asio_recording": _asio_recorder.recording,
         "bpm": _bpm,
+        "master": _master,
     }
 
 
@@ -467,7 +496,25 @@ def set_audio_settings(body: AudioSettingsRequest) -> Dict[str, Any]:
         "asio_profile": asio_profile(_sample_rate, _asio_buffer),
         "asio_probe": probe_asio(),
         "bpm": _bpm,
+        "master": _master,
     }
+
+
+@app.get("/api/audio/master")
+def get_master() -> Dict[str, Any]:
+    return _master
+
+
+@app.post("/api/audio/master")
+def set_master(body: MasterRequest) -> Dict[str, Any]:
+    if body.gain is not None:
+        _master["gain"] = max(0.0, body.gain)
+    if body.mute is not None:
+        _master["mute"] = body.mute
+    if body.compressor is not None:
+        comp = _master.setdefault("compressor", {})
+        comp.update(body.compressor)
+    return _master
 
 
 @app.get("/api/audio/asio/devices")
@@ -541,8 +588,7 @@ def asio_stop() -> Dict[str, Any]:
 
 @app.post("/api/audio/mix")
 def mix_audio() -> Dict[str, Any]:
-    """Bounce the arrangement to a stereo WAV and return the mix clip."""
-    path = mix_arrangement(_audio_clips, _audio_tracks, _sample_rate, "mix.wav")
+    path = mix_arrangement(_audio_clips, _audio_tracks, _sample_rate, "mix.wav", _master)
     clip = make_clip(len(_audio_clips), path.name, path, track_id=None, sample_rate=_sample_rate)
     clip["mix"] = True
     _audio_clips.append(clip)
@@ -554,14 +600,13 @@ def bounce_audio(body: BounceRequest) -> Dict[str, Any]:
     name = Path(body.name).name or "mix.wav"
     if not name.endswith(".wav"):
         name += ".wav"
-    path = mix_arrangement(_audio_clips, _audio_tracks, _sample_rate, name)
+    path = mix_arrangement(_audio_clips, _audio_tracks, _sample_rate, name, _master)
     clip = make_clip(len(_audio_clips), path.name, path, track_id=None, sample_rate=_sample_rate)
     clip["mix"] = True
     _audio_clips.append(clip)
     return clip
 
 
-# ---- Music: BPM, sequencer, instruments, loops, tools ----
 @app.get("/api/music/state")
 def music_state() -> Dict[str, Any]:
     return {
@@ -737,6 +782,37 @@ def audio_file(clip_id: int):
     return FileResponse(path)
 
 
+@app.post("/api/audio/clips/mute")
+def clip_mute(body: ClipMuteRequest) -> Dict[str, Any]:
+    if body.clip_id < 0 or body.clip_id >= len(_audio_clips):
+        raise HTTPException(status_code=404, detail="clip not found")
+    clip = _audio_clips[body.clip_id]
+    clip["mute"] = body.mute
+    return clip
+
+
+@app.post("/api/audio/clips/effect")
+def clip_effect(body: EffectRequest) -> Dict[str, Any]:
+    if body.clip_id < 0 or body.clip_id >= len(_audio_clips):
+        raise HTTPException(status_code=404, detail="clip not found")
+    clip = _audio_clips[body.clip_id]
+    path = clip.get("path")
+    if not path or not Path(path).exists():
+        raise HTTPException(status_code=400, detail="clip has no file")
+    if body.kind not in ("normalize", "compress", "morph"):
+        raise HTTPException(status_code=400, detail="unknown effect")
+    try:
+        new_path = apply_effect(Path(path), body.kind, body.params)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    effects = clip.setdefault("effects", {})
+    slot = effects.setdefault(body.kind, {})
+    slot["enabled"] = True
+    slot.update(body.params)
+    _refresh_clip(clip, new_path)
+    return clip
+
+
 @app.post("/api/audio/edit")
 def edit_audio(body: AudioEditRequest) -> Dict[str, Any]:
     if body.clip_id < 0 or body.clip_id >= len(_audio_clips):
@@ -752,12 +828,7 @@ def edit_audio(body: AudioEditRequest) -> Dict[str, Any]:
 
     try:
         if body.action == "trim":
-            new_path = process_clip(
-                Path(path),
-                "trim",
-                start=body.start or 0.0,
-                end=body.end,
-            )
+            new_path = process_clip(Path(path), "trim", start=body.start or 0.0, end=body.end)
         elif body.action == "gain":
             new_path = process_clip(Path(path), "gain", gain=body.gain if body.gain is not None else 1.0)
         elif body.action == "reverse":
