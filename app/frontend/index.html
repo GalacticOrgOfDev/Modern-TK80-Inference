@@ -125,8 +125,10 @@
         <h2>Mini Audio Studio</h2>
         <div class="transport">
           <button id="audio-play">Play</button>
+          <button id="audio-play-mix">Play mix</button>
           <button id="audio-stop">Stop</button>
           <button id="audio-record">Record</button>
+          <button id="audio-bounce">Bounce</button>
           <span id="audio-transport-status">Ready</span>
           <span id="rate-pill">44100 Hz</span>
           <span id="bpm-pill">120 BPM</span>
@@ -141,13 +143,15 @@
         <div id="audio-clips" class="clip-list"></div>
         <div class="edit-row">
           <label>Clip #<input id="audio-clip-id" type="number" value="0" /></label>
-          <label>Start<input id="audio-start" type="number" value="0" step="0.1" /></label>
-          <label>End<input id="audio-end" type="number" value="5" step="0.1" /></label>
+          <label>Trim start<input id="audio-start" type="number" value="0" step="0.1" /></label>
+          <label>Trim end<input id="audio-end" type="number" value="5" step="0.1" /></label>
           <label>Gain<input id="audio-gain" type="number" value="1" step="0.1" /></label>
+          <label>Position<input id="audio-position" type="number" value="0" step="0.1" /></label>
           <button id="audio-trim">Trim</button>
           <button id="audio-gain-btn">Set gain</button>
           <button id="audio-reverse">Reverse</button>
           <button id="audio-silence">Silence</button>
+          <button id="audio-set-position">Set position</button>
         </div>
         <pre id="audio-output"></pre>
       </div>
