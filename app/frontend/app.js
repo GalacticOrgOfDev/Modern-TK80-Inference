@@ -702,6 +702,53 @@ document.getElementById("fx-compress").onclick = () =>
 document.getElementById("fx-morph").onclick = () =>
   applyEffect("morph", { points: [[0, 0.2], [0.25, 1], [0.5, 0.4], [0.75, 1], [1, 0.2]] });
 
+// 30-band EQ: 100 Hz to 20 kHz, log spaced
+const EQ_BANDS = 30;
+const EQ_LOW = 100;
+const EQ_HIGH = 20000;
+function eqFreq(i) {
+  const ratio = Math.pow(EQ_HIGH / EQ_LOW, 1 / (EQ_BANDS - 1));
+  return EQ_LOW * Math.pow(ratio, i);
+}
+function dbFromGain(g) {
+  return 20 * Math.log10(Math.max(0.001, g));
+}
+const eqSliders = document.getElementById("eq-sliders");
+const eqTip = document.getElementById("eq-tip");
+if (eqSliders) {
+  for (let i = 0; i < EQ_BANDS; i++) {
+    const band = document.createElement("div");
+    band.className = "eq-band";
+    const input = document.createElement("input");
+    input.type = "range";
+    input.min = "0.25";
+    input.max = "4";
+    input.step = "0.01";
+    input.value = "1";
+    input.dataset.band = String(i);
+    const label = document.createElement("span");
+    const hz = eqFreq(i);
+    label.textContent = hz >= 1000 ? (hz / 1000).toFixed(1) + "k" : Math.round(hz);
+    const showTip = () => {
+      const g = Number(input.value);
+      const db = dbFromGain(g);
+      const sign = db >= 0 ? "+" : "";
+      eqTip.textContent = `${label.textContent} Hz: ${sign}${db.toFixed(1)} dB`;
+    };
+    input.oninput = showTip;
+    input.onmouseenter = showTip;
+    input.onmouseleave = () => { eqTip.textContent = "Hover a slider"; };
+    band.appendChild(input);
+    band.appendChild(label);
+    eqSliders.appendChild(band);
+  }
+}
+document.getElementById("fx-eq").onclick = () => {
+  const gains = [];
+  document.querySelectorAll("#eq-sliders input").forEach((el) => gains.push(Number(el.value)));
+  applyEffect("eq", { gains });
+};
+
 document.getElementById("vst-make").onclick = async () => {
   const name = document.getElementById("vst-name").value.trim() || "MyPlugin";
   const plugin_type = document.getElementById("vst-type").value;
