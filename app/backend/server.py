@@ -46,7 +46,7 @@ from .music import (
     render_pattern,
     save_pcm,
 )
-from .tools import list_tools, parse_intent
+from .tools import list_tools, parse_intent, parse_tool_call, tool_prompt
 
 log = logging.getLogger("tk80.app")
 
@@ -168,6 +168,16 @@ def _dispatch_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         return result
 
     raise HTTPException(status_code=400, detail=f"unknown tool: {name}")
+
+
+def _tool_summary(result: Dict[str, Any]) -> str:
+    if "clip" in result:
+        return f"Created {result['clip']['name']} on track {result['clip']['track_id']}."
+    if "bpm" in result:
+        return f"BPM set to {result['bpm']}."
+    if "error" in result:
+        return f"Tool error: {result['error']}"
+    return "Tool ran."
 
 
 class LoadRequest(BaseModel):
@@ -330,30 +340,59 @@ def chat(body: ChatRequest) -> Dict[str, Any]:
     _chat.clear()
     _chat.extend(messages)
 
-    # Tool intercept: if the last user message is a music command, run it.
     last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
     intent = parse_intent(last_user)
     tool_result: Optional[Dict[str, Any]] = None
-    if intent:
+
+    # Direct command path: no model needed.
+    if intent and not parse_tool_call(last_user):
         tool_result = _dispatch_tool(intent["name"], intent.get("args", {}))
-        text = f"Ran {intent['name']}."
-        if "clip" in tool_result:
-            text = f"Created {tool_result['clip']['name']} on track {tool_result['clip']['track_id']}."
-        elif "bpm" in tool_result:
-            text = f"BPM set to {tool_result['bpm']}."
+        text = _tool_summary(tool_result)
         _chat.append({"role": "assistant", "content": text})
         return {"result": text, "history": _chat, "tool": tool_result}
 
+    ic = get_ic()
+    die = body.die
+    if die is None:
+        loaded = list(ic._models.keys())
+        die = loaded[0] if loaded else None
+    modality = ic._modality.get(die) if die is not None else None
+
+    # Agent path: model emits tool calls, studio runs them, result is fed back.
+    if modality == "agent":
+        result = ic.generate(
+            {
+                "goal": last_user,
+                "tools": list_tools(),
+                "tool_prompt": tool_prompt(),
+                "tool_runner": _dispatch_tool,
+            },
+            die=die,
+        )
+        text = result.get("result", "") if isinstance(result, dict) else str(result)
+        tools_used = [
+            s.get("tool") for s in (result.get("steps") or []) if isinstance(result, dict) and s.get("tool")
+        ]
+        _chat.append({"role": "assistant", "content": text})
+        return {"result": text, "history": _chat, "steps": result.get("steps") if isinstance(result, dict) else [], "tools": tools_used}
+
     try:
-        result = get_ic().generate(
+        result = ic.generate(
             {"messages": messages, "max_tokens": body.max_tokens, "temperature": body.temperature},
-            die=body.die,
+            die=die,
         )
     except InterconnectorError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     text = result if isinstance(result, str) else str(result)
+
+    # LLM may emit a tool call in its reply. Run it once and append the result.
+    call = parse_tool_call(text)
+    if call:
+        tool_result = _dispatch_tool(call["name"], call.get("args", {}))
+        text = f"{text}\n\n{_tool_summary(tool_result)}"
+
     _chat.append({"role": "assistant", "content": text})
-    return {"result": text, "history": _chat}
+    return {"result": text, "history": _chat, "tool": tool_result}
 
 
 @app.get("/api/chat/history")
