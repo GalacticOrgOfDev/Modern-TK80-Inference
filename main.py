@@ -14,9 +14,6 @@ Hardware notes:
 Backends:
 - llama-cpp-python (CUDA build targeting sm_37) for GGUF models
 - PyTorch (cu118) for Hugging Face models
-
-Inspired by PoliSim's core.inference patterns (engine + device selection)
-but adapted for CUDA / dual K80 dies.
 """
 
 from __future__ import annotations
