@@ -1,30 +1,30 @@
-# Packaging for Windows 10+
+# Packaging
 
-Goal: a single installer that does not require the user to install Python.
+Target artifact: `Modern-TK80.exe` installed by `MTK80Setup.msi`.
 
-## Planned steps
+## What the MSI does
 
-1. **Backend binary**  
-   PyInstaller the FastAPI server + interconnector + required DLLs (CUDA, llama.cpp).
+1. Installs `Modern-TK80.exe` to `Program Files\Modern-TK80`.
+2. Bundles the frontend next to the exe.
+3. Runs the dependency installer (`scripts/install.ps1`) so fastapi, uvicorn, pywebview, and the rest of `requirements.txt` are present.
+4. Creates a Start Menu shortcut.
 
-2. **Frontend**  
-   Bundle `app/frontend/` as static files next to the binary.
+## Build steps
 
-3. **Launcher**  
-   A small native launcher (or pywebview) that starts the backend and opens the window.
+1. PyInstaller the launcher:
+   ```
+   pyinstaller --name Modern-TK80 --windowed app/launcher.py
+   ```
+2. Copy `app/frontend` next to the exe.
+3. WiX or a similar tool builds `MTK80Setup.msi` from `packaging/Product.wxs`.
 
-4. **Installer**  
-   Inno Setup or MSIX to produce a Windows 10+ installer.
+## Requirements on the target
 
-## Development run
+- Windows 10 or later
+- For K80 inference: R470 driver and CUDA 11.8
+- For non-WAV audio and video split: ffmpeg (installer can call `scripts/install_ffmpeg.sh`)
 
-```bash
-pip install fastapi uvicorn pywebview
-python -m app.launcher
-```
+## Status
 
-## Notes
-
-- CUDA 11.8 and the R470 driver must be present on the target machine for K80 use.
-- The installer should detect or document the driver requirement.
-- Video studio remains a shell until smaller video models or dual-die unification are ready.
+The WiX skeleton is in `Product.wxs`. It is not a signed production MSI yet.
+file_path="/workspace/artifacts/Modern-TK80-Inference/app/packaging/README.md"
