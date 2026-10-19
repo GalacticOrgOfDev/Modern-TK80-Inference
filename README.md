@@ -1,185 +1,123 @@
 # Modern-TK80-Inference
 
-Modern NVIDIA Tesla K80 inference engine, drivers, and custom interconnector.
+Windows 10+ creator app and Tesla K80 inference backend.
 
-## Overview
+The K80 is two independent 12 GB dies. Official support ended with CUDA 11.x and the R470 driver. The interconnector presents a modern interface on that baseline. Newer GPUs in the same cluster can run other workloads.
 
-This repository remasters the Tesla K80 (Kepler, compute capability 3.7 / `sm_37`) so it can participate in modern inference.
+## App
 
-The K80 is two independent 12 GB dies. Official support ended with CUDA 11.x and the R470 driver branch. The custom interconnector presents a modern interface while running on that baseline.
+Native window via FastAPI and pywebview. Not a browser tab.
 
-**Hybrid use:** K80 dies serve as a dedicated backend; newer GPUs in the same cluster handle other workloads.
+| Studio | What ships today | What is staged |
+|--------|------------------|----------------|
+| Chat | Multi-turn chat, tool indicator, direct commands | K80 inference when a die is connected |
+| DAW | Tracks, clips, ASIO record, sequencer, instruments, mix, bounce, 30-band EQ, undo | VST binary compile needs the SDK on the machine |
+| Video | Timeline, clips, text, VFX render (ffmpeg), audio split, MP4 encode | Validated glTF/FBX/BVH binaries |
+| Fusion | Status and plan | Dual-die data movement |
+| Fusion | Status and activation plan | Real dual-die data movement |
 
-## Custom App (Windows 10+)
-
-The primary interface is the custom app in [`app/`](./app/):
-
-- **Chat** — LLM or agent modality, with a tool indicator
-- **Mini DAW** — layered tracks, ASIO recording, sequencer, instruments, loops, mix, bounce
-- **Mini video studio** — frame timeline (image models)
-- **DieFusionCore** — future dual-die unification
+Launch:
 
 ```bash
-pip install fastapi uvicorn pywebview
 python -m app.launcher
 ```
 
-Opens a native window. Packaging notes for a Windows installer are in `app/packaging/`.
+Requires `pywebview`. Install with `scripts/install.sh` or `pip install -r requirements.txt`.
 
-## Mini DAW
+## DAW
 
-- Layered tracks with stereo / left / right channeling, per-track level faders, mute, and solo
-- Master bus with level, mute, and compressor (threshold / ratio / makeup)
-- Arm a track for a detected ASIO input
-- Sample rate (default 44100 Hz) with Focusrite Scarlett 2i2 Gen 1/2 profile detection
-- Native ASIO path (sounddevice / PortAudio). Prefer 64-sample buffer at 44100 Hz (~1.5 ms)
-- Live waveform on the armed track while recording
-- Instrument generator (kick, snare, hat, bass, lead, pad)
-- 16-step sequencer, BPM detect/set, loop/sample generation
-- Clip edits rewrite the WAV: trim, reverse, gain, silence
-- Per-clip level fader and mute toggle (inline on the clip list)
-- Per-clip effect channels: normalize, compressor, morphable envelope, delay, 30-band EQ (100 Hz–20 kHz), simple reverb
-- Undo stack restores the previous clip snapshot (20 steps) on every edit and effect
-- See [`app/backend/DAW.md`](./app/backend/DAW.md) for the full DAW reference
-- Transitions carry kind and duration
-- Timeline position per clip
-- True 16-bit peaks for the waveform
-- Play mix and bounce the arrangement to a stereo WAV (respects track mute/solo/gain, clip mute/gain, channel, position, and master bus)
-- MP3, FLAC, OGG, AIFF, M4A, and AAC are accepted and stored; WAV is the only processable format for edits and mix
-- Undo stack for audio edits (`undo` tool, 20 steps)
-- Video formats accepted: MP4, MOV, WebM, AVI, MKV, MPEG (stored; encode later)
-- Custom VFX stubs now carry parameters for later expansion
+Ships:
 
-### VST Maker
+- Tracks with stereo / left / right, level, mute, solo, arm
+- Master bus with level, mute, compressor
+- ASIO recording (sounddevice). Scarlett 2i2 Gen 1/2 profile when the device name matches
+- Sample rate default 44100 Hz
+- Instruments: kick, snare, hat, bass, lead, pad
+- 16-step sequencer, BPM set/detect, loop generation
+- Clip edits rewrite WAV: trim, reverse, gain, silence, fade
+- Effects: normalize, compress, morph, delay, 30-band EQ (100 Hz–20 kHz), simple reverb
+- Undo (20 steps)
+- Play mix and bounce to stereo WAV
+- Stored formats: WAV, MP3, FLAC, OGG, AIFF, M4A, AAC, WMA. Non-WAV converts via ffmpeg before edit.
 
-Generates VST3 source that targets the Steinberg VST3 SDK or a JUCE AudioPlugin project. Models can call `make_vst` (or the user can use the sidebar) to produce:
+Staged:
 
-- reverb
-- subpump
-- autotune
-- noise suppression
-- delay
-- distortion
-- custom
+- VST maker writes `.cpp` for VST3/JUCE. Binary `.vst3` requires the Steinberg SDK and a C++ toolchain on the machine (`scripts/install_vst3sdk.sh`, then press).
+- VST UI builder: drag-and-drop knobs, sliders, buttons, labels; bind to parameters; export source plus layout JSON. Same SDK requirement for a binary.
 
-Output is a `.cpp` file with parameters wired and a starter DSP stub in `processBlock`. Full binary compilation still requires the VST3 SDK on the machine.
+## Video / VFX
 
-### VST UI Builder
+Ships:
 
-Drag-and-drop canvas for designing a plugin interface. Object types:
+- Timeline of clips with prompt, duration, and path
+- Built-in VFX names: none, fade, zoom, pan, color_grade, overlay
+- Custom VFX from any prompt (`POST /api/vfx/render?prompt=...`). Keywords map to ffmpeg filters; unknown prompts still produce a playable clip.
+- Animation writers: JSON, glTF 2.0, BVH, and text FBX.
+- Text objects with texture name, position, style
+- `text_scene` stores a sequence of VFX names on a text object
+- Transitions: cut, crossfade, wipe, dissolve (kind and duration stored)
+- 3D object records (text mesh or model path)
+- Animation clip records
+- Export timeline as JSON manifest
+- Split audio from a video file via ffmpeg (`POST /api/video/split`)
+- Encode timeline to MP4 via ffmpeg (`POST /api/video/encode`)
+- Video store: MP4, MOV, WebM, AVI, MKV, MPEG, WMV
 
-- knob
-- vertical slider
-- horizontal slider
-- button
-- label
+Staged:
 
-Models can add parameters and objects via tools. Users drag objects onto the canvas, bind them to parameters (e.g. a knob to `input_level`, vertical sliders to frequencies), name the project, and press to VST. Export writes the source plus a layout JSON. Duplicate parameter names are rejected.
+- Animation export: JSON, glTF 2.0, BVH, and text FBX.
+- Full MP4 encode is not implemented.
+- Custom VFX stubs are not rendered.
 
-## Movie / VFX Studio
+## Tools
 
-- Timeline of clips (prompt, duration, optional image or MP4 path)
-- Built-in VFX: none, fade, zoom, pan, color grade, overlay
-- Custom VFX by name: models can invent effects such as tv_static, fire_hand, lightning, etc.
-- Each custom VFX writes a starter stub under `uploads/vfx/` so it can be expanded later
-- Load image model and generate frames
-- Video and audio tracks on the movie timeline
-- Split audio from a video clip (`POST /api/video/split`) via ffmpeg
-- ffmpeg installer: `scripts/install_ffmpeg.sh`
-- Reorder, set duration, apply VFX
-- Models can call `vfx_make`, `vfx_add`, and `vfx_apply`
-- Text objects: create text, set texture (stone, metal, etc.), position on the timeline, and attach VFX
-- `text_scene` builds a text object and applies a sequence of VFX in one call (e.g. stone text that falls, impacts with rubble, then is wrapped in lightning)
-- Clip transitions: cut, crossfade, wipe, dissolve (model tool `video_transition`)
-- Text styling: size, color, and alignment (`text_style`)
-- 3D objects: turn text into a 3D object or place a model file (.obj, .gltf, .glb, .fbx)
-- Animation clips on 3D and text objects (`add_animation`)
-- Animation export formats: json, gltf, fbx, bvh (`export_anim`)
-- Audio fades: linear fade-in and fade-out helper on clips
-- Export timeline as a full JSON manifest (clips, text, 3D objects, transitions)
-- Dedicated exporter module stages animation formats (json native; gltf/fbx/bvh staged) and records audio bounces
-- Full mp4 encode comes later
-
-## Music and VST tools
-
-The model (or a direct chat command) can call:
-
-| Tool | Purpose |
-|------|---------|
-| `set_bpm` | Set studio BPM (40–220) |
-| `generate_instrument` | Render a hit or tone to a clip |
-| `generate_loop` | Generate a short loop at the current BPM |
-| `render_pattern` | Bounce the step pattern to a clip |
-| `detect_bpm` | Estimate BPM from a clip |
-| `make_vst` | Generate VST3 source for reverb, subpump, autotune, noise_suppression, delay, distortion, or custom |
-| `vst_add_param` | Add a parameter to the current VST UI project (rejects duplicates) |
-| `vst_add_object` | Place a knob, slider, button, or label on the VST canvas |
-| `vst_bind` | Bind a UI object to a parameter by name |
-| `vst_export` | Export the VST UI project to source plus layout JSON |
-| `vfx_add` | Add a clip with a built-in or custom VFX name |
-| `vfx_apply` | Apply any VFX name to an existing clip |
-| `vfx_make` | Create a custom VFX by name and write a starter stub |
-| `text_add` | Create a text object with texture and timeline position |
-| `text_scene` | Create text and apply a sequence of VFX steps |
-| `text_vfx` | Attach a VFX to an existing text object |
-| `video_transition` | Set the transition after a clip (cut, crossfade, wipe, dissolve) |
-| `text_style` | Set size, color, and alignment on a text object |
-| `make_3d` | Create a 3D text or model object |
-| `add_animation` | Add an animation clip to a 3D or text object |
-| `export_anim` | Export an animation file (json, gltf, fbx, bvh) |
-| `undo` | Undo the last audio edit |
-
-Chat routes by modality:
-
-- Direct command (“make a kick”, “make a reverb vst”) runs immediately, no model required
-- Agent modality runs a tool loop: model emits `tool: name {json}`, studio runs it, result is fed back (up to 4 steps)
-- LLM modality runs a single tool call if the reply contains one
-
-The chat pane shows the tool that just ran.
-
-## Other entry points
-
-- `python main.py` — CLI over the interconnector
-- `python -m drivers.interconnector.cli` — same surface
-- Python API: `from drivers.interconnector import Interconnector`
-
-The Tkinter GUI in `gui/` is deprecated in favor of the custom app.
+The model or a direct chat command can call the tools in `app/backend/tools.py`. Direct commands run without a loaded model. Agent modality runs a tool loop. LLM modality runs one tool call if the reply contains one.
 
 ## Interconnector
 
-Lives in [`drivers/interconnector/`](./drivers/interconnector/).
+`drivers/interconnector/`:
 
-It provides:
-
-- Die discovery and tracking (never assumes unified 24 GB)
-- Translation of modern request formats
-- Explicit dual-die split modes (`single`, `dual`, `layer`)
+- Die discovery (never assumes unified 24 GB)
+- Request translation
+- Split modes: single, dual, layer
 - Hybrid cluster advertisement
 - Thermal and performance monitoring
-- Modality routing: LLM, image, voice, agent (video placeholder)
-- Tool-calling loop for the agent modality
+- Modality routing: LLM, image, voice, agent
 
-## Drivers
+## Install
 
-Last official support is the R470 branch. See [`drivers/`](./drivers/).
+Windows:
 
-## CUDA Baseline
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/install.ps1
+```
 
-CUDA 11.8 is the last toolkit that can target `sm_37`. See [`cuda/`](./cuda/).
+The script installs Python 3.12 if it is missing, then fastapi, uvicorn, python-multipart, pywebview, sounddevice, diffusers, transformers, pynvml, torch, and llama-cpp-python.
 
-## Backends
+Linux/macOS:
 
-- llama.cpp (CUDA build for `sm_37`)
-- PyTorch (FP32, single die)
-- diffusers (image, optional)
-- transformers (voice, optional)
+```bash
+scripts/install.sh
+```
 
-## Quick Start
+Torch and llama-cpp need Python 3.11-3.14.
 
-1. Install R470 driver and CUDA 11.8.
-2. Build llama-cpp-python: `./scripts/build_llama_cuda.sh`
-3. Launch the custom app: `python -m app.launcher`
+## Packaging
+
+Target: `Modern-TK80.exe` installed by `MTK80Setup.msi`.
+
+See `app/packaging/README.md`. The MSI installs the app and its Python dependencies.
+
+## Tests
+
+```bash
+python -m pytest tests/
+```
 
 ## Status
 
-Custom Windows app is in place with chat, mini DAW (ASIO, Scarlett, sequencer, instruments, loops, live waveform, real clip edits, timeline position, mix/bounce, VST maker and UI builder), movie/VFX studio (frames, MP4, custom VFX, text, 3D objects, animation, transitions), and a dedicated exporter. Agent tool-calling is wired. Full encode and packaging come next.
+- App launches without a K80. Connect is a button.
+- DAW mix and bounce produce WAV.
+- Video encode and real VFX rendering are staged.
+- Dual-die fusion is a plan, not a runtime.
+file_path="/workspace/artifacts/Modern-TK80-Inference/README.md"

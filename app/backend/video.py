@@ -213,6 +213,75 @@ def make_clip(
     }
 
 
+def render_vfx(name: str, duration: float = 2.0, width: int = 640, height: int = 360, prompt: str = "") -> Path:
+    """Render a VFX to an MP4 from a name or free-form prompt.
+
+    The prompt is scanned for keywords and mapped to an ffmpeg filter.
+    Unknown prompts still produce a playable clip.
+    """
+    import shutil
+    import subprocess
+    if not shutil.which("ffmpeg"):
+        raise ValueError("ffmpeg is required to render VFX")
+    text = (prompt or name or "effect").lower()
+    safe = _safe_name(name or text[:24])
+    dest = VFX_DIR / f"{safe}.mp4"
+    filt = _filter_for(text)
+    subprocess.run(
+        ["ffmpeg", "-y", "-f", "lavfi", "-i", f"color=c=black:s={width}x{height}:d={duration}",
+         "-vf", filt, "-c:v", "libx264", "-pix_fmt", "yuv420p", str(dest)],
+        check=True, capture_output=True,
+    )
+    return dest
+
+
+def design_vfx(prompt: str) -> Dict[str, Any]:
+    """Turn any prompt into a VFX design with filters and parameters."""
+    text = (prompt or "effect").strip()
+    lower = text.lower()
+    layers = []
+    if any(w in lower for w in ("static", "noise", "tv")):
+        layers.append("noise=alls=20:allf=t+u")
+    if any(w in lower for w in ("fire", "flame", "burn")):
+        layers.append("eq=saturation=2:gamma_r=1.5")
+    if any(w in lower for w in ("lightning", "electric", "spark")):
+        layers.append("eq=brightness=0.4:contrast=1.6")
+    if any(w in lower for w in ("smoke", "fog", "haze")):
+        layers.append("eq=brightness=-0.15:saturation=0.6")
+    if any(w in lower for w in ("rain", "storm")):
+        layers.append("noise=alls=6:allf=t")
+    if any(w in lower for w in ("snow", "blizzard")):
+        layers.append("noise=alls=4:allf=t,eq=brightness=0.2")
+    if any(w in lower for w in ("glitch", "corrupt")):
+        layers.append("noise=alls=40:allf=t,eq=contrast=1.8")
+    if any(w in lower for w in ("fade", "dissolve")):
+        layers.append("fade=t=in:st=0:d=0.4")
+    if any(w in lower for w in ("zoom", "punch")):
+        layers.append("zoompan=z='min(zoom+0.002,1.5)':d=60:s=640x360")
+    if not layers:
+        layers.append("noise=alls=10:allf=t,eq=saturation=1.3")
+    return {"prompt": text, "filter": ",".join(layers), "layers": layers}
+    """Map any prompt to an ffmpeg filter chain."""
+    rules = [
+        ("static", "noise=alls=20:allf=t+u"),
+        ("noise", "noise=alls=20:allf=t+u"),
+        ("fire", "noise=alls=12:allf=t,eq=saturation=2:gamma_r=1.4"),
+        ("flame", "noise=alls=12:allf=t,eq=saturation=2"),
+        ("lightning", "noise=alls=30:allf=t,eq=brightness=0.4:contrast=1.5"),
+        ("electric", "noise=alls=25:allf=t,eq=brightness=0.3"),
+        ("fade", "fade=t=in:st=0:d=0.5,fade=t=out:st=1.5:d=0.5"),
+        ("smoke", "noise=alls=8:allf=t,eq=brightness=-0.1"),
+        ("rain", "noise=alls=6:allf=t"),
+        ("snow", "noise=alls=4:allf=t,eq=brightness=0.2"),
+        ("glitch", "noise=alls=40:allf=t,eq=contrast=1.8"),
+        ("zoom", "zoompan=z='min(zoom+0.002,1.5)':d=60:s=640x360"),
+    ]
+    for key, filt in rules:
+        if key in text:
+            return filt
+    return "noise=alls=10:allf=t,eq=saturation=1.2"
+
+
 def make_vfx(name: str, description: str = "", params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Create a custom VFX by name and write a starter stub with parameters.
 

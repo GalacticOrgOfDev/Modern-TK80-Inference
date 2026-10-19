@@ -1,33 +1,36 @@
 # Modern-TK80 App
 
-Starter creator setup for Windows 10 and later.
+Windows 10+ creator app. Native window via pywebview.
 
 ## Studios
 
-- **Chat** — multi-turn LLM conversation with history
-- **Audio** — mini studio: add clips, trim, gain, reverse, silence, transcribe
-- **Video** — mini studio: add / generate / delete frames, set duration, timeline
-- **Fusion** — DieFusionCore status and activation
+| Tab | Ships | Staged |
+|-----|-------|--------|
+| Chat | History, tool indicator, direct commands | K80 inference on Connect |
+| Audio | Tracks, clips, ASIO, sequencer, effects, mix, bounce, 30-band EQ | VST binary needs SDK |
+| Video | Timeline, text, VFX stubs, audio split, JSON export | MP4 encode, real VFX render |
+| Fusion | Status and plan | Dual-die data movement |
 
-## Architecture
+## Layout
 
 ```
 app/
-  backend/          FastAPI (chat, audio edit, video edit, fusion)
-  frontend/         Custom HTML/CSS/JS
-  launcher.py       Native window via pywebview
+  backend/     FastAPI
+  frontend/    HTML/CSS/JS
+  launcher.py  pywebview window
+  packaging/   MSI notes
 ```
 
 ## Run
 
 ```bash
-pip install fastapi uvicorn pywebview
+pip install -r requirements.txt
 python -m app.launcher
 ```
 
-## DieFusionCore
+Connect is manual. The DAW does not need a GPU.
 
-Foundation for treating the two independent K80 dies as one logical device.
-See `drivers/interconnector/diefusion.py` and the Fusion tab.
+## Packaging
 
-Strategies planned: pipeline, layer, data. Data movement comes next.
+`Modern-TK80.exe` via `MTK80Setup.msi`. See `packaging/README.md`.
+file_path="/workspace/artifacts/Modern-TK80-Inference/app/README.md"

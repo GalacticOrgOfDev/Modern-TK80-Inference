@@ -41,7 +41,7 @@ from .audio import (
     save_upload,
 )
 from .effects import apply_effect
-from .vst import make_vst, PLUGIN_TYPES, EFFECT_PRESETS
+from .vst import make_vst, PLUGIN_TYPES, EFFECT_PRESETS, list_library
 from .vst_ui import (
     OBJECT_TYPES,
     add_object,
@@ -51,7 +51,7 @@ from .vst_ui import (
     export_project,
     list_presets,
 )
-from .export import export_animation, export_timeline as export_full_timeline
+from .export import encode_mp4, export_animation, export_timeline as export_full_timeline
 from .video import (
     ANIM_FORMATS,
     BUILTIN_VFX,
@@ -65,6 +65,7 @@ from .video import (
     make_text_scene,
     make_vfx,
     reorder,
+    render_vfx,
     save_video,
     set_text_style,
     set_transition,
@@ -263,11 +264,10 @@ def _dispatch_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         plugin_name = str(args.get("name", "GeneratedPlugin"))
         effect = str(args.get("effect", "custom"))
         plugin_type = str(args.get("plugin_type", "effect"))
-        if effect not in EFFECT_PRESETS:
-            effect = "custom"
+        prompt = str(args.get("prompt", ""))
         if plugin_type not in PLUGIN_TYPES:
             plugin_type = "effect"
-        result = make_vst(plugin_name, plugin_type, effect)
+        result = make_vst(plugin_name, plugin_type, effect, prompt=prompt)
         result["name"] = "make_vst"
         return result
 
@@ -918,13 +918,24 @@ def create_vst(body: VstRequest) -> Dict[str, Any]:
     """Generate a VST3 source file for the mini DAW."""
     if body.plugin_type not in PLUGIN_TYPES:
         raise HTTPException(status_code=400, detail=f"plugin_type must be one of {PLUGIN_TYPES}")
-    if body.effect not in EFFECT_PRESETS:
-        raise HTTPException(status_code=400, detail=f"effect must be one of {EFFECT_PRESETS}")
+    prompt = body.prompt or ""
+    effect = body.effect
+    if prompt:
+        from .vst import effect_from_prompt
+        effect = effect_from_prompt(prompt)
+    if effect not in EFFECT_PRESETS:
+        effect = "custom"
     try:
-        result = make_vst(body.name, body.plugin_type, body.effect, body.channels, body.params)
+        result = make_vst(body.name, body.plugin_type, effect, body.channels, body.params, prompt=prompt)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     return result
+
+
+@app.get("/api/vst/library")
+def vst_library() -> Dict[str, Any]:
+    """Return every VST the maker has generated this session."""
+    return {"plugins": list_library()}
 
 
 @app.get("/api/vst/presets")
@@ -1282,6 +1293,16 @@ def split_video_audio(path: str) -> Dict[str, Any]:
     """Split the audio track from a video file."""
     try:
         return split_audio(Path(path))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.post("/api/vfx/render")
+def render_vfx_endpoint(name: str = "effect", duration: float = 2.0, prompt: str = "") -> Dict[str, Any]:
+    """Render a VFX from a name or free-form prompt."""
+    try:
+        path = render_vfx(name, duration, prompt=prompt or name)
+        return {"path": str(path), "name": name, "prompt": prompt or name, "rendered": True}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 

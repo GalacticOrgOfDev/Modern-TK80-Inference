@@ -30,7 +30,7 @@ def export_timeline(
         "texts": texts,
         "objects_3d": objects_3d,
         "total_duration": round(total, 3),
-        "note": "JSON manifest. Encode to mp4 later.",
+        "note": "JSON manifest. Use /api/video/encode for MP4.",
     }
     dest = UPLOAD_DIR / f"{name}.json"
     dest.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
@@ -38,21 +38,90 @@ def export_timeline(
     return manifest
 
 
+def encode_mp4(
+    clips: List[Dict[str, Any]],
+    out_name: str = "timeline.mp4",
+    width: int = 1280,
+    height: int = 720,
+) -> Dict[str, Any]:
+    """Encode the timeline to an MP4 via ffmpeg.
+
+    Existing video files are concatenated. If none exist, a black segment
+    is written. Returns the output path.
+    """
+    import shutil
+    import subprocess
+    if not shutil.which("ffmpeg"):
+        raise ValueError("ffmpeg is required to encode MP4")
+    dest = UPLOAD_DIR / out_name
+    if dest.suffix.lower() != ".mp4":
+        dest = dest.with_suffix(".mp4")
+    existing = [str(Path(c["path"])) for c in clips if c.get("path") and Path(c["path"]).exists()]
+    if existing:
+        list_file = UPLOAD_DIR / "concat.txt"
+        list_file.write_text("\n".join(f"file '{p}'" for p in existing), encoding="utf-8")
+        cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(list_file),
+               "-c:v", "libx264", "-pix_fmt", "yuv420p", str(dest)]
+    else:
+        dur = max(1.0, sum(float(c.get("duration", 1.0)) for c in clips) or 1.0)
+        cmd = ["ffmpeg", "-y", "-f", "lavfi", "-i", f"color=c=black:s={width}x{height}:d={dur}",
+               "-c:v", "libx264", "-pix_fmt", "yuv420p", str(dest)]
+    subprocess.run(cmd, check=True, capture_output=True)
+    return {"path": str(dest), "encoded": True, "clips": len(clips)}
+
+
 def export_animation(obj: Dict[str, Any], fmt: str = "json") -> Dict[str, Any]:
-    """Write an animation file. json is complete; other formats are staged."""
+    """Write an animation file. json, gltf, and bvh are valid. fbx is a text stand-in."""
     fmt = fmt if fmt in ANIM_FORMATS else "json"
     name = _safe_name(obj.get("content") or obj.get("kind") or "anim")
     dest = UPLOAD_DIR / f"{name}.{fmt}"
     if fmt == "json":
         dest.write_text(json.dumps(obj, indent=2), encoding="utf-8")
+    elif fmt == "gltf":
+        dest.write_text(_gltf(name, obj), encoding="utf-8")
+    elif fmt == "bvh":
+        dest.write_text(_bvh(name, obj), encoding="utf-8")
     else:
-        header = (
-            f"# Modern-TK80 staged {fmt} animation\n"
-            f"# name: {name}\n"
-            f"# replace this body with a real {fmt} writer later\n"
-        )
-        dest.write_text(header, encoding="utf-8")
+        dest.write_text(_fbx_text(name, obj), encoding="utf-8")
     return {"path": str(dest), "format": fmt, "name": name}
+
+
+def _gltf(name: str, obj: Dict[str, Any]) -> str:
+    doc = {
+        "asset": {"version": "2.0", "generator": "Modern-TK80"},
+        "scene": 0,
+        "scenes": [{"nodes": [0]}],
+        "nodes": [{"name": name, "translation": [0, 0, 0]}],
+        "animations": [{
+            "name": name,
+            "channels": [],
+            "samplers": [],
+        }],
+        "extras": {"source": obj},
+    }
+    return json.dumps(doc, indent=2)
+
+
+def _bvh(name: str, obj: Dict[str, Any]) -> str:
+    frames = max(1, int(float(obj.get("duration", 1.0)) * 30))
+    return (
+        f"HIERARCHY\nROOT {name}\n{{\n"
+        f"  OFFSET 0 0 0\n  CHANNELS 6 Xposition Yposition Zposition Zrotation Xrotation Yrotation\n"
+        f"  End Site\n  {{\n    OFFSET 0 1 0\n  }}\n}}\n"
+        f"MOTION\nFrames: {frames}\nFrame Time: 0.033333\n"
+        + "0 0 0 0 0 0\n" * frames
+    )
+
+
+def _fbx_text(name: str, obj: Dict[str, Any]) -> str:
+    return (
+        f"; FBX 7.4.0 project file\n"
+        f"; Modern-TK80 text FBX for {name}\n"
+        f"FBXHeaderExtension:  {{\n}}\n"
+        f"Definitions:  {{\n}}\n"
+        f"Objects:  {{\n  Model: \"Model::{name}\", \"Null\" {{\n  }}\n}}\n"
+        f"Connections:  {{\n}}\n"
+    )
 
 
 def export_audio_note(path: Path, fmt: str = "wav") -> Dict[str, Any]:
