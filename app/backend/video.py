@@ -213,30 +213,48 @@ def make_clip(
     }
 
 
-def render_vfx(name: str, duration: float = 2.0, width: int = 640, height: int = 360) -> Path:
-    """Render a named VFX to an MP4 via ffmpeg.
+def render_vfx(name: str, duration: float = 2.0, width: int = 640, height: int = 360, prompt: str = "") -> Path:
+    """Render a VFX to an MP4 from a name or free-form prompt.
 
-    Known names get a matching filter. Unknown names get noise.
+    The prompt is scanned for keywords and mapped to an ffmpeg filter.
+    Unknown prompts still produce a playable clip.
     """
     import shutil
     import subprocess
     if not shutil.which("ffmpeg"):
         raise ValueError("ffmpeg is required to render VFX")
-    safe = _safe_name(name)
+    text = (prompt or name or "effect").lower()
+    safe = _safe_name(name or text[:24])
     dest = VFX_DIR / f"{safe}.mp4"
-    filters = {
-        "tv_static": "noise=alls=20:allf=t+u",
-        "fire_hand": "gradients=s=640x360,noise=alls=10",
-        "lightning": "noise=alls=30:allf=t,eq=brightness=0.3",
-        "fade": "fade=t=in:st=0:d=0.5",
-    }
-    filt = filters.get(safe, "noise=alls=15:allf=t")
+    filt = _filter_for(text)
     subprocess.run(
         ["ffmpeg", "-y", "-f", "lavfi", "-i", f"color=c=black:s={width}x{height}:d={duration}",
          "-vf", filt, "-c:v", "libx264", "-pix_fmt", "yuv420p", str(dest)],
         check=True, capture_output=True,
     )
     return dest
+
+
+def _filter_for(text: str) -> str:
+    """Map any prompt to an ffmpeg filter chain."""
+    rules = [
+        ("static", "noise=alls=20:allf=t+u"),
+        ("noise", "noise=alls=20:allf=t+u"),
+        ("fire", "noise=alls=12:allf=t,eq=saturation=2:gamma_r=1.4"),
+        ("flame", "noise=alls=12:allf=t,eq=saturation=2"),
+        ("lightning", "noise=alls=30:allf=t,eq=brightness=0.4:contrast=1.5"),
+        ("electric", "noise=alls=25:allf=t,eq=brightness=0.3"),
+        ("fade", "fade=t=in:st=0:d=0.5,fade=t=out:st=1.5:d=0.5"),
+        ("smoke", "noise=alls=8:allf=t,eq=brightness=-0.1"),
+        ("rain", "noise=alls=6:allf=t"),
+        ("snow", "noise=alls=4:allf=t,eq=brightness=0.2"),
+        ("glitch", "noise=alls=40:allf=t,eq=contrast=1.8"),
+        ("zoom", "zoompan=z='min(zoom+0.002,1.5)':d=60:s=640x360"),
+    ]
+    for key, filt in rules:
+        if key in text:
+            return filt
+    return "noise=alls=10:allf=t,eq=saturation=1.2"
 
 
 def make_vfx(name: str, description: str = "", params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:

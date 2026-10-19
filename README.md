@@ -51,8 +51,8 @@ Ships:
 
 - Timeline of clips with prompt, duration, and path
 - Built-in VFX names: none, fade, zoom, pan, color_grade, overlay
-- Custom VFX render to MP4 via ffmpeg (`POST /api/vfx/render`). Known names: tv_static, fire_hand, lightning, fade.
-- VST binary: `scripts/install_toolchain.ps1` installs CMake, VS Build Tools, and the Steinberg VST3 SDK. Press then builds a `.vst3`.
+- Custom VFX from any prompt (`POST /api/vfx/render?prompt=...`). Keywords map to ffmpeg filters; unknown prompts still produce a playable clip.
+- Animation writers: JSON, glTF 2.0, BVH, and text FBX.
 - Text objects with texture name, position, style
 - `text_scene` stores a sequence of VFX names on a text object
 - Transitions: cut, crossfade, wipe, dissolve (kind and duration stored)
@@ -65,7 +65,7 @@ Ships:
 
 Staged:
 
-- Animation export: JSON is native. glTF, FBX, and BVH write a staged file, not a validated binary.
+- Animation export: JSON, glTF 2.0, BVH, and text FBX.
 - Full MP4 encode is not implemented.
 - Custom VFX stubs are not rendered.
 

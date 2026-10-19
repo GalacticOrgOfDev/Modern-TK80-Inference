@@ -1210,11 +1210,11 @@ def split_video_audio(path: str) -> Dict[str, Any]:
 
 
 @app.post("/api/vfx/render")
-def render_vfx_endpoint(name: str = "tv_static", duration: float = 2.0) -> Dict[str, Any]:
-    """Render a named VFX to an MP4."""
+def render_vfx_endpoint(name: str = "effect", duration: float = 2.0, prompt: str = "") -> Dict[str, Any]:
+    """Render a VFX from a name or free-form prompt."""
     try:
-        path = render_vfx(name, duration)
-        return {"path": str(path), "name": name, "rendered": True}
+        path = render_vfx(name, duration, prompt=prompt or name)
+        return {"path": str(path), "name": name, "prompt": prompt or name, "rendered": True}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
