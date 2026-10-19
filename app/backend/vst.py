@@ -48,20 +48,42 @@ EFFECT_CATEGORIES = {
 }
 
 
+def effect_from_prompt(prompt: str) -> str:
+    """Map any free-form prompt to a preset effect name."""
+    text = (prompt or "").lower()
+    rules = [
+        ("reverb", "reverb"), ("room", "reverb"), ("space", "reverb"),
+        ("delay", "delay"), ("echo", "delay"),
+        ("compress", "compressor"), ("pump", "subpump"), ("sidechain", "subpump"),
+        ("tune", "autotune"), ("pitch", "autotune"), ("autotune", "autotune"),
+        ("noise", "noise_suppression"), ("denoise", "noise_suppression"), ("gate", "gate"),
+        ("distort", "distortion"), ("overdrive", "distortion"), ("fuzz", "distortion"),
+        ("eq", "eq"), ("equal", "eq"),
+        ("chorus", "chorus"), ("flange", "flanger"), ("phaser", "phaser"),
+        ("limit", "limiter"), ("filter", "filter"), ("bitcrush", "bitcrush"),
+        ("tremolo", "tremolo"),
+    ]
+    for key, effect in rules:
+        if key in text:
+            return effect
+    return "custom"
+
+
 def make_vst(
     name: str,
     plugin_type: str = "effect",
     effect: str = "custom",
     channels: int = 2,
     params: Optional[Dict[str, Any]] = None,
+    prompt: str = "",
 ) -> Dict[str, Any]:
-    """Write a VST3 source file and return its path and notes.
-
-    effect selects a DSP template: reverb, subpump, autotune,
-    noise_suppression, delay, distortion, or custom.
-    """
+    """Write a VST3 source file from a preset or a free-form prompt."""
     if plugin_type not in PLUGIN_TYPES:
         raise ValueError(f"plugin_type must be one of {PLUGIN_TYPES}")
+    if prompt:
+        effect = effect_from_prompt(prompt)
+        if not name or name == "Plugin":
+            name = _safe_name(prompt[:32])
     if effect not in EFFECT_PRESETS:
         effect = "custom"
     safe_name = "".join(c if c.isalnum() else "_" for c in name) or "Plugin"

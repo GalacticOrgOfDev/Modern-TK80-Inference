@@ -39,12 +39,8 @@ TOOLS: Dict[str, Dict[str, Any]] = {
         "args": {"clip_id": "int"},
     },
     "make_vst": {
-        "description": "Generate a VST3 effect or instrument plugin source (reverb, subpump, autotune, noise_suppression, delay, distortion, custom).",
-        "args": {
-            "name": "string",
-            "effect": "reverb|subpump|autotune|noise_suppression|delay|distortion|custom",
-            "plugin_type": "effect|instrument",
-        },
+        "description": "Generate VST3 source from a preset or a free-form prompt (e.g. 'warm room reverb', 'pumping sidechain').",
+        "args": {"name": "string", "effect": "string", "plugin_type": "effect|instrument", "prompt": "string"},
     },
     "vst_add_param": {
         "description": "Add a parameter to the current VST UI project.",
