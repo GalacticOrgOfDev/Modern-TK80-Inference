@@ -65,6 +65,7 @@ from .video import (
     make_text_scene,
     make_vfx,
     reorder,
+    render_vfx,
     save_video,
     set_text_style,
     set_transition,
@@ -1204,6 +1205,16 @@ def split_video_audio(path: str) -> Dict[str, Any]:
     """Split the audio track from a video file."""
     try:
         return split_audio(Path(path))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.post("/api/vfx/render")
+def render_vfx_endpoint(name: str = "tv_static", duration: float = 2.0) -> Dict[str, Any]:
+    """Render a named VFX to an MP4."""
+    try:
+        path = render_vfx(name, duration)
+        return {"path": str(path), "name": name, "rendered": True}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 

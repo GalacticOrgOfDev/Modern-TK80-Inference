@@ -213,6 +213,32 @@ def make_clip(
     }
 
 
+def render_vfx(name: str, duration: float = 2.0, width: int = 640, height: int = 360) -> Path:
+    """Render a named VFX to an MP4 via ffmpeg.
+
+    Known names get a matching filter. Unknown names get noise.
+    """
+    import shutil
+    import subprocess
+    if not shutil.which("ffmpeg"):
+        raise ValueError("ffmpeg is required to render VFX")
+    safe = _safe_name(name)
+    dest = VFX_DIR / f"{safe}.mp4"
+    filters = {
+        "tv_static": "noise=alls=20:allf=t+u",
+        "fire_hand": "gradients=s=640x360,noise=alls=10",
+        "lightning": "noise=alls=30:allf=t,eq=brightness=0.3",
+        "fade": "fade=t=in:st=0:d=0.5",
+    }
+    filt = filters.get(safe, "noise=alls=15:allf=t")
+    subprocess.run(
+        ["ffmpeg", "-y", "-f", "lavfi", "-i", f"color=c=black:s={width}x{height}:d={duration}",
+         "-vf", filt, "-c:v", "libx264", "-pix_fmt", "yuv420p", str(dest)],
+        check=True, capture_output=True,
+    )
+    return dest
+
+
 def make_vfx(name: str, description: str = "", params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Create a custom VFX by name and write a starter stub with parameters.
 

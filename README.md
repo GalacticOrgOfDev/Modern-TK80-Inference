@@ -12,7 +12,8 @@ Native window via FastAPI and pywebview. Not a browser tab.
 |--------|------------------|----------------|
 | Chat | Multi-turn chat, tool indicator, direct commands | K80 inference when a die is connected |
 | DAW | Tracks, clips, ASIO record, sequencer, instruments, mix, bounce, 30-band EQ, undo | VST binary compile needs the SDK on the machine |
-| Video | Timeline, clips, text objects, VFX stubs, audio split, MP4 encode | Real VFX rendering |
+| Video | Timeline, clips, text, VFX render (ffmpeg), audio split, MP4 encode | Validated glTF/FBX/BVH binaries |
+| Fusion | Status and plan | Dual-die data movement |
 | Fusion | Status and activation plan | Real dual-die data movement |
 
 Launch:
@@ -50,7 +51,8 @@ Ships:
 
 - Timeline of clips with prompt, duration, and path
 - Built-in VFX names: none, fade, zoom, pan, color_grade, overlay
-- Custom VFX by name writes a stub under `uploads/vfx/` (not a rendered effect yet)
+- Custom VFX render to MP4 via ffmpeg (`POST /api/vfx/render`). Known names: tv_static, fire_hand, lightning, fade.
+- VST binary: `scripts/install_toolchain.ps1` installs CMake, VS Build Tools, and the Steinberg VST3 SDK. Press then builds a `.vst3`.
 - Text objects with texture name, position, style
 - `text_scene` stores a sequence of VFX names on a text object
 - Transitions: cut, crossfade, wipe, dissolve (kind and duration stored)
