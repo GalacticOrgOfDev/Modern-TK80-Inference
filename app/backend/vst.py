@@ -48,7 +48,55 @@ EFFECT_CATEGORIES = {
 }
 
 
-def effect_from_prompt(prompt: str) -> str:
+def design_from_prompt(prompt: str) -> Dict[str, Any]:
+    """Turn any free-form description into a plugin design.
+
+    Returns name, type (effect or instrument), effect label, and params.
+    Unknown words still produce adjustable parameters.
+    """
+    text = (prompt or "custom effect").strip()
+    lower = text.lower()
+    is_instrument = any(w in lower for w in ("synth", "instrument", "vocoder", "keyboard", "oscillator"))
+    plugin_type = "instrument" if is_instrument else "effect"
+    name = _safe_name(text[:40]) or "Plugin"
+
+    params: Dict[str, float] = {}
+    keywords = {
+        "filter": ("cutoff", "resonance", "filter_mix"),
+        "vocoder": ("bands", "attack", "release", "carrier_mix"),
+        "synth": ("osc_mix", "detune", "cutoff", "resonance"),
+        "reverb": ("room", "damp", "mix"),
+        "delay": ("time", "feedback", "mix"),
+        "eq": ("low", "mid", "high"),
+        "compress": ("threshold", "ratio", "makeup"),
+        "distort": ("drive", "tone", "mix"),
+        "chorus": ("rate", "depth", "mix"),
+        "lfo": ("lfo_rate", "lfo_depth"),
+        "envelope": ("attack", "decay", "sustain", "release"),
+        "pitch": ("pitch", "strength"),
+        "noise": ("threshold", "reduction"),
+    }
+    for key, names in keywords.items():
+        if key in lower:
+            for n in names:
+                params[n] = 0.5
+    # Always give the user something to turn.
+    if not params:
+        params = {"amount": 0.5, "mix": 0.5, "tone": 0.5}
+    # Extra adjustable knobs if the prompt says "various" or "adjustable".
+    if any(w in lower for w in ("various", "adjustable", "multiple", "several")):
+        params.setdefault("param_a", 0.5)
+        params.setdefault("param_b", 0.5)
+        params.setdefault("param_c", 0.5)
+
+    effect = effect_from_prompt(text)
+    return {
+        "name": name,
+        "plugin_type": plugin_type,
+        "effect": effect,
+        "params": params,
+        "prompt": text,
+    }
     """Map any free-form prompt to a preset effect name."""
     text = (prompt or "").lower()
     rules = [
@@ -77,13 +125,19 @@ def make_vst(
     params: Optional[Dict[str, Any]] = None,
     prompt: str = "",
 ) -> Dict[str, Any]:
-    """Write a VST3 source file from a preset or a free-form prompt."""
-    if plugin_type not in PLUGIN_TYPES:
-        raise ValueError(f"plugin_type must be one of {PLUGIN_TYPES}")
+    """Write a VST3 source file from a preset or any free-form prompt.
+
+    A prompt designs the plugin: type, parameters, and DSP. Unknown
+    descriptions still produce a buildable source with adjustable knobs.
+    """
     if prompt:
-        effect = effect_from_prompt(prompt)
-        if not name or name == "Plugin":
-            name = _safe_name(prompt[:32])
+        design = design_from_prompt(prompt)
+        name = name if name and name not in ("Plugin", "GeneratedPlugin") else design["name"]
+        plugin_type = design["plugin_type"]
+        effect = design["effect"]
+        params = {**design["params"], **(params or {})}
+    if plugin_type not in PLUGIN_TYPES:
+        plugin_type = "effect"
     if effect not in EFFECT_PRESETS:
         effect = "custom"
     safe_name = "".join(c if c.isalnum() else "_" for c in name) or "Plugin"
@@ -156,7 +210,7 @@ def _render_skeleton(
         )
     params_code = "\n".join(param_lines) if param_lines else "    // no parameters"
 
-    dsp = _dsp_for(effect)
+    dsp = _dsp_for(effect, params)
 
     return f'''// Modern-TK80 generated VST3 source: {name}
 // Type: {plugin_type} | Effect: {effect} | Channels: {channels}
@@ -217,7 +271,30 @@ juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 '''
 
 
-def _dsp_for(effect: str) -> str:
+def _dsp_for(effect: str, params: Optional[Dict[str, Any]] = None) -> str:
+    """Return a processBlock that reads every designed parameter."""
+    params = params or {}
+    reads = []
+    for pname in params:
+        reads.append(f'        auto* p_{pname} = parameters.getRawParameterValue("{pname}");')
+        reads.append(f'        float v_{pname} = p_{pname} ? *p_{pname} : 0.5f;')
+    if not reads:
+        reads.append('        float v_gain = 1.0f;')
+    body = "\n".join(reads)
+    return f'''
+{body}
+        // Designed from prompt. Each parameter scales the buffer.
+        float amount = 1.0f;
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        {{
+            auto* data = buffer.getWritePointer(ch);
+            for (int i = 0; i < buffer.getNumSamples(); ++i)
+            {{
+                float s = data[i];
+                data[i] = s * amount;
+            }}
+        }}
+'''
     """Return a starter DSP block for the named effect."""
     if effect == "reverb":
         return '''

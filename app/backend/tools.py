@@ -39,7 +39,7 @@ TOOLS: Dict[str, Dict[str, Any]] = {
         "args": {"clip_id": "int"},
     },
     "make_vst": {
-        "description": "Generate VST3 source from a preset or a free-form prompt (e.g. 'warm room reverb', 'pumping sidechain').",
+        "description": "Generate a VST3 plugin from any free-form prompt. Instruments, synths, vocoders, and effects are all accepted.",
         "args": {"name": "string", "effect": "string", "plugin_type": "effect|instrument", "prompt": "string"},
     },
     "vst_add_param": {
