@@ -51,7 +51,7 @@ from .vst_ui import (
     export_project,
     list_presets,
 )
-from .export import export_animation, export_timeline as export_full_timeline
+from .export import encode_mp4, export_animation, export_timeline as export_full_timeline
 from .video import (
     ANIM_FORMATS,
     BUILTIN_VFX,

@@ -12,7 +12,7 @@ Native window via FastAPI and pywebview. Not a browser tab.
 |--------|------------------|----------------|
 | Chat | Multi-turn chat, tool indicator, direct commands | K80 inference when a die is connected |
 | DAW | Tracks, clips, ASIO record, sequencer, instruments, mix, bounce, 30-band EQ, undo | VST binary compile needs the SDK on the machine |
-| Video | Timeline, clips, text objects, VFX stubs, audio split | Full MP4 encode |
+| Video | Timeline, clips, text objects, VFX stubs, audio split, MP4 encode | Real VFX rendering |
 | Fusion | Status and activation plan | Real dual-die data movement |
 
 Launch:
@@ -58,6 +58,7 @@ Ships:
 - Animation clip records
 - Export timeline as JSON manifest
 - Split audio from a video file via ffmpeg (`POST /api/video/split`)
+- Encode timeline to MP4 via ffmpeg (`POST /api/video/encode`)
 - Video store: MP4, MOV, WebM, AVI, MKV, MPEG, WMV
 
 Staged:

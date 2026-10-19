@@ -30,12 +30,44 @@ def export_timeline(
         "texts": texts,
         "objects_3d": objects_3d,
         "total_duration": round(total, 3),
-        "note": "JSON manifest. Encode to mp4 later.",
+        "note": "JSON manifest. Use /api/video/encode for MP4.",
     }
     dest = UPLOAD_DIR / f"{name}.json"
     dest.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     manifest["path"] = str(dest)
     return manifest
+
+
+def encode_mp4(
+    clips: List[Dict[str, Any]],
+    out_name: str = "timeline.mp4",
+    width: int = 1280,
+    height: int = 720,
+) -> Dict[str, Any]:
+    """Encode the timeline to an MP4 via ffmpeg.
+
+    Existing video files are concatenated. If none exist, a black segment
+    is written. Returns the output path.
+    """
+    import shutil
+    import subprocess
+    if not shutil.which("ffmpeg"):
+        raise ValueError("ffmpeg is required to encode MP4")
+    dest = UPLOAD_DIR / out_name
+    if dest.suffix.lower() != ".mp4":
+        dest = dest.with_suffix(".mp4")
+    existing = [str(Path(c["path"])) for c in clips if c.get("path") and Path(c["path"]).exists()]
+    if existing:
+        list_file = UPLOAD_DIR / "concat.txt"
+        list_file.write_text("\n".join(f"file '{p}'" for p in existing), encoding="utf-8")
+        cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(list_file),
+               "-c:v", "libx264", "-pix_fmt", "yuv420p", str(dest)]
+    else:
+        dur = max(1.0, sum(float(c.get("duration", 1.0)) for c in clips) or 1.0)
+        cmd = ["ffmpeg", "-y", "-f", "lavfi", "-i", f"color=c=black:s={width}x{height}:d={dur}",
+               "-c:v", "libx264", "-pix_fmt", "yuv420p", str(dest)]
+    subprocess.run(cmd, check=True, capture_output=True)
+    return {"path": str(dest), "encoded": True, "clips": len(clips)}
 
 
 def export_animation(obj: Dict[str, Any], fmt: str = "json") -> Dict[str, Any]:
