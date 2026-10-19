@@ -83,17 +83,21 @@ The model or a direct chat command can call the tools in `app/backend/tools.py`.
 
 ## Install
 
+Windows:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/install.ps1
+```
+
+The script installs Python 3.12 if it is missing, then fastapi, uvicorn, python-multipart, pywebview, sounddevice, diffusers, transformers, pynvml, torch, and llama-cpp-python.
+
+Linux/macOS:
+
 ```bash
 scripts/install.sh
 ```
 
-Or:
-
-```bash
-pip install -r requirements.txt
-```
-
-Torch and llama-cpp need Python 3.11–3.14. On 3.15 the core app installs; inference packages do not.
+Torch and llama-cpp need Python 3.11-3.14.
 
 ## Packaging
 
