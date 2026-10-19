@@ -25,6 +25,7 @@ SEARCH_SDK = [
 
 
 def _which(names: List[str]) -> Optional[str]:
+    """future docstring"""
     for name in names:
         found = shutil.which(name)
         if found:
@@ -33,6 +34,7 @@ def _which(names: List[str]) -> Optional[str]:
 
 
 def sdk_path() -> Optional[Path]:
+    """future docstring"""
     env = os.environ.get("TK80_VST3_SDK")
     if env and Path(env).exists():
         return Path(env)
@@ -43,6 +45,7 @@ def sdk_path() -> Optional[Path]:
 
 
 def find_toolchain() -> Dict[str, Optional[str]]:
+    """future docstring"""
     return {
         "cmake": _which(["cmake"]),
         "compiler": _which(["cl", "g++", "clang++", "c++"]),

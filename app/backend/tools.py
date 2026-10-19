@@ -120,6 +120,7 @@ _CALL_RE = re.compile(
 
 
 def list_tools() -> List[Dict[str, Any]]:
+    """future docstring"""
     return [
         {"name": name, "description": spec["description"], "args": spec["args"]}
         for name, spec in TOOLS.items()

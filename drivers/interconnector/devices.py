@@ -26,9 +26,11 @@ class K80Die:
 
     @property
     def is_k80(self) -> bool:
+        """future docstring"""
         return "K80" in self.name.upper() or self.compute_capability == (3, 7)
 
     def __str__(self) -> str:
+        """future docstring"""
         cc = f"{self.compute_capability[0]}.{self.compute_capability[1]}"
         free = f"{self.free_memory_mb} MB free" if self.free_memory_mb is not None else "free unknown"
         state = "BUSY" if self.busy else "free"

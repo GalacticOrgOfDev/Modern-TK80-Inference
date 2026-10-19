@@ -18,6 +18,7 @@ logging.basicConfig(
 
 
 def main() -> int:
+    """future docstring"""
     parser = argparse.ArgumentParser(description="K80 Interconnector")
     parser.add_argument("--dies", type=str, default=None, help="Comma-separated die indices")
     parser.add_argument("--status", action="store_true", help="Print status and exit")

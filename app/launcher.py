@@ -20,6 +20,7 @@ FRONTEND = Path(__file__).parent / "frontend"
 
 
 def _mount_frontend() -> None:
+    """future docstring"""
     from fastapi.staticfiles import StaticFiles
 
     if FRONTEND.exists():
@@ -27,6 +28,7 @@ def _mount_frontend() -> None:
 
 
 def _run_server() -> None:
+    """future docstring"""
     uvicorn.run(fastapi_app, host=HOST, port=PORT, log_level="info")
 
 

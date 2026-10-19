@@ -39,6 +39,7 @@ class Interconnector:
     """Modern interface to one or more Tesla K80 dies."""
 
     def __init__(self, die_indices: Optional[List[int]] = None):
+        """future docstring"""
         self.dies: List[K80Die] = discover_dies()
         if not self.dies:
             raise InterconnectorError("No CUDA devices found. Install R470 driver + CUDA 11.8.")

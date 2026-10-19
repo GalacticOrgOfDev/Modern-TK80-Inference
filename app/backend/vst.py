@@ -94,6 +94,7 @@ def make_vst(
 
 
 def _fill_preset_params(effect: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    """future docstring"""
     presets: Dict[str, Dict[str, float]] = {
         "reverb": {"room": 0.5, "damp": 0.4, "mix": 0.3},
         "subpump": {"rate": 0.5, "depth": 0.7, "mix": 1.0},
@@ -125,6 +126,7 @@ def _render_skeleton(
     channels: int,
     params: Dict[str, Any],
 ) -> str:
+    """future docstring"""
     is_instrument = plugin_type == "instrument"
     param_lines = []
     for pname, default in params.items():

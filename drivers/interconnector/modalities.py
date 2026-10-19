@@ -35,6 +35,7 @@ class ImageBackend:
     """Small diffusion model (e.g. SD 1.5) on one die, FP32."""
 
     def __init__(self, model_name_or_path: str, device: str = "cuda:0"):
+        """future docstring"""
         try:
             import torch
             from diffusers import StableDiffusionPipeline
@@ -50,6 +51,7 @@ class ImageBackend:
         ).to(device)
 
     def generate(self, prompt: str, **kwargs: Any) -> Any:
+        """future docstring"""
         result = self.pipe(prompt, **kwargs)
         return result.images[0] if hasattr(result, "images") else result
 
@@ -75,6 +77,7 @@ class VoiceBackend:
         )
 
     def generate(self, audio_path: str, **kwargs: Any) -> str:
+        """future docstring"""
         if not audio_path:
             raise ValueError("voice generate requires an audio path")
         result = self.pipe(audio_path, **kwargs)
@@ -89,6 +92,7 @@ class AgentBackend:
     """
 
     def __init__(self, llm_backend: Any, max_steps: int = 4):
+        """future docstring"""
         self.llm = llm_backend
         self.max_steps = max_steps
 
@@ -99,6 +103,7 @@ class AgentBackend:
         tool_runner: Optional[ToolRunner] = None,
         tool_prompt: str = "",
     ) -> Dict[str, Any]:
+        """future docstring"""
         if not goal:
             raise ValueError("agent run requires a goal")
         tools = tools or []
@@ -168,6 +173,7 @@ class VideoBackend:
     """Placeholder. Most video models exceed one 12 GB K80 die."""
 
     def __init__(self, *args: Any, **kwargs: Any):
+        """future docstring"""
         raise NotImplementedError(
             "Video models generally exceed a single 12 GB K80 die. "
             "Smaller frame-by-frame or latent models can be added later."

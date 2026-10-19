@@ -49,6 +49,7 @@ class LlamaCppBackend:
         )
 
     def generate(self, prompt: str, max_tokens: int = 128, temperature: float = 0.7) -> str:
+        """future docstring"""
         result = self.llm(
             prompt,
             max_tokens=max_tokens,
@@ -62,6 +63,7 @@ class PyTorchBackend:
     """Simple PyTorch backend for models that fit on a single K80 die (12 GB)."""
 
     def __init__(self, model_name_or_path: str, device: str = "cuda:0"):
+        """future docstring"""
         try:
             import torch
             from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -78,6 +80,7 @@ class PyTorchBackend:
         )
 
     def generate(self, prompt: str, max_tokens: int = 128, temperature: float = 0.7) -> str:
+        """future docstring"""
         import torch
 
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)

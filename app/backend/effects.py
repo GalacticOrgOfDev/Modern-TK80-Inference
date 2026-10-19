@@ -13,6 +13,7 @@ from .audio import UPLOAD_DIR, _pack, _read_wav, _samples, _write_wav
 
 
 def _peak(samples: List[int]) -> int:
+    """future docstring"""
     peak = 0
     for s in samples:
         a = abs(s)
@@ -83,6 +84,7 @@ def morph(samples: List[int], points: List[Tuple[float, float]], channels: int) 
 
 
 def _interp(points: List[Tuple[float, float]], t: float) -> float:
+    """future docstring"""
     for i in range(len(points) - 1):
         t0, g0 = points[i]
         t1, g1 = points[i + 1]

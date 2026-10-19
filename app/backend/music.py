@@ -21,10 +21,12 @@ INSTRUMENTS = ("kick", "snare", "hat", "bass", "lead", "pad")
 
 
 def _sine(freq: float, i: int, rate: int) -> float:
+    """future docstring"""
     return math.sin(2.0 * math.pi * freq * i / rate)
 
 
 def _env(i: int, n: int, attack: float = 0.01, release: float = 0.2) -> float:
+    """future docstring"""
     t = i / float(n)
     if t < attack:
         return t / attack
@@ -66,6 +68,7 @@ def render_instrument(
 
 
 def write_wav(path: Path, pcm: bytes, rate: int, channels: int = 1) -> Path:
+    """future docstring"""
     path.parent.mkdir(parents=True, exist_ok=True)
     with wave.open(str(path), "wb") as w:
         w.setnchannels(channels)
@@ -119,6 +122,7 @@ def detect_bpm(path: Path) -> Dict[str, Any]:
 
 
 def make_pattern(steps: int = STEPS) -> Dict[str, List[int]]:
+    """future docstring"""
     return {name: [0] * steps for name in INSTRUMENTS}
 
 
@@ -183,5 +187,6 @@ def generate_loop(
 
 
 def save_pcm(name: str, pcm: bytes, rate: int) -> Path:
+    """future docstring"""
     path = UPLOAD_DIR / name
     return write_wav(path, pcm, rate)

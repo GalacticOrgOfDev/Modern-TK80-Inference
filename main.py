@@ -24,6 +24,7 @@ log = logging.getLogger("tk80")
 
 
 def main() -> int:
+    """future docstring"""
     parser = argparse.ArgumentParser(description="Modern-TK80-Inference")
     parser.add_argument("--dies", type=str, default=None, help="Comma-separated die indices")
     parser.add_argument("--status", action="store_true", help="Print status and exit")

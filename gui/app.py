@@ -26,7 +26,9 @@ log = logging.getLogger("tk80.gui")
 
 
 class TK80App:
+    """future docstring"""
     def __init__(self, root: tk.Tk):
+        """future docstring"""
         self.root = root
         self.root.title("Modern-TK80-Inference")
         self.root.geometry("900x720")
@@ -36,6 +38,7 @@ class TK80App:
         self._connect()
 
     def _build_ui(self) -> None:
+        """future docstring"""
         top = ttk.Frame(self.root, padding=8)
         top.pack(fill=tk.X)
 
@@ -109,10 +112,12 @@ class TK80App:
         self.status_bar.pack(fill=tk.X, side=tk.BOTTOM)
 
     def _set_status(self, msg: str) -> None:
+        """future docstring"""
         self.status_bar.config(text=msg)
         self.root.update_idletasks()
 
     def _connect(self) -> None:
+        """future docstring"""
         try:
             self.ic = Interconnector()
             self._set_status("Connected to K80 dies")
@@ -123,6 +128,7 @@ class TK80App:
             self.status_text.insert("1.0", f"No CUDA devices found.\n\n{e}\n\nInstall R470 driver + CUDA 11.8 and restart.")
 
     def browse_model(self) -> None:
+        """future docstring"""
         path = filedialog.askopenfilename(
             title="Select model",
             filetypes=[("GGUF", "*.gguf"), ("All files", "*.*")],
@@ -131,6 +137,7 @@ class TK80App:
             self.model_var.set(path)
 
     def refresh_status(self) -> None:
+        """future docstring"""
         if self.ic is None:
             return
         try:
@@ -142,6 +149,7 @@ class TK80App:
             messagebox.showerror("Status", str(e))
 
     def show_advertise(self) -> None:
+        """future docstring"""
         if self.ic is None:
             messagebox.showwarning("Advertise", "Not connected")
             return
@@ -149,6 +157,7 @@ class TK80App:
         messagebox.showinfo("Cluster advertisement", json.dumps(data, indent=2))
 
     def load_model(self) -> None:
+        """future docstring"""
         if self.ic is None:
             messagebox.showwarning("Load", "Not connected")
             return
@@ -165,6 +174,7 @@ class TK80App:
         self._set_status("Loading...")
 
         def work() -> None:
+            """future docstring"""
             try:
                 assert self.ic is not None
                 self.ic.load(
@@ -180,6 +190,7 @@ class TK80App:
                 err = str(exc)
 
                 def _show_load(msg: str = err) -> None:
+                    """future docstring"""
                     messagebox.showerror("Load failed", msg)
 
                 self.root.after(0, _show_load)
@@ -188,6 +199,7 @@ class TK80App:
         threading.Thread(target=work, daemon=True).start()
 
     def unload_model(self) -> None:
+        """future docstring"""
         if self.ic is None:
             return
         try:
@@ -199,6 +211,7 @@ class TK80App:
             messagebox.showerror("Unload", str(e))
 
     def generate(self) -> None:
+        """future docstring"""
         if self.ic is None:
             messagebox.showwarning("Generate", "Not connected")
             return
@@ -227,6 +240,7 @@ class TK80App:
         self.output_text.insert("1.0", "Working...\n")
 
         def work() -> None:
+            """future docstring"""
             try:
                 assert self.ic is not None
                 result = self.ic.generate(request, die=die)
@@ -238,6 +252,7 @@ class TK80App:
                 err = str(exc)
 
                 def _show_gen(msg: str = err) -> None:
+                    """future docstring"""
                     messagebox.showerror("Generate failed", msg)
 
                 self.root.after(0, _show_gen)
@@ -246,11 +261,13 @@ class TK80App:
         threading.Thread(target=work, daemon=True).start()
 
     def _show_result(self, text: str) -> None:
+        """future docstring"""
         self.output_text.delete("1.0", tk.END)
         self.output_text.insert("1.0", text)
 
 
 def main() -> None:
+    """future docstring"""
     root = tk.Tk()
     TK80App(root)
     root.mainloop()
