@@ -41,7 +41,7 @@ from .audio import (
     save_upload,
 )
 from .effects import apply_effect
-from .vst import make_vst, PLUGIN_TYPES, EFFECT_PRESETS
+from .vst import make_vst, PLUGIN_TYPES, EFFECT_PRESETS, list_library
 from .vst_ui import (
     OBJECT_TYPES,
     add_object,
@@ -883,6 +883,12 @@ def create_vst(body: VstRequest) -> Dict[str, Any]:
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     return result
+
+
+@app.get("/api/vst/library")
+def vst_library() -> Dict[str, Any]:
+    """Return every VST the maker has generated this session."""
+    return {"plugins": list_library()}
 
 
 @app.get("/api/vst/presets")

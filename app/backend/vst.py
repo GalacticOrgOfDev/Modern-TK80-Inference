@@ -48,7 +48,17 @@ EFFECT_CATEGORIES = {
 }
 
 
-def design_from_prompt(prompt: str) -> Dict[str, Any]:
+_LIBRARY: List[Dict[str, Any]] = []
+
+
+def add_to_library(entry: Dict[str, Any]) -> Dict[str, Any]:
+    """Store a generated VST in the in-memory library."""
+    _LIBRARY.append(entry)
+    return entry
+
+
+def list_library() -> List[Dict[str, Any]]:
+    return list(_LIBRARY)
     """Turn any free-form description into a plugin design.
 
     Returns name, type (effect or instrument), effect label, and params.
@@ -158,7 +168,7 @@ def make_vst(
         "Compile against the Steinberg VST3 SDK (or drop into a JUCE AudioPlugin project). "
         f"Effect template: {effect}. process() contains a starter DSP stub for that effect."
     )
-    return {
+    result = {
         "name": safe_name,
         "type": plugin_type,
         "effect": effect,
@@ -167,6 +177,8 @@ def make_vst(
         "params": params,
         "note": note,
     }
+    add_to_library(result)
+    return result
 
 
 def _fill_preset_params(effect: str, params: Dict[str, Any]) -> Dict[str, Any]:

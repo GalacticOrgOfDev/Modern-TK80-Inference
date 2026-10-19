@@ -235,7 +235,32 @@ def render_vfx(name: str, duration: float = 2.0, width: int = 640, height: int =
     return dest
 
 
-def _filter_for(text: str) -> str:
+def design_vfx(prompt: str) -> Dict[str, Any]:
+    """Turn any prompt into a VFX design with filters and parameters."""
+    text = (prompt or "effect").strip()
+    lower = text.lower()
+    layers = []
+    if any(w in lower for w in ("static", "noise", "tv")):
+        layers.append("noise=alls=20:allf=t+u")
+    if any(w in lower for w in ("fire", "flame", "burn")):
+        layers.append("eq=saturation=2:gamma_r=1.5")
+    if any(w in lower for w in ("lightning", "electric", "spark")):
+        layers.append("eq=brightness=0.4:contrast=1.6")
+    if any(w in lower for w in ("smoke", "fog", "haze")):
+        layers.append("eq=brightness=-0.15:saturation=0.6")
+    if any(w in lower for w in ("rain", "storm")):
+        layers.append("noise=alls=6:allf=t")
+    if any(w in lower for w in ("snow", "blizzard")):
+        layers.append("noise=alls=4:allf=t,eq=brightness=0.2")
+    if any(w in lower for w in ("glitch", "corrupt")):
+        layers.append("noise=alls=40:allf=t,eq=contrast=1.8")
+    if any(w in lower for w in ("fade", "dissolve")):
+        layers.append("fade=t=in:st=0:d=0.4")
+    if any(w in lower for w in ("zoom", "punch")):
+        layers.append("zoompan=z='min(zoom+0.002,1.5)':d=60:s=640x360")
+    if not layers:
+        layers.append("noise=alls=10:allf=t,eq=saturation=1.3")
+    return {"prompt": text, "filter": ",".join(layers), "layers": layers}
     """Map any prompt to an ffmpeg filter chain."""
     rules = [
         ("static", "noise=alls=20:allf=t+u"),
