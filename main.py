@@ -24,7 +24,11 @@ log = logging.getLogger("tk80")
 
 
 def main() -> int:
-    """future docstring"""
+    """Parse CLI args, connect, and optionally load or generate.
+
+    Returns:
+        0 on success, 1 on error.
+    """
     parser = argparse.ArgumentParser(description="Modern-TK80-Inference")
     parser.add_argument("--dies", type=str, default=None, help="Comma-separated die indices")
     parser.add_argument("--status", action="store_true", help="Print status and exit")
