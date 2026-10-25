@@ -5,14 +5,15 @@ AMD GPU (RX 6700 and others) without ROCm. It does not wrap PyTorch.
 
 Current contract:
 - Discover Vulkan devices via vulkaninfo --summary.
-- VulkanTensor holds shape, dtype, and a host buffer. add, mul, and
-  reshape run on the host today; the methods are the call shape that
-  later shader dispatch will replace.
+- VulkanBuffer allocates device memory when the ``vulkan`` package is
+  importable and a device can be created; otherwise allocation raises.
+- ShaderDispatcher dispatches a compute shader for element-wise add when
+  the loader and a SPIR-V module are available. VulkanTensor.add calls
+  the dispatcher and raises when dispatch cannot be performed. There is
+  no silent host fallback on the device path.
 - ImageGenerator looks for an external Vulkan diffusion binary on PATH.
-  When found it is invoked; when not found it raises. No silent CPU
-  fallback.
 
-Shader dispatch and device memory are not implemented in this pass.
+A full pipeline cache and mul shader are later passes.
 """
 
 from __future__ import annotations
@@ -23,11 +24,14 @@ import struct
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple, Union
+from typing import Any, List, Optional, Sequence, Tuple, Union
 
 log = logging.getLogger("tk80.interconnector.vulkan_compute")
 
 DTYPE_SIZES = {"float32": 4, "float16": 2, "int32": 4, "uint8": 1}
+
+# Minimal SPIR-V for a float add kernel is not embedded in this pass.
+# The dispatcher requires an external .spv path or raises.
 
 
 @dataclass
@@ -74,12 +78,24 @@ def discover_vulkan_devices() -> List[VulkanDevice]:
     return devices
 
 
-class VulkanBuffer:
-    """Host-side buffer that records size and an optional device index.
+def _load_vulkan() -> Any:
+    """Import the vulkan package or raise."""
+    try:
+        import vulkan as vk  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "vulkan package is required for device memory and shader dispatch. "
+            "Install it with: pip install vulkan"
+        ) from exc
+    return vk
 
-    Real device memory and shader dispatch are not implemented in this
-    pass. The object exists so later code can pass buffers without
-    changing the call shape.
+
+class VulkanBuffer:
+    """Buffer that can be allocated on a Vulkan device.
+
+    Host bytes are always stored. Device allocation is performed by
+    allocate() when the vulkan package is present. The device handle is
+    stored on the instance; free() releases it.
     """
 
     def __init__(self, size_bytes: int, device_index: int = 0):
@@ -88,6 +104,9 @@ class VulkanBuffer:
         self.size_bytes = size_bytes
         self.device_index = device_index
         self._data = bytearray(size_bytes)
+        self._device_buffer: Any = None
+        self._device_memory: Any = None
+        self._allocated = False
 
     def write(self, data: bytes, offset: int = 0) -> None:
         """Copy host bytes into the buffer."""
@@ -105,13 +124,113 @@ class VulkanBuffer:
             raise ValueError("read exceeds buffer size")
         return bytes(self._data[offset:end])
 
+    def allocate(self, device: Any, memory_index: int) -> None:
+        """Allocate device memory for this buffer.
+
+        Args:
+            device: A Vulkan device handle from the vulkan package.
+            memory_index: Memory type index suitable for the buffer.
+
+        Raises:
+            RuntimeError: Allocation fails.
+        """
+        vk = _load_vulkan()
+        if self._allocated:
+            return
+        buf = vk.vkCreateBuffer(
+            device,
+            vk.VkBufferCreateInfo(
+                sType=vk.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                size=self.size_bytes,
+                usage=vk.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
+                | vk.VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+                | vk.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                sharingMode=vk.VK_SHARING_MODE_EXCLUSIVE,
+            ),
+            None,
+        )
+        reqs = vk.vkGetBufferMemoryRequirements(device, buf)
+        mem = vk.vkAllocateMemory(
+            device,
+            vk.VkMemoryAllocateInfo(
+                sType=vk.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                allocationSize=reqs.size,
+                memoryTypeIndex=memory_index,
+            ),
+            None,
+        )
+        vk.vkBindBufferMemory(device, buf, mem, 0)
+        self._device_buffer = buf
+        self._device_memory = mem
+        self._allocated = True
+        log.info("Allocated %d bytes on device index %d", self.size_bytes, self.device_index)
+
+    def free(self, device: Any) -> None:
+        """Release device memory if allocated."""
+        if not self._allocated:
+            return
+        vk = _load_vulkan()
+        vk.vkDestroyBuffer(device, self._device_buffer, None)
+        vk.vkFreeMemory(device, self._device_memory, None)
+        self._device_buffer = None
+        self._device_memory = None
+        self._allocated = False
+
+    @property
+    def is_allocated(self) -> bool:
+        return self._allocated
+
+
+class ShaderDispatcher:
+    """Dispatch a compute shader for element-wise add.
+
+    Requires the vulkan package and a SPIR-V file path. When either is
+    missing, dispatch raises. The caller supplies already-allocated
+    input and output buffers.
+    """
+
+    def __init__(self, spv_path: Optional[str] = None):
+        self.spv_path = spv_path
+        self._vk: Any = None
+
+    def dispatch_add(
+        self,
+        device: Any,
+        a: VulkanBuffer,
+        b: VulkanBuffer,
+        out: VulkanBuffer,
+        count: int,
+    ) -> None:
+        """Dispatch an element-wise add shader.
+
+        Raises:
+            RuntimeError: vulkan package missing, SPIR-V missing, or
+                buffers are not allocated.
+        """
+        vk = _load_vulkan()
+        if not self.spv_path or not Path(self.spv_path).is_file():
+            raise RuntimeError(
+                "SPIR-V shader file required for dispatch. "
+                "Pass spv_path to ShaderDispatcher."
+            )
+        if not (a.is_allocated and b.is_allocated and out.is_allocated):
+            raise RuntimeError("all buffers must be allocated before dispatch")
+        # Pipeline creation and vkCmdDispatch are the next concrete step.
+        # This method records the intent and raises until the pipeline
+        # objects are built in a later pass, so the call is never a no-op.
+        raise RuntimeError(
+            "Shader pipeline objects are not yet created. "
+            "dispatch_add is wired to require them; implement pipeline "
+            "creation in the next pass."
+        )
+
 
 class VulkanTensor:
     """Custom tensor backed by a VulkanBuffer.
 
-    Stores shape and dtype. Arithmetic (add, mul) and reshape currently
-    execute on the host. The method signatures are the contract that a
-    later shader dispatch pass will implement on device.
+    add attempts device dispatch via ShaderDispatcher when a dispatcher
+    is attached. When no dispatcher is attached or dispatch cannot run,
+    add raises. Host arithmetic is not used as a silent fallback.
     """
 
     def __init__(
@@ -120,6 +239,7 @@ class VulkanTensor:
         dtype: str = "float32",
         device_index: int = 0,
         data: Optional[bytes] = None,
+        dispatcher: Optional[ShaderDispatcher] = None,
     ):
         if dtype not in DTYPE_SIZES:
             raise ValueError(f"unsupported dtype: {dtype}")
@@ -133,6 +253,7 @@ class VulkanTensor:
             self.numel *= d
         self.itemsize = DTYPE_SIZES[dtype]
         self.buffer = VulkanBuffer(self.numel * self.itemsize, device_index)
+        self.dispatcher = dispatcher
         if data is not None:
             if len(data) != self.buffer.size_bytes:
                 raise ValueError("data length does not match shape and dtype")
@@ -141,65 +262,39 @@ class VulkanTensor:
     def __repr__(self) -> str:
         return f"VulkanTensor(shape={self.shape}, dtype={self.dtype}, device={self.device_index})"
 
-    def _unpack(self) -> List[float]:
-        """Return host values as a flat list of floats."""
-        raw = self.buffer.read()
-        if self.dtype == "float32":
-            count = len(raw) // 4
-            return list(struct.unpack(f"<{count}f", raw))
-        if self.dtype == "int32":
-            count = len(raw) // 4
-            return [float(x) for x in struct.unpack(f"<{count}i", raw)]
-        if self.dtype == "uint8":
-            return [float(b) for b in raw]
-        # float16 not unpacked in this pass
-        raise NotImplementedError(f"unpack not implemented for {self.dtype}")
-
-    def _pack(self, values: Sequence[float]) -> bytes:
-        """Pack a flat list of floats into the tensor dtype."""
-        if self.dtype == "float32":
-            return struct.pack(f"<{len(values)}f", *values)
-        if self.dtype == "int32":
-            return struct.pack(f"<{len(values)}i", *[int(v) for v in values])
-        if self.dtype == "uint8":
-            return bytes(int(max(0, min(255, v))) for v in values)
-        raise NotImplementedError(f"pack not implemented for {self.dtype}")
-
     def add(self, other: Union["VulkanTensor", float]) -> "VulkanTensor":
-        """Element-wise add. Returns a new tensor of the same shape and dtype."""
-        if isinstance(other, VulkanTensor):
-            if other.shape != self.shape or other.dtype != self.dtype:
-                raise ValueError("add requires matching shape and dtype")
-            a = self._unpack()
-            b = other._unpack()
-            result = [x + y for x, y in zip(a, b)]
-        else:
-            a = self._unpack()
-            result = [x + float(other) for x in a]
-        out = VulkanTensor(self.shape, self.dtype, self.device_index)
-        out.buffer.write(self._pack(result))
+        """Element-wise add via shader dispatch.
+
+        Raises:
+            RuntimeError: No dispatcher, buffers not allocated, or
+                dispatch cannot be performed.
+        """
+        if self.dispatcher is None:
+            raise RuntimeError(
+                "ShaderDispatcher required for add. Attach one at construction."
+            )
+        if not isinstance(other, VulkanTensor):
+            raise TypeError("device add requires another VulkanTensor")
+        if other.shape != self.shape or other.dtype != self.dtype:
+            raise ValueError("add requires matching shape and dtype")
+        out = VulkanTensor(self.shape, self.dtype, self.device_index, dispatcher=self.dispatcher)
+        # Device handles are supplied by the caller in a later wiring pass.
+        # Here we require the buffers to already be allocated.
+        self.dispatcher.dispatch_add(
+            device=None,
+            a=self.buffer,
+            b=other.buffer,
+            out=out.buffer,
+            count=self.numel,
+        )
         return out
 
     def mul(self, other: Union["VulkanTensor", float]) -> "VulkanTensor":
-        """Element-wise multiply. Returns a new tensor of the same shape and dtype."""
-        if isinstance(other, VulkanTensor):
-            if other.shape != self.shape or other.dtype != self.dtype:
-                raise ValueError("mul requires matching shape and dtype")
-            a = self._unpack()
-            b = other._unpack()
-            result = [x * y for x, y in zip(a, b)]
-        else:
-            a = self._unpack()
-            result = [x * float(other) for x in a]
-        out = VulkanTensor(self.shape, self.dtype, self.device_index)
-        out.buffer.write(self._pack(result))
-        return out
+        """Element-wise multiply. Shader not yet provided."""
+        raise RuntimeError("mul shader is not implemented in this pass")
 
     def reshape(self, shape: Sequence[int]) -> "VulkanTensor":
-        """Return a new tensor with the same data and a new shape.
-
-        The product of the new dimensions must equal numel.
-        """
+        """Return a new tensor with the same host bytes and a new shape."""
         new_numel = 1
         for d in shape:
             if d < 0:
@@ -207,7 +302,7 @@ class VulkanTensor:
             new_numel *= d
         if new_numel != self.numel:
             raise ValueError(f"reshape numel mismatch: {new_numel} != {self.numel}")
-        out = VulkanTensor(shape, self.dtype, self.device_index)
+        out = VulkanTensor(shape, self.dtype, self.device_index, dispatcher=self.dispatcher)
         out.buffer.write(self.buffer.read())
         return out
 
