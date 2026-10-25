@@ -1,0 +1,23 @@
+#version 450
+layout(local_size_x = 64) in;
+
+layout(set = 0, binding = 0) readonly buffer In { float x[]; };
+layout(set = 0, binding = 1) writeonly buffer Out { float y[]; };
+
+layout(push_constant) uniform Push { uint head_dim; uint pos; float theta; } pc;
+
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    uint pair = i / 2;
+    uint dim = pc.head_dim;
+    if (pair >= dim / 2) return;
+    float freq = pow(pc.theta, -float(pair) / float(dim / 2));
+    float angle = float(pc.pos) * freq;
+    float c = cos(angle);
+    float s = sin(angle);
+    uint base = (i / dim) * dim + pair * 2;
+    float x0 = x[base];
+    float x1 = x[base + 1];
+    y[base]     = x0 * c - x1 * s;
+    y[base + 1] = x0 * s + x1 * c;
+}

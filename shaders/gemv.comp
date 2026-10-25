@@ -1,0 +1,17 @@
+#version 450
+layout(local_size_x = 64) in;
+
+layout(set = 0, binding = 0) readonly buffer W { int w[]; };      // int8 packed as int
+layout(set = 0, binding = 1) readonly buffer X { float x[]; };
+layout(set = 0, binding = 2) writeonly buffer Y { float y[]; };
+
+layout(push_constant) uniform Push { uint N; uint K; float scale; } pc;
+
+void main() {
+    uint row = gl_GlobalInvocationID.x;
+    if (row >= pc.N) return;
+    int acc = 0;
+    for (uint k = 0; k < pc.K; ++k)
+        acc += w[row * pc.K + k] * int(x[k]);
+    y[row] = float(acc) * pc.scale;
+}

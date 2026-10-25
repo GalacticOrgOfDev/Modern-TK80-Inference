@@ -1,0 +1,43 @@
+#version 450
+layout(local_size_x = 64) in;
+
+layout(set = 0, binding = 0) readonly buffer In { float x[]; };
+layout(set = 0, binding = 1) readonly buffer Gamma { float gamma[]; };
+layout(set = 0, binding = 2) readonly buffer Beta { float beta[]; };
+layout(set = 0, binding = 3) writeonly buffer Out { float y[]; };
+
+layout(push_constant) uniform Push { uint N; float eps; } pc;
+
+shared float scratch[64];
+
+void main() {
+    uint tid = gl_LocalInvocationID.x;
+    uint row = gl_WorkGroupID.x;
+    uint base = row * pc.N;
+
+    float local = 0.0;
+    for (uint i = tid; i < pc.N; i += 64) local += x[base + i];
+    scratch[tid] = local;
+    barrier();
+    for (uint s = 32; s > 0; s >>= 1) {
+        if (tid < s) scratch[tid] += scratch[tid + s];
+        barrier();
+    }
+    float mean = scratch[0] / float(pc.N);
+
+    local = 0.0;
+    for (uint i = tid; i < pc.N; i += 64) {
+        float d = x[base + i] - mean;
+        local += d * d;
+    }
+    scratch[tid] = local;
+    barrier();
+    for (uint s = 32; s > 0; s >>= 1) {
+        if (tid < s) scratch[tid] += scratch[tid + s];
+        barrier();
+    }
+    float inv_std = inversesqrt(scratch[0] / float(pc.N) + pc.eps);
+
+    for (uint i = tid; i < pc.N; i += 64)
+        y[base + i] = (x[base + i] - mean) * inv_std * gamma[i] + beta[i];
+}

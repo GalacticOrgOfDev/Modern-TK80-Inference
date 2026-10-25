@@ -1,0 +1,36 @@
+#version 450
+layout(local_size_x = 64) in;
+
+layout(set = 0, binding = 0) readonly buffer Q { float q[]; };
+layout(set = 0, binding = 1) readonly buffer K { float k[]; };
+layout(set = 0, binding = 2) readonly buffer V { float v[]; };
+layout(set = 0, binding = 3) writeonly buffer Out { float o[]; };
+
+layout(push_constant) uniform Push { uint seq; uint dim; float scale; } pc;
+
+void main() {
+    uint q_idx = gl_GlobalInvocationID.x;
+    if (q_idx >= pc.seq) return;
+    // scores
+    float scores[1024];
+    float m = -1e30;
+    for (uint t = 0; t < pc.seq; ++t) {
+        float dot = 0.0;
+        for (uint d = 0; d < pc.dim; ++d)
+            dot += q[q_idx * pc.dim + d] * k[t * pc.dim + d];
+        scores[t] = dot * pc.scale;
+        m = max(m, scores[t]);
+    }
+    float sum = 0.0;
+    for (uint t = 0; t < pc.seq; ++t) {
+        scores[t] = exp(scores[t] - m);
+        sum += scores[t];
+    }
+    float inv = 1.0 / sum;
+    for (uint d = 0; d < pc.dim; ++d) {
+        float acc = 0.0;
+        for (uint t = 0; t < pc.seq; ++t)
+            acc += scores[t] * inv * v[t * pc.dim + d];
+        o[q_idx * pc.dim + d] = acc;
+    }
+}
