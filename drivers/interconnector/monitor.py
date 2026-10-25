@@ -49,7 +49,7 @@ def read_die_metrics(die_index: int) -> Dict[str, Any]:
 
 
 def read_all_metrics(die_indices: List[int]) -> List[Dict[str, Any]]:
-    """future docstring"""
+    """Return metrics for each die index."""
     return [read_die_metrics(i) for i in die_indices]
 
 
@@ -57,30 +57,30 @@ class PerfTimer:
     """Simple wall-clock timer for inference performance."""
 
     def __init__(self) -> None:
-        """future docstring"""
+        """Create a timer with no samples."""
         self.start: Optional[float] = None
         self.elapsed: float = 0.0
         self.tokens: int = 0
 
     def begin(self) -> None:
-        """future docstring"""
+        """Mark the start of a timed region."""
         self.start = time.perf_counter()
 
     def end(self, tokens: int = 0) -> None:
-        """future docstring"""
+        """Mark the end of a timed region and record token count."""
         if self.start is not None:
             self.elapsed = time.perf_counter() - self.start
             self.tokens = tokens
             self.start = None
 
     def tokens_per_sec(self) -> float:
-        """future docstring"""
+        """Return tokens per second for the last sample, or 0."""
         if self.elapsed <= 0 or self.tokens <= 0:
             return 0.0
         return self.tokens / self.elapsed
 
     def report(self) -> Dict[str, Any]:
-        """future docstring"""
+        """Return a dict of the last timing sample."""
         return {
             "elapsed_s": round(self.elapsed, 3),
             "tokens": self.tokens,
