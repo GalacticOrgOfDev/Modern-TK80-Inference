@@ -36,7 +36,11 @@ class DieFusionCore:
     """Logical fusion of two independent K80 dies."""
 
     def __init__(self, dies: List[K80Die]):
-        """future docstring"""
+        """Store the die list and mark fusion inactive.
+
+        Args:
+            dies: K80 dies available for fusion.
+        """
         self.dies = dies
         self.active = False
         log.info("DieFusionCore initialized with %d die(s)", len(dies))
@@ -47,7 +51,11 @@ class DieFusionCore:
         return len(free) >= 2
 
     def status(self) -> Dict[str, Any]:
-        """future docstring"""
+        """Return fusion readiness, free dies, and aggregate memory.
+
+        Returns:
+            Status dict. unified_memory is always False.
+        """
         free = [d.index for d in self.dies if not d.busy]
         total = sum(d.total_memory_mb for d in self.dies)
         return {
@@ -98,6 +106,6 @@ class DieFusionCore:
         return plan
 
     def deactivate(self) -> None:
-        """future docstring"""
+        """Mark fusion inactive. Does not move data."""
         self.active = False
         log.info("DieFusionCore deactivated")
