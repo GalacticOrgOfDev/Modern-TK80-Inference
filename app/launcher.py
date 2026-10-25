@@ -20,7 +20,10 @@ FRONTEND = Path(__file__).parent / "frontend"
 
 
 def _mount_frontend() -> None:
-    """future docstring"""
+    """Mount the frontend directory at / if it exists.
+
+    StaticFiles serves index.html for directory requests.
+    """
     from fastapi.staticfiles import StaticFiles
 
     if FRONTEND.exists():
@@ -28,7 +31,10 @@ def _mount_frontend() -> None:
 
 
 def _run_server() -> None:
-    """future docstring"""
+    """Run the FastAPI app with uvicorn on HOST:PORT.
+
+    Blocks the calling thread.
+    """
     uvicorn.run(fastapi_app, host=HOST, port=PORT, log_level="info")
 
 
