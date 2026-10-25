@@ -11,7 +11,7 @@ Current contract:
   a temporary host-visible staging buffer when the primary memory is
   device-local. Both staging methods require a queue, command pool, and
   a host-visible memory type index.
-- ShaderDispatcher is SPIR-V native. dispatch_matmul, dispatch_softmax, dispatch_layernorm, dispatch_rope, dispatch_attention, and dispatch_gemv are wired. Matmul includes an accumulation step.
+- ShaderDispatcher is SPIR-V native. create_matmul_pipeline, create_softmax_pipeline, create_layernorm_pipeline, create_rope_pipeline, create_attention_pipeline, and create_gemv_pipeline build pipelines from the embedded SPIR-V. Matching dispatch_* methods submit them.
   plus add and mul. create_pipeline and create_mul_pipeline
   use embedded SPIR-V by default; an external path overrides when supplied. dispatch_add and dispatch_mul
   upload inputs (direct or staging), submit the dispatch, and download the
@@ -550,6 +550,65 @@ class ShaderDispatcher:
         log.info("Dispatched mul for %d elements", count)
 
 
+
+
+    def create_matmul_pipeline(self, device):
+        """Create the matmul compute pipeline from EMBEDDED_MATMUL_SPV."""
+        self._matmul_pipeline = self._create_from_spv(device, EMBEDDED_MATMUL_SPV, "matmul")
+
+    def create_softmax_pipeline(self, device):
+        """Create the softmax compute pipeline from EMBEDDED_SOFTMAX_SPV."""
+        self._softmax_pipeline = self._create_from_spv(device, EMBEDDED_SOFTMAX_SPV, "softmax")
+
+    def create_layernorm_pipeline(self, device):
+        """Create the layer-norm compute pipeline from EMBEDDED_LAYERNORM_SPV."""
+        self._layernorm_pipeline = self._create_from_spv(device, EMBEDDED_LAYERNORM_SPV, "layernorm")
+
+    def create_rope_pipeline(self, device):
+        """Create the RoPE compute pipeline from EMBEDDED_ROPE_SPV."""
+        self._rope_pipeline = self._create_from_spv(device, EMBEDDED_ROPE_SPV, "rope")
+
+    def create_attention_pipeline(self, device):
+        """Create the attention compute pipeline from EMBEDDED_ATTENTION_SPV."""
+        self._attention_pipeline = self._create_from_spv(device, EMBEDDED_ATTENTION_SPV, "attention")
+
+    def create_gemv_pipeline(self, device):
+        """Create the quantized GEMV compute pipeline from EMBEDDED_GEMV_SPV."""
+        self._gemv_pipeline = self._create_from_spv(device, EMBEDDED_GEMV_SPV, "gemv")
+
+    def _create_from_spv(self, device, spv: bytes, name: str):
+        """Build a compute pipeline from raw SPIR-V bytes. Raises if vulkan is missing."""
+        vk = _load_vulkan()
+        if self._pipeline_layout is None:
+            raise RuntimeError("call create_pipeline before creating model-op pipelines")
+        module = vk.vkCreateShaderModule(
+            device,
+            vk.VkShaderModuleCreateInfo(
+                sType=vk.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                codeSize=len(spv),
+                pCode=spv,
+            ),
+            None,
+        )
+        stage = vk.VkPipelineShaderStageCreateInfo(
+            sType=vk.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            stage=vk.VK_SHADER_STAGE_COMPUTE_BIT,
+            module=module,
+            pName="main",
+        )
+        pipeline = vk.vkCreateComputePipelines(
+            device,
+            None,
+            1,
+            [vk.VkComputePipelineCreateInfo(
+                sType=vk.VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+                stage=stage,
+                layout=self._pipeline_layout,
+            )],
+            None,
+        )[0]
+        log.info("%s pipeline created from embedded SPIR-V", name)
+        return pipeline
 
     def dispatch_matmul(self, device, queue, command_pool, a, b, out, count, use_staging=False, host_visible_index=None):
         """Dispatch the matmul pipeline. Requires create_matmul_pipeline first."""
