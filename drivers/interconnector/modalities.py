@@ -1,12 +1,16 @@
-"""Modality backends for smaller models that fit on one K80 die (12 GB FP32).
+"""Modality backends for Modern-TK80-Inference.
 
-Supported now (single-die):
+Supported:
 - image: Stable Diffusion 1.5-class via diffusers
-- voice: Whisper-small-class ASR
-- agent: tool-calling loop on top of an LLM backend
+- voice: Whisper-class ASR via transformers
+- agent: tool-calling loop on top of an already-loaded LLM backend
 
-Video is acknowledged but left as a constrained placeholder; most video models
-exceed a single 12 GB die.
+Device selection uses the same device_string produced by
+drivers.interconnector.devices ("vulkan:N", "cuda:N", or "cpu").
+CUDA indexes are passed to torch. Vulkan and CPU both map to the CPU
+device because diffusers and the transformers pipeline do not implement
+a Vulkan compute path in this wrapper. Creator tools do not require
+these backends.
 """
 
 from __future__ import annotations
@@ -19,65 +23,77 @@ log = logging.getLogger("tk80.interconnector.modalities")
 ToolRunner = Callable[[str, Dict[str, Any]], Dict[str, Any]]
 
 
-def _device_index(device: str) -> int:
-    """Turn 'cuda:0' into 0. Falls back to 0."""
-    if isinstance(device, int):
-        return device
-    if isinstance(device, str) and device.startswith("cuda:"):
-        try:
-            return int(device.split(":", 1)[1])
-        except (IndexError, ValueError):
-            return 0
-    return 0
+def _torch_device(device_string: Optional[str]) -> str:
+    """Map a discovery device_string to a torch device.
+
+    "cuda:1" -> "cuda:1"
+    "vulkan:0" or "cpu" or None -> "cpu"
+    """
+    if not device_string or device_string == "cpu":
+        return "cpu"
+    if device_string.startswith("cuda:"):
+        return device_string
+    return "cpu"
 
 
 class ImageBackend:
-    """Small diffusion model (e.g. SD 1.5) on one die, FP32."""
+    """Small diffusion model (e.g. SD 1.5).
 
-    def __init__(self, model_name_or_path: str, device: str = "cuda:0"):
-        """future docstring"""
+    Accepts a device_string from discovery. Only a cuda:N string is placed
+    on a GPU; vulkan:N and cpu run on CPU. The model path may be a local
+    directory or a Hugging Face repo id.
+    """
+
+    def __init__(self, model_name_or_path: str, device: str = "cpu"):
         try:
             import torch
             from diffusers import StableDiffusionPipeline
         except ImportError as exc:
             raise RuntimeError("diffusers + torch required for image backend") from exc
 
-        self.device = device
-        log.info("Loading image model on %s: %s", device, model_name_or_path)
+        self.device = _torch_device(device)
+        self.device_string = device or "cpu"
+        log.info("Loading image model on %s (requested %s): %s", self.device, self.device_string, model_name_or_path)
         self.pipe = StableDiffusionPipeline.from_pretrained(
             model_name_or_path,
-            torch_dtype=getattr(torch, "float32"),
+            torch_dtype=torch.float32,
             safety_checker=None,
-        ).to(device)
+        ).to(self.device)
 
     def generate(self, prompt: str, **kwargs: Any) -> Any:
-        """future docstring"""
+        """Generate an image. Returns the first PIL image or the raw result."""
         result = self.pipe(prompt, **kwargs)
         return result.images[0] if hasattr(result, "images") else result
 
 
 class VoiceBackend:
-    """Small ASR (Whisper-class) on one die."""
+    """Small ASR (Whisper-class).
 
-    def __init__(self, model_name_or_path: str, device: str = "cuda:0"):
+    Accepts a device_string from discovery. Only a cuda:N string is placed
+    on a GPU; vulkan:N and cpu run on CPU. The model path may be a local
+    directory or a Hugging Face repo id.
+    """
+
+    def __init__(self, model_name_or_path: str, device: str = "cpu"):
         try:
             import torch
             from transformers import pipeline
         except ImportError as exc:
             raise RuntimeError("transformers + torch required for voice backend") from exc
 
-        self.device = device
-        dev_idx = _device_index(device)
-        log.info("Loading voice model on %s (index %d): %s", device, dev_idx, model_name_or_path)
+        self.device = _torch_device(device)
+        self.device_string = device or "cpu"
+        dev_idx = 0 if self.device == "cpu" else int(self.device.split(":", 1)[1])
+        log.info("Loading voice model on %s (requested %s): %s", self.device, self.device_string, model_name_or_path)
         self.pipe = pipeline(
             "automatic-speech-recognition",
             model=model_name_or_path,
-            device=dev_idx,
-            torch_dtype=getattr(torch, "float32"),
+            device=dev_idx if self.device != "cpu" else -1,
+            torch_dtype=torch.float32,
         )
 
     def generate(self, audio_path: str, **kwargs: Any) -> str:
-        """future docstring"""
+        """Transcribe an audio file. Returns the text."""
         if not audio_path:
             raise ValueError("voice generate requires an audio path")
         result = self.pipe(audio_path, **kwargs)
@@ -89,10 +105,10 @@ class AgentBackend:
 
     The model emits `tool: <name> {json}` or `Final: <answer>`.
     A tool_runner callback executes the call and the result is fed back.
+    No device selection is performed here; the LLM backend already owns it.
     """
 
     def __init__(self, llm_backend: Any, max_steps: int = 4):
-        """future docstring"""
         self.llm = llm_backend
         self.max_steps = max_steps
 
@@ -103,7 +119,7 @@ class AgentBackend:
         tool_runner: Optional[ToolRunner] = None,
         tool_prompt: str = "",
     ) -> Dict[str, Any]:
-        """future docstring"""
+        """Run the tool loop. Returns a dict with goal, steps, and result."""
         if not goal:
             raise ValueError("agent run requires a goal")
         tools = tools or []
@@ -137,7 +153,6 @@ class AgentBackend:
                 step["result"] = result
                 history.append(f"Tool result: {result}")
             elif call is None:
-                # No tool and no Final: stop to avoid spinning.
                 final = reply
                 break
 
@@ -170,11 +185,10 @@ def _extract_call(text: str) -> Optional[Dict[str, Any]]:
 
 
 class VideoBackend:
-    """Placeholder. Most video models exceed one 12 GB K80 die."""
+    """Placeholder. Most video models exceed practical single-device limits."""
 
     def __init__(self, *args: Any, **kwargs: Any):
-        """future docstring"""
         raise NotImplementedError(
-            "Video models generally exceed a single 12 GB K80 die. "
-            "Smaller frame-by-frame or latent models can be added later."
+            "Video generation models are not implemented in this wrapper. "
+            "Use the timeline and ffmpeg encode path in the creator tools."
         )
