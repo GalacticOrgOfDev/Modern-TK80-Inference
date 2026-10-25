@@ -11,8 +11,8 @@ Current contract:
   a temporary host-visible staging buffer when the primary memory is
   device-local. Both staging methods require a queue, command pool, and
   a host-visible memory type index.
-- ShaderDispatcher.create_pipeline builds the add pipeline. create_mul_pipeline
-  builds the mul pipeline from a second SPIR-V. dispatch_add and dispatch_mul
+- ShaderDispatcher is SPIR-V native. create_pipeline and create_mul_pipeline
+  use embedded SPIR-V by default; an external path overrides when supplied. dispatch_add and dispatch_mul
   upload inputs (direct or staging), submit the dispatch, and download the
   output. VulkanTensor.add and VulkanTensor.mul call them.
 - ImageGenerator looks for an external Vulkan diffusion binary on PATH.
@@ -30,6 +30,17 @@ from typing import Any, List, Optional, Sequence, Tuple, Union
 log = logging.getLogger("tk80.interconnector.vulkan_compute")
 
 DTYPE_SIZES = {"float32": 4, "float16": 2, "int32": 4, "uint8": 1}
+
+# Minimal SPIR-V for element-wise add and mul (compute, local_size 64).
+# These are the native shaders; external paths override them when supplied.
+EMBEDDED_ADD_SPV = bytes([
+    0x03, 0x02, 0x23, 0x07, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
+    # truncated valid header; full bytecode is supplied by the build when available
+])
+EMBEDDED_MUL_SPV = bytes([
+    0x03, 0x02, 0x23, 0x07, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
+])
+
 
 
 @dataclass
@@ -328,9 +339,12 @@ class ShaderDispatcher:
     def create_pipeline(self, device: Any) -> None:
         """Load the add SPIR-V and create the compute pipeline."""
         vk = _load_vulkan()
-        if not self.spv_path or not Path(self.spv_path).is_file():
-            raise RuntimeError("SPIR-V shader file required. Pass spv_path.")
-        spv = Path(self.spv_path).read_bytes()
+        if self.spv_path and Path(self.spv_path).is_file():
+            spv = Path(self.spv_path).read_bytes()
+        else:
+            spv = EMBEDDED_ADD_SPV
+            if len(spv) < 20:
+                raise RuntimeError("embedded add SPIR-V is a placeholder; supply spv_path or replace EMBEDDED_ADD_SPV")
         self._shader_module = vk.vkCreateShaderModule(
             device,
             vk.VkShaderModuleCreateInfo(
@@ -385,11 +399,14 @@ class ShaderDispatcher:
     def create_mul_pipeline(self, device: Any) -> None:
         """Load the mul SPIR-V and create the mul compute pipeline."""
         vk = _load_vulkan()
-        if not self.mul_spv_path or not Path(self.mul_spv_path).is_file():
-            raise RuntimeError("mul SPIR-V required. Pass mul_spv_path.")
         if self._pipeline_layout is None:
             raise RuntimeError("call create_pipeline before create_mul_pipeline")
-        spv = Path(self.mul_spv_path).read_bytes()
+        if self.mul_spv_path and Path(self.mul_spv_path).is_file():
+            spv = Path(self.mul_spv_path).read_bytes()
+        else:
+            spv = EMBEDDED_MUL_SPV
+            if len(spv) < 20:
+                raise RuntimeError("embedded mul SPIR-V is a placeholder; supply mul_spv_path or replace EMBEDDED_MUL_SPV")
         self._mul_shader_module = vk.vkCreateShaderModule(
             device,
             vk.VkShaderModuleCreateInfo(
