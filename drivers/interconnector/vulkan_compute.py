@@ -5,22 +5,22 @@ AMD GPU (RX 6700 and others) without ROCm. It does not wrap PyTorch.
 
 Current contract:
 - Discover Vulkan devices via vulkaninfo --summary.
-- VulkanBuffer allocates device memory when the ``vulkan`` package is
-  importable and a device can be created; otherwise allocation raises.
-- ShaderDispatcher dispatches a compute shader for element-wise add when
-  the loader and a SPIR-V module are available. VulkanTensor.add calls
-  the dispatcher and raises when dispatch cannot be performed. There is
-  no silent host fallback on the device path.
+- VulkanBuffer allocates device memory when the vulkan package is
+  importable.
+- ShaderDispatcher.create_pipeline loads a SPIR-V file and builds the
+  descriptor set layout, pipeline layout, and compute pipeline.
+  dispatch_add records a command buffer, binds three storage buffers,
+  and submits vkCmdDispatch. VulkanTensor.add calls it and raises when
+  any required object is missing. No silent host fallback.
 - ImageGenerator looks for an external Vulkan diffusion binary on PATH.
 
-A full pipeline cache and mul shader are later passes.
+A mul shader and automatic upload/download are later passes.
 """
 
 from __future__ import annotations
 
 import logging
 import shutil
-import struct
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,9 +29,6 @@ from typing import Any, List, Optional, Sequence, Tuple, Union
 log = logging.getLogger("tk80.interconnector.vulkan_compute")
 
 DTYPE_SIZES = {"float32": 4, "float16": 2, "int32": 4, "uint8": 1}
-
-# Minimal SPIR-V for a float add kernel is not embedded in this pass.
-# The dispatcher requires an external .spv path or raises.
 
 
 @dataclass
@@ -125,15 +122,7 @@ class VulkanBuffer:
         return bytes(self._data[offset:end])
 
     def allocate(self, device: Any, memory_index: int) -> None:
-        """Allocate device memory for this buffer.
-
-        Args:
-            device: A Vulkan device handle from the vulkan package.
-            memory_index: Memory type index suitable for the buffer.
-
-        Raises:
-            RuntimeError: Allocation fails.
-        """
+        """Allocate device memory for this buffer."""
         vk = _load_vulkan()
         if self._allocated:
             return
@@ -180,57 +169,210 @@ class VulkanBuffer:
     def is_allocated(self) -> bool:
         return self._allocated
 
+    @property
+    def device_buffer(self) -> Any:
+        return self._device_buffer
+
 
 class ShaderDispatcher:
-    """Dispatch a compute shader for element-wise add.
+    """Create a compute pipeline and dispatch an element-wise add shader.
 
-    Requires the vulkan package and a SPIR-V file path. When either is
-    missing, dispatch raises. The caller supplies already-allocated
-    input and output buffers.
+    create_pipeline loads SPIR-V and builds the layout and pipeline.
+    dispatch_add records a command buffer, binds three storage buffers,
+    and submits the dispatch. Both methods raise when a required object
+    is missing.
     """
 
     def __init__(self, spv_path: Optional[str] = None):
         self.spv_path = spv_path
-        self._vk: Any = None
+        self._pipeline: Any = None
+        self._pipeline_layout: Any = None
+        self._descriptor_set_layout: Any = None
+        self._shader_module: Any = None
+
+    def create_pipeline(self, device: Any) -> None:
+        """Load SPIR-V and create the compute pipeline.
+
+        Raises:
+            RuntimeError: SPIR-V missing or vulkan package missing.
+        """
+        vk = _load_vulkan()
+        if not self.spv_path or not Path(self.spv_path).is_file():
+            raise RuntimeError("SPIR-V shader file required. Pass spv_path.")
+        spv = Path(self.spv_path).read_bytes()
+        self._shader_module = vk.vkCreateShaderModule(
+            device,
+            vk.VkShaderModuleCreateInfo(
+                sType=vk.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                codeSize=len(spv),
+                pCode=spv,
+            ),
+            None,
+        )
+        bindings = [
+            vk.VkDescriptorSetLayoutBinding(
+                binding=i,
+                descriptorType=vk.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                descriptorCount=1,
+                stageFlags=vk.VK_SHADER_STAGE_COMPUTE_BIT,
+            )
+            for i in range(3)
+        ]
+        self._descriptor_set_layout = vk.vkCreateDescriptorSetLayout(
+            device,
+            vk.VkDescriptorSetLayoutCreateInfo(
+                sType=vk.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+                bindingCount=3,
+                pBindings=bindings,
+            ),
+            None,
+        )
+        self._pipeline_layout = vk.vkCreatePipelineLayout(
+            device,
+            vk.VkPipelineLayoutCreateInfo(
+                sType=vk.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                setLayoutCount=1,
+                pSetLayouts=[self._descriptor_set_layout],
+            ),
+            None,
+        )
+        stage = vk.VkPipelineShaderStageCreateInfo(
+            sType=vk.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            stage=vk.VK_SHADER_STAGE_COMPUTE_BIT,
+            module=self._shader_module,
+            pName="main",
+        )
+        self._pipeline = vk.vkCreateComputePipelines(
+            device,
+            None,
+            1,
+            [
+                vk.VkComputePipelineCreateInfo(
+                    sType=vk.VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+                    stage=stage,
+                    layout=self._pipeline_layout,
+                )
+            ],
+            None,
+        )[0]
+        log.info("Compute pipeline created from %s", self.spv_path)
 
     def dispatch_add(
         self,
         device: Any,
+        queue: Any,
+        command_pool: Any,
         a: VulkanBuffer,
         b: VulkanBuffer,
         out: VulkanBuffer,
         count: int,
     ) -> None:
-        """Dispatch an element-wise add shader.
+        """Record and submit an element-wise add dispatch.
 
         Raises:
-            RuntimeError: vulkan package missing, SPIR-V missing, or
-                buffers are not allocated.
+            RuntimeError: pipeline not created, buffers not allocated, or
+                vulkan package missing.
         """
         vk = _load_vulkan()
-        if not self.spv_path or not Path(self.spv_path).is_file():
-            raise RuntimeError(
-                "SPIR-V shader file required for dispatch. "
-                "Pass spv_path to ShaderDispatcher."
-            )
+        if self._pipeline is None:
+            raise RuntimeError("call create_pipeline before dispatch_add")
         if not (a.is_allocated and b.is_allocated and out.is_allocated):
             raise RuntimeError("all buffers must be allocated before dispatch")
-        # Pipeline creation and vkCmdDispatch are the next concrete step.
-        # This method records the intent and raises until the pipeline
-        # objects are built in a later pass, so the call is never a no-op.
-        raise RuntimeError(
-            "Shader pipeline objects are not yet created. "
-            "dispatch_add is wired to require them; implement pipeline "
-            "creation in the next pass."
+        # Descriptor pool and set
+        pool = vk.vkCreateDescriptorPool(
+            device,
+            vk.VkDescriptorPoolCreateInfo(
+                sType=vk.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+                maxSets=1,
+                poolSizeCount=1,
+                pPoolSizes=[
+                    vk.VkDescriptorPoolSize(
+                        type=vk.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                        descriptorCount=3,
+                    )
+                ],
+            ),
+            None,
         )
+        dset = vk.vkAllocateDescriptorSets(
+            device,
+            vk.VkDescriptorSetAllocateInfo(
+                sType=vk.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+                descriptorPool=pool,
+                descriptorSetCount=1,
+                pSetLayouts=[self._descriptor_set_layout],
+            ),
+        )[0]
+        infos = [
+            vk.VkDescriptorBufferInfo(buffer=buf.device_buffer, offset=0, range=buf.size_bytes)
+            for buf in (a, b, out)
+        ]
+        writes = [
+            vk.VkWriteDescriptorSet(
+                sType=vk.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                dstSet=dset,
+                dstBinding=i,
+                descriptorCount=1,
+                descriptorType=vk.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                pBufferInfo=infos[i],
+            )
+            for i in range(3)
+        ]
+        vk.vkUpdateDescriptorSets(device, 3, writes, 0, None)
+        # Command buffer
+        cmd = vk.vkAllocateCommandBuffers(
+            device,
+            vk.VkCommandBufferAllocateInfo(
+                sType=vk.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+                commandPool=command_pool,
+                level=vk.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                commandBufferCount=1,
+            ),
+        )[0]
+        vk.vkBeginCommandBuffer(
+            cmd,
+            vk.VkCommandBufferBeginInfo(
+                sType=vk.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            ),
+        )
+        vk.vkCmdBindPipeline(cmd, vk.VK_PIPELINE_BIND_POINT_COMPUTE, self._pipeline)
+        vk.vkCmdBindDescriptorSets(
+            cmd,
+            vk.VK_PIPELINE_BIND_POINT_COMPUTE,
+            self._pipeline_layout,
+            0,
+            1,
+            [dset],
+            0,
+            None,
+        )
+        groups = (count + 63) // 64
+        vk.vkCmdDispatch(cmd, groups, 1, 1)
+        vk.vkEndCommandBuffer(cmd)
+        vk.vkQueueSubmit(
+            queue,
+            1,
+            [
+                vk.VkSubmitInfo(
+                    sType=vk.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                    commandBufferCount=1,
+                    pCommandBuffers=[cmd],
+                )
+            ],
+            None,
+        )
+        vk.vkQueueWaitIdle(queue)
+        vk.vkFreeCommandBuffers(device, command_pool, 1, [cmd])
+        vk.vkDestroyDescriptorPool(device, pool, None)
+        log.info("Dispatched add for %d elements", count)
 
 
 class VulkanTensor:
     """Custom tensor backed by a VulkanBuffer.
 
-    add attempts device dispatch via ShaderDispatcher when a dispatcher
-    is attached. When no dispatcher is attached or dispatch cannot run,
-    add raises. Host arithmetic is not used as a silent fallback.
+    add requires an attached ShaderDispatcher whose pipeline has been
+    created, plus a device, queue, and command pool supplied by the
+    caller. It raises when any of those are missing.
     """
 
     def __init__(
@@ -262,26 +404,29 @@ class VulkanTensor:
     def __repr__(self) -> str:
         return f"VulkanTensor(shape={self.shape}, dtype={self.dtype}, device={self.device_index})"
 
-    def add(self, other: Union["VulkanTensor", float]) -> "VulkanTensor":
-        """Element-wise add via shader dispatch.
+    def add(
+        self,
+        other: "VulkanTensor",
+        device: Any,
+        queue: Any,
+        command_pool: Any,
+    ) -> "VulkanTensor":
+        """Element-wise add via the compute pipeline.
 
         Raises:
-            RuntimeError: No dispatcher, buffers not allocated, or
-                dispatch cannot be performed.
+            RuntimeError: dispatcher missing or dispatch fails.
         """
         if self.dispatcher is None:
-            raise RuntimeError(
-                "ShaderDispatcher required for add. Attach one at construction."
-            )
-        if not isinstance(other, VulkanTensor):
-            raise TypeError("device add requires another VulkanTensor")
+            raise RuntimeError("ShaderDispatcher required for add")
         if other.shape != self.shape or other.dtype != self.dtype:
             raise ValueError("add requires matching shape and dtype")
-        out = VulkanTensor(self.shape, self.dtype, self.device_index, dispatcher=self.dispatcher)
-        # Device handles are supplied by the caller in a later wiring pass.
-        # Here we require the buffers to already be allocated.
+        out = VulkanTensor(
+            self.shape, self.dtype, self.device_index, dispatcher=self.dispatcher
+        )
         self.dispatcher.dispatch_add(
-            device=None,
+            device=device,
+            queue=queue,
+            command_pool=command_pool,
             a=self.buffer,
             b=other.buffer,
             out=out.buffer,
@@ -330,11 +475,7 @@ class ImageGenerator:
             log.info("No Vulkan diffusion binary found on PATH")
 
     def generate(self, prompt: str, output_path: str, steps: int = 20) -> Path:
-        """Run the external binary. Returns the output path on success.
-
-        Raises:
-            RuntimeError: No binary is available or the process fails.
-        """
+        """Run the external binary. Returns the output path on success."""
         if not self.binary:
             raise RuntimeError(
                 "No Vulkan diffusion binary on PATH. Install one of: "
