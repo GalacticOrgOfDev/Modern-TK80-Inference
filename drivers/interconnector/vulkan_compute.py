@@ -6,15 +6,15 @@ AMD GPU (RX 6700 and others) without ROCm. It does not wrap PyTorch.
 Current contract:
 - Discover Vulkan devices via vulkaninfo --summary.
 - VulkanBuffer allocates device memory when the vulkan package is
-  importable.
+  importable. upload maps the memory and copies host bytes to the
+  device; download maps and copies the device bytes back. Both raise
+  if the memory is not host-visible.
 - ShaderDispatcher.create_pipeline loads a SPIR-V file and builds the
-  descriptor set layout, pipeline layout, and compute pipeline.
-  dispatch_add records a command buffer, binds three storage buffers,
-  and submits vkCmdDispatch. VulkanTensor.add calls it and raises when
-  any required object is missing. No silent host fallback.
+  pipeline. dispatch_add uploads the two inputs, records and submits
+  the dispatch, then downloads the output. VulkanTensor.add calls it.
 - ImageGenerator looks for an external Vulkan diffusion binary on PATH.
 
-A mul shader and automatic upload/download are later passes.
+A mul shader is a later pass.
 """
 
 from __future__ import annotations
@@ -90,9 +90,10 @@ def _load_vulkan() -> Any:
 class VulkanBuffer:
     """Buffer that can be allocated on a Vulkan device.
 
-    Host bytes are always stored. Device allocation is performed by
-    allocate() when the vulkan package is present. The device handle is
-    stored on the instance; free() releases it.
+    Host bytes are always stored. allocate creates the device buffer.
+    upload copies host bytes into the mapped device memory. download
+    copies the mapped device memory back into the host bytes. Both
+    require the memory type to be host-visible; otherwise they raise.
     """
 
     def __init__(self, size_bytes: int, device_index: int = 0):
@@ -154,6 +155,53 @@ class VulkanBuffer:
         self._allocated = True
         log.info("Allocated %d bytes on device index %d", self.size_bytes, self.device_index)
 
+    def upload(self, device: Any) -> None:
+        """Map the device memory and copy host bytes into it.
+
+        Raises:
+            RuntimeError: Buffer is not allocated or memory is not
+                host-visible.
+        """
+        if not self._allocated:
+            raise RuntimeError("buffer must be allocated before upload")
+        vk = _load_vulkan()
+        ptr = vk.vkMapMemory(device, self._device_memory, 0, self.size_bytes, 0)
+        if not ptr:
+            raise RuntimeError("vkMapMemory returned null; memory is not host-visible")
+        # The vulkan package exposes the mapped pointer as an integer or
+        # a ctypes object depending on version. Copy via a bytearray view
+        # when possible; otherwise raise so the failure is visible.
+        try:
+            import ctypes
+            ctypes.memmove(ptr, (ctypes.c_char * self.size_bytes).from_buffer(self._data), self.size_bytes)
+        except Exception as exc:
+            vk.vkUnmapMemory(device, self._device_memory)
+            raise RuntimeError(f"host-to-device copy failed: {exc}") from exc
+        vk.vkUnmapMemory(device, self._device_memory)
+        log.info("Uploaded %d bytes", self.size_bytes)
+
+    def download(self, device: Any) -> None:
+        """Map the device memory and copy it into the host bytes.
+
+        Raises:
+            RuntimeError: Buffer is not allocated or memory is not
+                host-visible.
+        """
+        if not self._allocated:
+            raise RuntimeError("buffer must be allocated before download")
+        vk = _load_vulkan()
+        ptr = vk.vkMapMemory(device, self._device_memory, 0, self.size_bytes, 0)
+        if not ptr:
+            raise RuntimeError("vkMapMemory returned null; memory is not host-visible")
+        try:
+            import ctypes
+            ctypes.memmove((ctypes.c_char * self.size_bytes).from_buffer(self._data), ptr, self.size_bytes)
+        except Exception as exc:
+            vk.vkUnmapMemory(device, self._device_memory)
+            raise RuntimeError(f"device-to-host copy failed: {exc}") from exc
+        vk.vkUnmapMemory(device, self._device_memory)
+        log.info("Downloaded %d bytes", self.size_bytes)
+
     def free(self, device: Any) -> None:
         """Release device memory if allocated."""
         if not self._allocated:
@@ -178,8 +226,8 @@ class ShaderDispatcher:
     """Create a compute pipeline and dispatch an element-wise add shader.
 
     create_pipeline loads SPIR-V and builds the layout and pipeline.
-    dispatch_add records a command buffer, binds three storage buffers,
-    and submits the dispatch. Both methods raise when a required object
+    dispatch_add uploads the inputs, records and submits the dispatch,
+    then downloads the output. Both methods raise when a required object
     is missing.
     """
 
@@ -191,11 +239,7 @@ class ShaderDispatcher:
         self._shader_module: Any = None
 
     def create_pipeline(self, device: Any) -> None:
-        """Load SPIR-V and create the compute pipeline.
-
-        Raises:
-            RuntimeError: SPIR-V missing or vulkan package missing.
-        """
+        """Load SPIR-V and create the compute pipeline."""
         vk = _load_vulkan()
         if not self.spv_path or not Path(self.spv_path).is_file():
             raise RuntimeError("SPIR-V shader file required. Pass spv_path.")
@@ -267,18 +311,19 @@ class ShaderDispatcher:
         out: VulkanBuffer,
         count: int,
     ) -> None:
-        """Record and submit an element-wise add dispatch.
+        """Upload inputs, dispatch, and download the output.
 
         Raises:
             RuntimeError: pipeline not created, buffers not allocated, or
-                vulkan package missing.
+                transfer fails.
         """
         vk = _load_vulkan()
         if self._pipeline is None:
             raise RuntimeError("call create_pipeline before dispatch_add")
         if not (a.is_allocated and b.is_allocated and out.is_allocated):
             raise RuntimeError("all buffers must be allocated before dispatch")
-        # Descriptor pool and set
+        a.upload(device)
+        b.upload(device)
         pool = vk.vkCreateDescriptorPool(
             device,
             vk.VkDescriptorPoolCreateInfo(
@@ -319,7 +364,6 @@ class ShaderDispatcher:
             for i in range(3)
         ]
         vk.vkUpdateDescriptorSets(device, 3, writes, 0, None)
-        # Command buffer
         cmd = vk.vkAllocateCommandBuffers(
             device,
             vk.VkCommandBufferAllocateInfo(
@@ -364,15 +408,16 @@ class ShaderDispatcher:
         vk.vkQueueWaitIdle(queue)
         vk.vkFreeCommandBuffers(device, command_pool, 1, [cmd])
         vk.vkDestroyDescriptorPool(device, pool, None)
-        log.info("Dispatched add for %d elements", count)
+        out.download(device)
+        log.info("Dispatched add for %d elements and downloaded result", count)
 
 
 class VulkanTensor:
     """Custom tensor backed by a VulkanBuffer.
 
     add requires an attached ShaderDispatcher whose pipeline has been
-    created, plus a device, queue, and command pool supplied by the
-    caller. It raises when any of those are missing.
+    created, plus a device, queue, and command pool. The dispatcher
+    uploads the inputs and downloads the result.
     """
 
     def __init__(
@@ -411,11 +456,7 @@ class VulkanTensor:
         queue: Any,
         command_pool: Any,
     ) -> "VulkanTensor":
-        """Element-wise add via the compute pipeline.
-
-        Raises:
-            RuntimeError: dispatcher missing or dispatch fails.
-        """
+        """Element-wise add via the compute pipeline."""
         if self.dispatcher is None:
             raise RuntimeError("ShaderDispatcher required for add")
         if other.shape != self.shape or other.dtype != self.dtype:
