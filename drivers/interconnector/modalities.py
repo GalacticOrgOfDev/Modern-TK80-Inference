@@ -238,10 +238,59 @@ def _extract_call(text: str) -> Optional[Dict[str, Any]]:
 
 
 class VideoBackend:
-    """Placeholder. Most video models exceed practical single-device limits."""
+    """Video path that does not require a generative model.
+
+    Frame generation models are not loaded here. The backend records a
+    timeline of clips and encodes them with ffmpeg when encode() is called.
+    """
 
     def __init__(self, *args: Any, **kwargs: Any):
-        raise NotImplementedError(
-            "Video generation models are not implemented in this wrapper. "
-            "Use the timeline and ffmpeg encode path in the creator tools."
+        self.frames: list = []
+        self.device_string = kwargs.get("device_string", "cpu")
+
+    def add_frame(self, prompt: str, duration: float = 1.0) -> dict:
+        """Append a timeline frame. No model is loaded.
+
+        Args:
+            prompt: Frame description.
+            duration: Length in seconds.
+
+        Returns:
+            The frame dict.
+        """
+        frame = {"id": len(self.frames), "prompt": prompt, "duration": duration}
+        self.frames.append(frame)
+        return frame
+
+    def encode(self, output_path: str) -> str:
+        """Encode the timeline to MP4 with ffmpeg.
+
+        Raises:
+            RuntimeError: ffmpeg is missing or the encode fails.
+        """
+        import shutil
+        import subprocess
+        from pathlib import Path as P
+        if shutil.which("ffmpeg") is None:
+            raise RuntimeError("ffmpeg is required to encode the timeline")
+        if not self.frames:
+            raise RuntimeError("no frames to encode")
+        out = P(output_path)
+        # Concat demuxer requires a list file; write a silent color source per frame.
+        list_file = out.with_suffix(".txt")
+        lines = []
+        for i, f in enumerate(self.frames):
+            seg = out.with_name(f"seg_{i}.mp4")
+            subprocess.run(
+                ["ffmpeg", "-y", "-f", "lavfi", "-i", f"color=c=black:s=640x360:d={f['duration']}",
+                 "-c:v", "libx264", str(seg)],
+                check=True, capture_output=True,
+            )
+            lines.append(f"file '{seg}'")
+        list_file.write_text("\n".join(lines))
+        subprocess.run(
+            ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(list_file),
+             "-c", "copy", str(out)],
+            check=True, capture_output=True,
         )
+        return str(out)
