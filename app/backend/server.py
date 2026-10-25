@@ -119,7 +119,10 @@ _vst_project: Dict[str, Any] = default_project()
 
 
 def get_ic() -> Interconnector:
-    """future docstring"""
+    """Return the shared Interconnector, creating it on first use.
+
+Raises:
+    HTTPException: Interconnector construction fails."""
     global _ic, _fusion
     if _ic is None:
         try:
@@ -131,7 +134,7 @@ def get_ic() -> Interconnector:
 
 
 def get_fusion() -> DieFusionCore:
-    """future docstring"""
+    """Return the DieFusionCore, creating the Interconnector if needed."""
     get_ic()
     assert _fusion is not None
     return _fusion
@@ -158,14 +161,18 @@ def _restore_undo(entry: Dict[str, Any]) -> None:
 
 
 def _ensure_track() -> int:
-    """future docstring"""
+    """Return the id of the first audio track, creating one if none exist."""
     if not _audio_tracks:
         _audio_tracks.append(make_track(0, "Track 1", "stereo", _sample_rate))
     return _audio_tracks[0]["id"]
 
 
 def _validate_rate_for_track(track: Dict[str, Any], rate: int) -> None:
-    """future docstring"""
+    """Raise if the track Scarlett profile does not support the rate.
+
+Args:
+    track: Track dict.
+    rate: Sample rate in Hz."""
     scar = track.get("scarlett")
     if scar and rate not in scar.get("rates", []):
         raise HTTPException(
@@ -175,7 +182,11 @@ def _validate_rate_for_track(track: Dict[str, Any], rate: int) -> None:
 
 
 def _refresh_clip(clip: Dict[str, Any], path: Path) -> None:
-    """future docstring"""
+    """Rebuild a clip dict from a new file while keeping mute, effects, gain, and position.
+
+Args:
+    clip: Existing clip dict.
+    path: New audio file path."""
     kept = {
         "mute": clip.get("mute", False),
         "effects": clip.get("effects"),
@@ -199,7 +210,14 @@ def _refresh_clip(clip: Dict[str, Any], path: Path) -> None:
 
 
 def _dispatch_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
-    """future docstring"""
+    """Run a named creator tool and return its result dict.
+
+Args:
+    name: Tool name.
+    args: Tool arguments.
+
+Raises:
+    HTTPException: Unknown tool or bad arguments."""
     global _bpm
     track_id = args.get("track_id")
     if track_id is None:
@@ -443,7 +461,10 @@ def _dispatch_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _tool_summary(result: Dict[str, Any]) -> str:
-    """future docstring"""
+    """Return a one-line summary of a tool result.
+
+Args:
+    result: Tool result dict."""
     if "clip" in result:
         return f"Created {result['clip']['name']} on track {result['clip']['track_id']}."
     if "bpm" in result:
@@ -454,7 +475,7 @@ def _tool_summary(result: Dict[str, Any]) -> str:
 
 
 class LoadRequest(BaseModel):
-    """future docstring"""
+    """Request body for loading a model."""
     model: str
     backend: str = "llama"
     modality: str = "llm"
@@ -463,19 +484,19 @@ class LoadRequest(BaseModel):
 
 
 class GenerateRequest(BaseModel):
-    """future docstring"""
+    """Request body for a generate call."""
     request: Any
     die: Optional[int] = None
 
 
 class ChatMessage(BaseModel):
-    """future docstring"""
+    """One chat message."""
     role: str
     content: str
 
 
 class ChatRequest(BaseModel):
-    """future docstring"""
+    """Request body for a chat completion."""
     messages: List[ChatMessage]
     die: Optional[int] = None
     max_tokens: int = 256
@@ -483,7 +504,7 @@ class ChatRequest(BaseModel):
 
 
 class AudioEditRequest(BaseModel):
-    """future docstring"""
+    """Request body for an audio clip edit."""
     clip_id: int
     action: str
     start: Optional[float] = None
@@ -493,7 +514,7 @@ class AudioEditRequest(BaseModel):
 
 
 class TrackUpdate(BaseModel):
-    """future docstring"""
+    """Partial update for an audio track."""
     name: Optional[str] = None
     channel: Optional[str] = None
     gain: Optional[float] = None
@@ -506,29 +527,29 @@ class TrackUpdate(BaseModel):
 
 
 class AudioSettingsRequest(BaseModel):
-    """future docstring"""
+    """AudioSettingsRequest."""
     sample_rate: Optional[int] = None
     asio: Optional[bool] = None
     buffer: Optional[int] = None
 
 
 class AsioStartRequest(BaseModel):
-    """future docstring"""
+    """AsioStartRequest."""
     track_id: int
 
 
 class BpmRequest(BaseModel):
-    """future docstring"""
+    """BpmRequest."""
     bpm: float
 
 
 class PatternRequest(BaseModel):
-    """future docstring"""
+    """PatternRequest."""
     pattern: Dict[str, List[int]]
 
 
 class InstrumentRequest(BaseModel):
-    """future docstring"""
+    """InstrumentRequest."""
     instrument: str
     note: int = 60
     duration: float = 0.4
@@ -536,25 +557,25 @@ class InstrumentRequest(BaseModel):
 
 
 class LoopRequest(BaseModel):
-    """future docstring"""
+    """LoopRequest."""
     style: str = "basic"
     bars: int = 1
     track_id: Optional[int] = None
 
 
 class ToolRequest(BaseModel):
-    """future docstring"""
+    """ToolRequest."""
     name: str
     args: Dict[str, Any] = {}
 
 
 class BounceRequest(BaseModel):
-    """future docstring"""
+    """BounceRequest."""
     name: str = "mix.wav"
 
 
 class VstRequest(BaseModel):
-    """future docstring"""
+    """VstRequest."""
     name: str
     plugin_type: str = "effect"
     effect: str = "custom"
@@ -563,27 +584,27 @@ class VstRequest(BaseModel):
 
 
 class MasterRequest(BaseModel):
-    """future docstring"""
+    """MasterRequest."""
     gain: Optional[float] = None
     mute: Optional[bool] = None
     compressor: Optional[Dict[str, Any]] = None
 
 
 class EffectRequest(BaseModel):
-    """future docstring"""
+    """EffectRequest."""
     clip_id: int
     kind: str
     params: Dict[str, Any] = {}
 
 
 class ClipMuteRequest(BaseModel):
-    """future docstring"""
+    """ClipMuteRequest."""
     clip_id: int
     mute: bool
 
 
 class VideoEditRequest(BaseModel):
-    """future docstring"""
+    """VideoEditRequest."""
     action: str
     frame_id: Optional[int] = None
     prompt: Optional[str] = None
@@ -597,7 +618,7 @@ class VideoEditRequest(BaseModel):
 
 @app.get("/api/formats")
 def list_formats() -> Dict[str, Any]:
-    """future docstring"""
+    """list formats."""
     return format_catalog()
 
 
@@ -612,19 +633,19 @@ def get_status() -> Dict[str, Any]:
 
 @app.get("/api/advertise")
 def get_advertise() -> Dict[str, Any]:
-    """future docstring"""
+    """get advertise."""
     return get_ic().advertise()
 
 
 @app.get("/api/fusion")
 def fusion_status() -> Dict[str, Any]:
-    """future docstring"""
+    """fusion status."""
     return get_fusion().status()
 
 
 @app.post("/api/fusion/activate")
 def fusion_activate(strategy: str = "pipeline") -> Dict[str, Any]:
-    """future docstring"""
+    """fusion activate."""
     try:
         plan = get_fusion().activate(strategy)
     except RuntimeError as e:
@@ -640,14 +661,14 @@ def fusion_activate(strategy: str = "pipeline") -> Dict[str, Any]:
 
 @app.post("/api/fusion/deactivate")
 def fusion_deactivate() -> Dict[str, str]:
-    """future docstring"""
+    """fusion deactivate."""
     get_fusion().deactivate()
     return {"ok": "deactivated"}
 
 
 @app.post("/api/load")
 def load_model(body: LoadRequest) -> Dict[str, str]:
-    """future docstring"""
+    """load model."""
     try:
         get_ic().load(body.model, backend=body.backend, modality=body.modality, die=body.die, split=body.split)
     except (InterconnectorError, ValueError) as e:
@@ -657,7 +678,7 @@ def load_model(body: LoadRequest) -> Dict[str, str]:
 
 @app.post("/api/unload")
 def unload_model(die: int) -> Dict[str, str]:
-    """future docstring"""
+    """unload model."""
     try:
         get_ic().unload(die)
     except InterconnectorError as e:
@@ -667,7 +688,7 @@ def unload_model(die: int) -> Dict[str, str]:
 
 @app.post("/api/generate")
 def generate(body: GenerateRequest) -> Dict[str, Any]:
-    """future docstring"""
+    """generate."""
     try:
         result = get_ic().generate(body.request, die=body.die)
     except InterconnectorError as e:
@@ -679,7 +700,7 @@ def generate(body: GenerateRequest) -> Dict[str, Any]:
 
 @app.post("/api/chat")
 def chat(body: ChatRequest) -> Dict[str, Any]:
-    """future docstring"""
+    """chat."""
     messages = [{"role": m.role, "content": m.content} for m in body.messages]
     _chat.clear()
     _chat.extend(messages)
@@ -743,20 +764,20 @@ def chat(body: ChatRequest) -> Dict[str, Any]:
 
 @app.get("/api/chat/history")
 def chat_history() -> Dict[str, Any]:
-    """future docstring"""
+    """chat history."""
     return {"history": _chat}
 
 
 @app.post("/api/chat/clear")
 def chat_clear() -> Dict[str, str]:
-    """future docstring"""
+    """chat clear."""
     _chat.clear()
     return {"ok": "cleared"}
 
 
 @app.get("/api/audio/settings")
 def audio_settings() -> Dict[str, Any]:
-    """future docstring"""
+    """audio settings."""
     return {
         "sample_rate": _sample_rate,
         "default_sample_rate": DEFAULT_SAMPLE_RATE,
@@ -775,7 +796,7 @@ def audio_settings() -> Dict[str, Any]:
 
 @app.post("/api/audio/settings")
 def set_audio_settings(body: AudioSettingsRequest) -> Dict[str, Any]:
-    """future docstring"""
+    """set audio settings."""
     global _sample_rate, _asio_enabled, _asio_buffer
     if body.sample_rate is not None:
         if body.sample_rate not in COMMON_RATES:
@@ -800,13 +821,13 @@ def set_audio_settings(body: AudioSettingsRequest) -> Dict[str, Any]:
 
 @app.get("/api/audio/master")
 def get_master() -> Dict[str, Any]:
-    """future docstring"""
+    """get master."""
     return _master
 
 
 @app.post("/api/audio/master")
 def set_master(body: MasterRequest) -> Dict[str, Any]:
-    """future docstring"""
+    """set master."""
     if body.gain is not None:
         _master["gain"] = max(0.0, body.gain)
     if body.mute is not None:
@@ -819,19 +840,19 @@ def set_master(body: MasterRequest) -> Dict[str, Any]:
 
 @app.get("/api/audio/asio/devices")
 def asio_devices() -> Dict[str, Any]:
-    """future docstring"""
+    """asio devices."""
     return {"devices": list_asio_devices(), "probe": probe_asio()}
 
 
 @app.get("/api/audio/asio/levels")
 def asio_levels() -> Dict[str, Any]:
-    """future docstring"""
+    """asio levels."""
     return _asio_recorder.levels()
 
 
 @app.post("/api/audio/asio/start")
 def asio_start(body: AsioStartRequest) -> Dict[str, Any]:
-    """future docstring"""
+    """asio start."""
     global _asio_track_id
     if not _asio_enabled:
         raise HTTPException(status_code=400, detail="ASIO is not enabled")
@@ -863,7 +884,7 @@ def asio_start(body: AsioStartRequest) -> Dict[str, Any]:
 
 @app.post("/api/audio/asio/stop")
 def asio_stop() -> Dict[str, Any]:
-    """future docstring"""
+    """asio stop."""
     global _asio_track_id
     if not _asio_recorder.recording:
         raise HTTPException(status_code=400, detail="not recording")
@@ -892,7 +913,7 @@ def asio_stop() -> Dict[str, Any]:
 
 @app.post("/api/audio/mix")
 def mix_audio() -> Dict[str, Any]:
-    """future docstring"""
+    """mix audio."""
     path = mix_arrangement(_audio_clips, _audio_tracks, _sample_rate, "mix.wav", _master)
     clip = make_clip(len(_audio_clips), path.name, path, track_id=None, sample_rate=_sample_rate)
     clip["mix"] = True
@@ -902,7 +923,7 @@ def mix_audio() -> Dict[str, Any]:
 
 @app.post("/api/audio/bounce")
 def bounce_audio(body: BounceRequest) -> Dict[str, Any]:
-    """future docstring"""
+    """bounce audio."""
     name = Path(body.name).name or "mix.wav"
     if not name.endswith(".wav"):
         name += ".wav"
@@ -940,32 +961,32 @@ def vst_library() -> Dict[str, Any]:
 
 @app.get("/api/vst/presets")
 def vst_presets() -> Dict[str, Any]:
-    """future docstring"""
+    """vst presets."""
     return list_presets()
 
 
 @app.get("/api/vst/sdk")
 def vst_sdk_status() -> Dict[str, Any]:
-    """future docstring"""
+    """vst sdk status."""
     path = sdk_path()
     return {"installed": path is not None, "path": str(path) if path else None}
 
 
 @app.post("/api/vst/press")
 def vst_press(source: str, name: str = "Plugin") -> Dict[str, Any]:
-    """future docstring"""
+    """vst press."""
     return press_vst(Path(source), name)
 
 
 @app.get("/api/vst/ui")
 def get_vst_ui() -> Dict[str, Any]:
-    """future docstring"""
+    """get vst ui."""
     return _vst_project
 
 
 @app.post("/api/vst/ui/reset")
 def reset_vst_ui(name: str = "MyPlugin") -> Dict[str, Any]:
-    """future docstring"""
+    """reset vst ui."""
     global _vst_project
     _vst_project = default_project(name)
     return _vst_project
@@ -973,7 +994,7 @@ def reset_vst_ui(name: str = "MyPlugin") -> Dict[str, Any]:
 
 @app.post("/api/vst/ui/param")
 def vst_add_param(name: str, default: float = 0.5) -> Dict[str, Any]:
-    """future docstring"""
+    """vst add param."""
     try:
         return add_parameter(_vst_project, name, default)
     except ValueError as e:
@@ -990,7 +1011,7 @@ def vst_add_object_endpoint(
     label: str = "",
     bind: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """future docstring"""
+    """vst add object endpoint."""
     if kind not in OBJECT_TYPES:
         raise HTTPException(status_code=400, detail=f"kind must be one of {OBJECT_TYPES}")
     return add_object(_vst_project, kind, x, y, w, h, label, bind)
@@ -998,7 +1019,7 @@ def vst_add_object_endpoint(
 
 @app.post("/api/vst/ui/bind")
 def vst_bind_endpoint(object_id: int, param: str) -> Dict[str, Any]:
-    """future docstring"""
+    """vst bind endpoint."""
     try:
         return bind_object(_vst_project, object_id, param)
     except ValueError as e:
@@ -1007,13 +1028,13 @@ def vst_bind_endpoint(object_id: int, param: str) -> Dict[str, Any]:
 
 @app.post("/api/vst/ui/export")
 def vst_export_endpoint() -> Dict[str, Any]:
-    """future docstring"""
+    """vst export endpoint."""
     return export_project(_vst_project)
 
 
 @app.get("/api/music/state")
 def music_state() -> Dict[str, Any]:
-    """future docstring"""
+    """music state."""
     return {
         "bpm": _bpm,
         "pattern": _pattern,
@@ -1025,37 +1046,37 @@ def music_state() -> Dict[str, Any]:
 
 @app.get("/api/music/tools")
 def music_tools() -> Dict[str, Any]:
-    """future docstring"""
+    """music tools."""
     return {"tools": list_tools()}
 
 
 @app.post("/api/music/tool")
 def music_tool(body: ToolRequest) -> Dict[str, Any]:
-    """future docstring"""
+    """music tool."""
     return _dispatch_tool(body.name, body.args)
 
 
 @app.post("/api/music/bpm")
 def set_bpm(body: BpmRequest) -> Dict[str, Any]:
-    """future docstring"""
+    """set bpm."""
     return _dispatch_tool("set_bpm", {"bpm": body.bpm})
 
 
 @app.post("/api/music/bpm/detect")
 def detect_bpm_from_clip(clip_id: int) -> Dict[str, Any]:
-    """future docstring"""
+    """detect bpm from clip."""
     return _dispatch_tool("detect_bpm", {"clip_id": clip_id})
 
 
 @app.get("/api/music/pattern")
 def get_pattern() -> Dict[str, Any]:
-    """future docstring"""
+    """get pattern."""
     return {"pattern": _pattern, "bpm": _bpm}
 
 
 @app.post("/api/music/pattern")
 def set_pattern(body: PatternRequest) -> Dict[str, Any]:
-    """future docstring"""
+    """set pattern."""
     global _pattern
     clean: Dict[str, List[int]] = {}
     for name in INSTRUMENTS:
@@ -1069,7 +1090,7 @@ def set_pattern(body: PatternRequest) -> Dict[str, Any]:
 
 @app.post("/api/music/instrument")
 def generate_instrument(body: InstrumentRequest) -> Dict[str, Any]:
-    """future docstring"""
+    """generate instrument."""
     result = _dispatch_tool(
         "generate_instrument",
         {
@@ -1084,7 +1105,7 @@ def generate_instrument(body: InstrumentRequest) -> Dict[str, Any]:
 
 @app.post("/api/music/loop")
 def generate_loop_clip(body: LoopRequest) -> Dict[str, Any]:
-    """future docstring"""
+    """generate loop clip."""
     result = _dispatch_tool(
         "generate_loop",
         {"style": body.style, "bars": body.bars, "track_id": body.track_id},
@@ -1094,20 +1115,20 @@ def generate_loop_clip(body: LoopRequest) -> Dict[str, Any]:
 
 @app.post("/api/music/render")
 def render_current_pattern(track_id: Optional[int] = None, bars: int = 1) -> Dict[str, Any]:
-    """future docstring"""
+    """render current pattern."""
     result = _dispatch_tool("render_pattern", {"track_id": track_id, "bars": bars})
     return result.get("clip", result)
 
 
 @app.get("/api/audio/tracks")
 def list_tracks() -> Dict[str, Any]:
-    """future docstring"""
+    """list tracks."""
     return {"tracks": _audio_tracks}
 
 
 @app.post("/api/audio/tracks")
 def create_track(name: str = "Track", channel: str = "stereo") -> Dict[str, Any]:
-    """future docstring"""
+    """create track."""
     track = make_track(len(_audio_tracks), name, channel, _sample_rate)
     _audio_tracks.append(track)
     return track
@@ -1115,7 +1136,7 @@ def create_track(name: str = "Track", channel: str = "stereo") -> Dict[str, Any]
 
 @app.delete("/api/audio/tracks/{track_id}")
 def delete_track(track_id: int) -> Dict[str, Any]:
-    """future docstring"""
+    """delete track."""
     global _audio_tracks, _audio_clips
     _audio_tracks = [t for t in _audio_tracks if t["id"] != track_id]
     _audio_clips = [c for c in _audio_clips if c.get("track_id") != track_id]
@@ -1124,7 +1145,7 @@ def delete_track(track_id: int) -> Dict[str, Any]:
 
 @app.post("/api/audio/tracks/{track_id}")
 def update_track(track_id: int, body: TrackUpdate) -> Dict[str, Any]:
-    """future docstring"""
+    """update track."""
     track = next((t for t in _audio_tracks if t["id"] == track_id), None)
     if track is None:
         raise HTTPException(status_code=404, detail="track not found")
@@ -1158,7 +1179,7 @@ def update_track(track_id: int, body: TrackUpdate) -> Dict[str, Any]:
 
 @app.get("/api/audio/clips")
 def list_clips() -> Dict[str, Any]:
-    """future docstring"""
+    """list clips."""
     return {"clips": _audio_clips}
 
 
@@ -1170,7 +1191,7 @@ def add_clip(
     track_id: Optional[int] = None,
     position: float = 0.0,
 ) -> Dict[str, Any]:
-    """future docstring"""
+    """add clip."""
     if track_id is None:
         track_id = _ensure_track()
     clip = make_clip(
@@ -1191,7 +1212,7 @@ async def upload_audio(
     file: UploadFile = File(...),
     track_id: Optional[int] = Form(None),
 ) -> Dict[str, Any]:
-    """future docstring"""
+    """upload audio."""
     if track_id is None:
         track_id = _ensure_track()
     data = await file.read()
@@ -1203,7 +1224,7 @@ async def upload_audio(
 
 @app.get("/api/audio/file/{clip_id}")
 def audio_file(clip_id: int):
-    """future docstring"""
+    """audio file."""
     if clip_id < 0 or clip_id >= len(_audio_clips):
         raise HTTPException(status_code=404, detail="clip not found")
     path = _audio_clips[clip_id].get("path")
@@ -1214,7 +1235,7 @@ def audio_file(clip_id: int):
 
 @app.post("/api/audio/clips/mute")
 def clip_mute(body: ClipMuteRequest) -> Dict[str, Any]:
-    """future docstring"""
+    """clip mute."""
     if body.clip_id < 0 or body.clip_id >= len(_audio_clips):
         raise HTTPException(status_code=404, detail="clip not found")
     clip = _audio_clips[body.clip_id]
@@ -1224,7 +1245,7 @@ def clip_mute(body: ClipMuteRequest) -> Dict[str, Any]:
 
 @app.post("/api/audio/clips/effect")
 def clip_effect(body: EffectRequest) -> Dict[str, Any]:
-    """future docstring"""
+    """clip effect."""
     if body.clip_id < 0 or body.clip_id >= len(_audio_clips):
         raise HTTPException(status_code=404, detail="clip not found")
     clip = _audio_clips[body.clip_id]
@@ -1248,7 +1269,7 @@ def clip_effect(body: EffectRequest) -> Dict[str, Any]:
 
 @app.post("/api/audio/edit")
 def edit_audio(body: AudioEditRequest) -> Dict[str, Any]:
-    """future docstring"""
+    """edit audio."""
     if body.clip_id < 0 or body.clip_id >= len(_audio_clips):
         raise HTTPException(status_code=404, detail="clip not found")
     clip = _audio_clips[body.clip_id]
@@ -1284,7 +1305,7 @@ def edit_audio(body: AudioEditRequest) -> Dict[str, Any]:
 
 @app.get("/api/video/tracks")
 def list_video_tracks() -> Dict[str, Any]:
-    """future docstring"""
+    """list video tracks."""
     return {"video": _video_tracks, "audio": _video_audio_tracks}
 
 
@@ -1309,7 +1330,7 @@ def render_vfx_endpoint(name: str = "effect", duration: float = 2.0, prompt: str
 
 @app.get("/api/video/frames")
 def list_frames() -> Dict[str, Any]:
-    """future docstring"""
+    """list frames."""
     return {
         "frames": _video_frames,
         "texts": _text_objects,
@@ -1326,7 +1347,7 @@ def add_text_endpoint(
     position: float = 0.0,
     duration: float = 2.0,
 ) -> Dict[str, Any]:
-    """future docstring"""
+    """add text endpoint."""
     obj = make_text(len(_text_objects), content, position, duration, texture)
     _text_objects.append(obj)
     return obj
@@ -1360,7 +1381,7 @@ def export_timeline(name: str = "timeline") -> Dict[str, Any]:
 
 @app.post("/api/video/edit")
 def edit_video(body: VideoEditRequest) -> Dict[str, Any]:
-    """future docstring"""
+    """edit video."""
     if body.action == "add_frame":
         clip = make_video_clip(
             len(_video_frames),
@@ -1394,5 +1415,5 @@ def edit_video(body: VideoEditRequest) -> Dict[str, Any]:
 
 @app.get("/api/health")
 def health() -> Dict[str, str]:
-    """future docstring"""
+    """health."""
     return {"status": "ok"}
