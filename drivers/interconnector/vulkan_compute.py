@@ -5,16 +5,16 @@ AMD GPU (RX 6700 and others) without ROCm. It does not wrap PyTorch.
 
 Current contract:
 - Discover Vulkan devices via vulkaninfo --summary.
-- VulkanBuffer allocates device memory when the vulkan package is
-  importable. upload maps the memory and copies host bytes to the
-  device; download maps and copies the device bytes back. Both raise
-  if the memory is not host-visible.
-- ShaderDispatcher.create_pipeline loads a SPIR-V file and builds the
-  pipeline. dispatch_add uploads the two inputs, records and submits
-  the dispatch, then downloads the output. VulkanTensor.add calls it.
+- VulkanBuffer allocates device memory. upload and download map host-visible
+  memory directly. upload_via_staging and download_via_staging copy through
+  a temporary host-visible staging buffer when the primary memory is
+  device-local. Both staging methods require a queue, command pool, and
+  a host-visible memory type index.
+- ShaderDispatcher.create_pipeline builds the add pipeline. create_mul_pipeline
+  builds the mul pipeline from a second SPIR-V. dispatch_add and dispatch_mul
+  upload inputs (direct or staging), submit the dispatch, and download the
+  output. VulkanTensor.add and VulkanTensor.mul call them.
 - ImageGenerator looks for an external Vulkan diffusion binary on PATH.
-
-A mul shader is a later pass.
 """
 
 from __future__ import annotations
@@ -91,9 +91,9 @@ class VulkanBuffer:
     """Buffer that can be allocated on a Vulkan device.
 
     Host bytes are always stored. allocate creates the device buffer.
-    upload copies host bytes into the mapped device memory. download
-    copies the mapped device memory back into the host bytes. Both
-    require the memory type to be host-visible; otherwise they raise.
+    upload and download map host-visible memory. upload_via_staging and
+    download_via_staging copy through a temporary host-visible buffer
+    when the primary allocation is device-local.
     """
 
     def __init__(self, size_bytes: int, device_index: int = 0):
@@ -156,21 +156,13 @@ class VulkanBuffer:
         log.info("Allocated %d bytes on device index %d", self.size_bytes, self.device_index)
 
     def upload(self, device: Any) -> None:
-        """Map the device memory and copy host bytes into it.
-
-        Raises:
-            RuntimeError: Buffer is not allocated or memory is not
-                host-visible.
-        """
+        """Map the device memory and copy host bytes into it."""
         if not self._allocated:
             raise RuntimeError("buffer must be allocated before upload")
         vk = _load_vulkan()
         ptr = vk.vkMapMemory(device, self._device_memory, 0, self.size_bytes, 0)
         if not ptr:
             raise RuntimeError("vkMapMemory returned null; memory is not host-visible")
-        # The vulkan package exposes the mapped pointer as an integer or
-        # a ctypes object depending on version. Copy via a bytearray view
-        # when possible; otherwise raise so the failure is visible.
         try:
             import ctypes
             ctypes.memmove(ptr, (ctypes.c_char * self.size_bytes).from_buffer(self._data), self.size_bytes)
@@ -178,15 +170,9 @@ class VulkanBuffer:
             vk.vkUnmapMemory(device, self._device_memory)
             raise RuntimeError(f"host-to-device copy failed: {exc}") from exc
         vk.vkUnmapMemory(device, self._device_memory)
-        log.info("Uploaded %d bytes", self.size_bytes)
 
     def download(self, device: Any) -> None:
-        """Map the device memory and copy it into the host bytes.
-
-        Raises:
-            RuntimeError: Buffer is not allocated or memory is not
-                host-visible.
-        """
+        """Map the device memory and copy it into the host bytes."""
         if not self._allocated:
             raise RuntimeError("buffer must be allocated before download")
         vk = _load_vulkan()
@@ -200,7 +186,88 @@ class VulkanBuffer:
             vk.vkUnmapMemory(device, self._device_memory)
             raise RuntimeError(f"device-to-host copy failed: {exc}") from exc
         vk.vkUnmapMemory(device, self._device_memory)
-        log.info("Downloaded %d bytes", self.size_bytes)
+
+    def upload_via_staging(
+        self,
+        device: Any,
+        queue: Any,
+        command_pool: Any,
+        host_visible_index: int,
+    ) -> None:
+        """Copy host bytes to a staging buffer, then to this device-local buffer.
+
+        Raises:
+            RuntimeError: this buffer is not allocated or the copy fails.
+        """
+        if not self._allocated:
+            raise RuntimeError("buffer must be allocated before staging upload")
+        vk = _load_vulkan()
+        staging = VulkanBuffer(self.size_bytes, self.device_index)
+        staging.write(self.read())
+        staging.allocate(device, host_visible_index)
+        staging.upload(device)
+        cmd = vk.vkAllocateCommandBuffers(
+            device,
+            vk.VkCommandBufferAllocateInfo(
+                sType=vk.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+                commandPool=command_pool,
+                level=vk.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                commandBufferCount=1,
+            ),
+        )[0]
+        vk.vkBeginCommandBuffer(cmd, vk.VkCommandBufferBeginInfo(sType=vk.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO))
+        vk.vkCmdCopyBuffer(
+            cmd,
+            staging.device_buffer,
+            self._device_buffer,
+            1,
+            [vk.VkBufferCopy(srcOffset=0, dstOffset=0, size=self.size_bytes)],
+        )
+        vk.vkEndCommandBuffer(cmd)
+        vk.vkQueueSubmit(queue, 1, [vk.VkSubmitInfo(sType=vk.VK_STRUCTURE_TYPE_SUBMIT_INFO, commandBufferCount=1, pCommandBuffers=[cmd])], None)
+        vk.vkQueueWaitIdle(queue)
+        vk.vkFreeCommandBuffers(device, command_pool, 1, [cmd])
+        staging.free(device)
+        log.info("Staged upload of %d bytes", self.size_bytes)
+
+    def download_via_staging(
+        self,
+        device: Any,
+        queue: Any,
+        command_pool: Any,
+        host_visible_index: int,
+    ) -> None:
+        """Copy this device-local buffer to a staging buffer, then to host bytes."""
+        if not self._allocated:
+            raise RuntimeError("buffer must be allocated before staging download")
+        vk = _load_vulkan()
+        staging = VulkanBuffer(self.size_bytes, self.device_index)
+        staging.allocate(device, host_visible_index)
+        cmd = vk.vkAllocateCommandBuffers(
+            device,
+            vk.VkCommandBufferAllocateInfo(
+                sType=vk.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+                commandPool=command_pool,
+                level=vk.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                commandBufferCount=1,
+            ),
+        )[0]
+        vk.vkBeginCommandBuffer(cmd, vk.VkCommandBufferBeginInfo(sType=vk.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO))
+        vk.vkCmdCopyBuffer(
+            cmd,
+            self._device_buffer,
+            staging.device_buffer,
+            1,
+            [vk.VkBufferCopy(srcOffset=0, dstOffset=0, size=self.size_bytes)],
+        )
+        vk.vkEndCommandBuffer(cmd)
+        vk.vkQueueSubmit(queue, 1, [vk.VkSubmitInfo(sType=vk.VK_STRUCTURE_TYPE_SUBMIT_INFO, commandBufferCount=1, pCommandBuffers=[cmd])], None)
+        vk.vkQueueWaitIdle(queue)
+        vk.vkFreeCommandBuffers(device, command_pool, 1, [cmd])
+        staging.download(device)
+        self.write(staging.read())
+        staging.free(device)
+        log.info("Staged download of %d bytes", self.size_bytes)
 
     def free(self, device: Any) -> None:
         """Release device memory if allocated."""
@@ -223,23 +290,25 @@ class VulkanBuffer:
 
 
 class ShaderDispatcher:
-    """Create a compute pipeline and dispatch an element-wise add shader.
+    """Create compute pipelines and dispatch add or mul shaders.
 
-    create_pipeline loads SPIR-V and builds the layout and pipeline.
-    dispatch_add uploads the inputs, records and submits the dispatch,
-    then downloads the output. Both methods raise when a required object
-    is missing.
+    create_pipeline builds the add pipeline. create_mul_pipeline builds
+    the mul pipeline from a second SPIR-V. dispatch_add and dispatch_mul
+    transfer data (direct or staging) and submit the dispatch.
     """
 
-    def __init__(self, spv_path: Optional[str] = None):
+    def __init__(self, spv_path: Optional[str] = None, mul_spv_path: Optional[str] = None):
         self.spv_path = spv_path
+        self.mul_spv_path = mul_spv_path
         self._pipeline: Any = None
+        self._mul_pipeline: Any = None
         self._pipeline_layout: Any = None
         self._descriptor_set_layout: Any = None
         self._shader_module: Any = None
+        self._mul_shader_module: Any = None
 
     def create_pipeline(self, device: Any) -> None:
-        """Load SPIR-V and create the compute pipeline."""
+        """Load the add SPIR-V and create the compute pipeline."""
         vk = _load_vulkan()
         if not self.spv_path or not Path(self.spv_path).is_file():
             raise RuntimeError("SPIR-V shader file required. Pass spv_path.")
@@ -290,52 +359,75 @@ class ShaderDispatcher:
             device,
             None,
             1,
-            [
-                vk.VkComputePipelineCreateInfo(
-                    sType=vk.VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
-                    stage=stage,
-                    layout=self._pipeline_layout,
-                )
-            ],
+            [vk.VkComputePipelineCreateInfo(sType=vk.VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, stage=stage, layout=self._pipeline_layout)],
             None,
         )[0]
-        log.info("Compute pipeline created from %s", self.spv_path)
+        log.info("Add pipeline created from %s", self.spv_path)
 
-    def dispatch_add(
+    def create_mul_pipeline(self, device: Any) -> None:
+        """Load the mul SPIR-V and create the mul compute pipeline."""
+        vk = _load_vulkan()
+        if not self.mul_spv_path or not Path(self.mul_spv_path).is_file():
+            raise RuntimeError("mul SPIR-V required. Pass mul_spv_path.")
+        if self._pipeline_layout is None:
+            raise RuntimeError("call create_pipeline before create_mul_pipeline")
+        spv = Path(self.mul_spv_path).read_bytes()
+        self._mul_shader_module = vk.vkCreateShaderModule(
+            device,
+            vk.VkShaderModuleCreateInfo(
+                sType=vk.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                codeSize=len(spv),
+                pCode=spv,
+            ),
+            None,
+        )
+        stage = vk.VkPipelineShaderStageCreateInfo(
+            sType=vk.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            stage=vk.VK_SHADER_STAGE_COMPUTE_BIT,
+            module=self._mul_shader_module,
+            pName="main",
+        )
+        self._mul_pipeline = vk.vkCreateComputePipelines(
+            device,
+            None,
+            1,
+            [vk.VkComputePipelineCreateInfo(sType=vk.VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO, stage=stage, layout=self._pipeline_layout)],
+            None,
+        )[0]
+        log.info("Mul pipeline created from %s", self.mul_spv_path)
+
+    def _dispatch(
         self,
         device: Any,
         queue: Any,
         command_pool: Any,
+        pipeline: Any,
         a: VulkanBuffer,
         b: VulkanBuffer,
         out: VulkanBuffer,
         count: int,
+        use_staging: bool,
+        host_visible_index: Optional[int],
     ) -> None:
-        """Upload inputs, dispatch, and download the output.
-
-        Raises:
-            RuntimeError: pipeline not created, buffers not allocated, or
-                transfer fails.
-        """
+        """Shared dispatch path for add and mul."""
         vk = _load_vulkan()
-        if self._pipeline is None:
-            raise RuntimeError("call create_pipeline before dispatch_add")
         if not (a.is_allocated and b.is_allocated and out.is_allocated):
             raise RuntimeError("all buffers must be allocated before dispatch")
-        a.upload(device)
-        b.upload(device)
+        if use_staging:
+            if host_visible_index is None:
+                raise RuntimeError("host_visible_index required for staging")
+            a.upload_via_staging(device, queue, command_pool, host_visible_index)
+            b.upload_via_staging(device, queue, command_pool, host_visible_index)
+        else:
+            a.upload(device)
+            b.upload(device)
         pool = vk.vkCreateDescriptorPool(
             device,
             vk.VkDescriptorPoolCreateInfo(
                 sType=vk.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
                 maxSets=1,
                 poolSizeCount=1,
-                pPoolSizes=[
-                    vk.VkDescriptorPoolSize(
-                        type=vk.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                        descriptorCount=3,
-                    )
-                ],
+                pPoolSizes=[vk.VkDescriptorPoolSize(type=vk.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorCount=3)],
             ),
             None,
         )
@@ -348,10 +440,7 @@ class ShaderDispatcher:
                 pSetLayouts=[self._descriptor_set_layout],
             ),
         )[0]
-        infos = [
-            vk.VkDescriptorBufferInfo(buffer=buf.device_buffer, offset=0, range=buf.size_bytes)
-            for buf in (a, b, out)
-        ]
+        infos = [vk.VkDescriptorBufferInfo(buffer=buf.device_buffer, offset=0, range=buf.size_bytes) for buf in (a, b, out)]
         writes = [
             vk.VkWriteDescriptorSet(
                 sType=vk.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -373,51 +462,63 @@ class ShaderDispatcher:
                 commandBufferCount=1,
             ),
         )[0]
-        vk.vkBeginCommandBuffer(
-            cmd,
-            vk.VkCommandBufferBeginInfo(
-                sType=vk.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-            ),
-        )
-        vk.vkCmdBindPipeline(cmd, vk.VK_PIPELINE_BIND_POINT_COMPUTE, self._pipeline)
-        vk.vkCmdBindDescriptorSets(
-            cmd,
-            vk.VK_PIPELINE_BIND_POINT_COMPUTE,
-            self._pipeline_layout,
-            0,
-            1,
-            [dset],
-            0,
-            None,
-        )
+        vk.vkBeginCommandBuffer(cmd, vk.VkCommandBufferBeginInfo(sType=vk.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO))
+        vk.vkCmdBindPipeline(cmd, vk.VK_PIPELINE_BIND_POINT_COMPUTE, pipeline)
+        vk.vkCmdBindDescriptorSets(cmd, vk.VK_PIPELINE_BIND_POINT_COMPUTE, self._pipeline_layout, 0, 1, [dset], 0, None)
         groups = (count + 63) // 64
         vk.vkCmdDispatch(cmd, groups, 1, 1)
         vk.vkEndCommandBuffer(cmd)
-        vk.vkQueueSubmit(
-            queue,
-            1,
-            [
-                vk.VkSubmitInfo(
-                    sType=vk.VK_STRUCTURE_TYPE_SUBMIT_INFO,
-                    commandBufferCount=1,
-                    pCommandBuffers=[cmd],
-                )
-            ],
-            None,
-        )
+        vk.vkQueueSubmit(queue, 1, [vk.VkSubmitInfo(sType=vk.VK_STRUCTURE_TYPE_SUBMIT_INFO, commandBufferCount=1, pCommandBuffers=[cmd])], None)
         vk.vkQueueWaitIdle(queue)
         vk.vkFreeCommandBuffers(device, command_pool, 1, [cmd])
         vk.vkDestroyDescriptorPool(device, pool, None)
-        out.download(device)
-        log.info("Dispatched add for %d elements and downloaded result", count)
+        if use_staging:
+            out.download_via_staging(device, queue, command_pool, host_visible_index)  # type: ignore[arg-type]
+        else:
+            out.download(device)
+
+    def dispatch_add(
+        self,
+        device: Any,
+        queue: Any,
+        command_pool: Any,
+        a: VulkanBuffer,
+        b: VulkanBuffer,
+        out: VulkanBuffer,
+        count: int,
+        use_staging: bool = False,
+        host_visible_index: Optional[int] = None,
+    ) -> None:
+        """Dispatch the add pipeline."""
+        if self._pipeline is None:
+            raise RuntimeError("call create_pipeline before dispatch_add")
+        self._dispatch(device, queue, command_pool, self._pipeline, a, b, out, count, use_staging, host_visible_index)
+        log.info("Dispatched add for %d elements", count)
+
+    def dispatch_mul(
+        self,
+        device: Any,
+        queue: Any,
+        command_pool: Any,
+        a: VulkanBuffer,
+        b: VulkanBuffer,
+        out: VulkanBuffer,
+        count: int,
+        use_staging: bool = False,
+        host_visible_index: Optional[int] = None,
+    ) -> None:
+        """Dispatch the mul pipeline."""
+        if self._mul_pipeline is None:
+            raise RuntimeError("call create_mul_pipeline before dispatch_mul")
+        self._dispatch(device, queue, command_pool, self._mul_pipeline, a, b, out, count, use_staging, host_visible_index)
+        log.info("Dispatched mul for %d elements", count)
 
 
 class VulkanTensor:
     """Custom tensor backed by a VulkanBuffer.
 
-    add requires an attached ShaderDispatcher whose pipeline has been
-    created, plus a device, queue, and command pool. The dispatcher
-    uploads the inputs and downloads the result.
+    add and mul require an attached ShaderDispatcher with the matching
+    pipeline created, plus a device, queue, and command pool.
     """
 
     def __init__(
@@ -455,29 +556,39 @@ class VulkanTensor:
         device: Any,
         queue: Any,
         command_pool: Any,
+        use_staging: bool = False,
+        host_visible_index: Optional[int] = None,
     ) -> "VulkanTensor":
         """Element-wise add via the compute pipeline."""
         if self.dispatcher is None:
             raise RuntimeError("ShaderDispatcher required for add")
         if other.shape != self.shape or other.dtype != self.dtype:
             raise ValueError("add requires matching shape and dtype")
-        out = VulkanTensor(
-            self.shape, self.dtype, self.device_index, dispatcher=self.dispatcher
-        )
+        out = VulkanTensor(self.shape, self.dtype, self.device_index, dispatcher=self.dispatcher)
         self.dispatcher.dispatch_add(
-            device=device,
-            queue=queue,
-            command_pool=command_pool,
-            a=self.buffer,
-            b=other.buffer,
-            out=out.buffer,
-            count=self.numel,
+            device, queue, command_pool, self.buffer, other.buffer, out.buffer, self.numel, use_staging, host_visible_index
         )
         return out
 
-    def mul(self, other: Union["VulkanTensor", float]) -> "VulkanTensor":
-        """Element-wise multiply. Shader not yet provided."""
-        raise RuntimeError("mul shader is not implemented in this pass")
+    def mul(
+        self,
+        other: "VulkanTensor",
+        device: Any,
+        queue: Any,
+        command_pool: Any,
+        use_staging: bool = False,
+        host_visible_index: Optional[int] = None,
+    ) -> "VulkanTensor":
+        """Element-wise multiply via the compute pipeline."""
+        if self.dispatcher is None:
+            raise RuntimeError("ShaderDispatcher required for mul")
+        if other.shape != self.shape or other.dtype != self.dtype:
+            raise ValueError("mul requires matching shape and dtype")
+        out = VulkanTensor(self.shape, self.dtype, self.device_index, dispatcher=self.dispatcher)
+        self.dispatcher.dispatch_mul(
+            device, queue, command_pool, self.buffer, other.buffer, out.buffer, self.numel, use_staging, host_visible_index
+        )
+        return out
 
     def reshape(self, shape: Sequence[int]) -> "VulkanTensor":
         """Return a new tensor with the same host bytes and a new shape."""
