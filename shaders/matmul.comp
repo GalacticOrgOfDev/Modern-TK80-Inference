@@ -1,0 +1,19 @@
+#version 450
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(set = 0, binding = 0) readonly buffer A { float a[]; };
+layout(set = 0, binding = 1) readonly buffer B { float b[]; };
+layout(set = 0, binding = 2) writeonly buffer C { float c[]; };
+
+layout(push_constant) uniform Push { uint M; uint N; uint K; } pc;
+
+void main() {
+    uint col = gl_GlobalInvocationID.x;
+    uint row = gl_GlobalInvocationID.y;
+    if (row >= pc.M || col >= pc.N) return;
+    float acc = 0.0;
+    for (uint k = 0; k < pc.K; ++k) {
+        acc += a[row * pc.K + k] * b[k * pc.N + col];
+    }
+    c[row * pc.N + col] = acc;
+}
