@@ -7,10 +7,15 @@ Supported:
 
 Device selection uses the same device_string produced by
 drivers.interconnector.devices ("vulkan:N", "cuda:N", or "cpu").
-CUDA indexes are passed to torch. Vulkan and CPU both map to the CPU
-device because diffusers and the transformers pipeline do not implement
-a Vulkan compute path in this wrapper. Creator tools do not require
-these backends.
+
+Torch Vulkan path:
+- If the installed torch reports a Vulkan backend and a device can be
+  created, a vulkan:N request is mapped to that torch device.
+- If torch has no Vulkan backend (the common case for stock builds),
+  the reason is logged and the request falls back to CPU.
+- CUDA indexes are always passed through when present.
+
+Creator tools do not require these backends.
 """
 
 from __future__ import annotations
@@ -23,25 +28,58 @@ log = logging.getLogger("tk80.interconnector.modalities")
 ToolRunner = Callable[[str, Dict[str, Any]], Dict[str, Any]]
 
 
+def _torch_has_vulkan() -> bool:
+    """Return True when the installed torch can create a Vulkan device."""
+    try:
+        import torch
+    except ImportError:
+        return False
+    # Experimental / vendor builds may expose torch.vulkan or a "vulkan" device type.
+    if hasattr(torch, "vulkan") and hasattr(torch.vulkan, "is_available"):
+        try:
+            return bool(torch.vulkan.is_available())
+        except Exception:
+            return False
+    # Some builds accept torch.device("vulkan") or "vulkan:0".
+    try:
+        _ = torch.device("vulkan")
+        return True
+    except (RuntimeError, ValueError, AttributeError):
+        return False
+
+
 def _torch_device(device_string: Optional[str]) -> str:
     """Map a discovery device_string to a torch device.
 
     "cuda:1" -> "cuda:1"
-    "vulkan:0" or "cpu" or None -> "cpu"
+    "vulkan:0" -> "vulkan:0" when torch has a Vulkan backend, else "cpu"
+    "cpu" or None -> "cpu"
     """
     if not device_string or device_string == "cpu":
         return "cpu"
     if device_string.startswith("cuda:"):
         return device_string
+    if device_string.startswith("vulkan:"):
+        if _torch_has_vulkan():
+            # Prefer the indexed form when the string carries an index.
+            return device_string
+        log.warning(
+            "torch has no usable Vulkan backend; falling back to CPU for %s. "
+            "A Vulkan-enabled torch build or a ROCm build is required for GPU "
+            "torch processes on AMD.",
+            device_string,
+        )
+        return "cpu"
     return "cpu"
 
 
 class ImageBackend:
     """Small diffusion model (e.g. SD 1.5).
 
-    Accepts a device_string from discovery. Only a cuda:N string is placed
-    on a GPU; vulkan:N and cpu run on CPU. The model path may be a local
-    directory or a Hugging Face repo id.
+    Accepts a device_string from discovery. cuda:N is placed on CUDA.
+    vulkan:N is placed on a torch Vulkan device when the installed torch
+    supports it; otherwise the load runs on CPU and the reason is logged.
+    The model path may be a local directory or a Hugging Face repo id.
     """
 
     def __init__(self, model_name_or_path: str, device: str = "cpu"):
@@ -53,7 +91,12 @@ class ImageBackend:
 
         self.device = _torch_device(device)
         self.device_string = device or "cpu"
-        log.info("Loading image model on %s (requested %s): %s", self.device, self.device_string, model_name_or_path)
+        log.info(
+            "Loading image model on %s (requested %s): %s",
+            self.device,
+            self.device_string,
+            model_name_or_path,
+        )
         self.pipe = StableDiffusionPipeline.from_pretrained(
             model_name_or_path,
             torch_dtype=torch.float32,
@@ -69,9 +112,10 @@ class ImageBackend:
 class VoiceBackend:
     """Small ASR (Whisper-class).
 
-    Accepts a device_string from discovery. Only a cuda:N string is placed
-    on a GPU; vulkan:N and cpu run on CPU. The model path may be a local
-    directory or a Hugging Face repo id.
+    Accepts a device_string from discovery. cuda:N is placed on CUDA.
+    vulkan:N is placed on a torch Vulkan device when the installed torch
+    supports it; otherwise the load runs on CPU and the reason is logged.
+    The model path may be a local directory or a Hugging Face repo id.
     """
 
     def __init__(self, model_name_or_path: str, device: str = "cpu"):
@@ -83,12 +127,21 @@ class VoiceBackend:
 
         self.device = _torch_device(device)
         self.device_string = device or "cpu"
-        dev_idx = 0 if self.device == "cpu" else int(self.device.split(":", 1)[1])
-        log.info("Loading voice model on %s (requested %s): %s", self.device, self.device_string, model_name_or_path)
+        # transformers pipeline device: -1 for CPU, non-negative index for CUDA.
+        if self.device.startswith("cuda:"):
+            dev_arg: Any = int(self.device.split(":", 1)[1])
+        else:
+            dev_arg = -1
+        log.info(
+            "Loading voice model on %s (requested %s): %s",
+            self.device,
+            self.device_string,
+            model_name_or_path,
+        )
         self.pipe = pipeline(
             "automatic-speech-recognition",
             model=model_name_or_path,
-            device=dev_idx if self.device != "cpu" else -1,
+            device=dev_arg,
             torch_dtype=torch.float32,
         )
 
