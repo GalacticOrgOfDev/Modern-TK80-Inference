@@ -36,7 +36,7 @@ def list_presets() -> Dict[str, Any]:
 
 
 def default_project(name: str = "MyPlugin") -> Dict[str, Any]:
-    """future docstring"""
+    """default project."""
     return {
         "name": name,
         "effect": "custom",
