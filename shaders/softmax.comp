@@ -1,0 +1,43 @@
+#version 450
+layout(local_size_x = 64) in;
+
+layout(set = 0, binding = 0) readonly buffer In { float x[]; };
+layout(set = 0, binding = 1) writeonly buffer Out { float y[]; };
+
+layout(push_constant) uniform Push { uint N; } pc;
+
+shared float scratch[64];
+
+void main() {
+    uint tid = gl_LocalInvocationID.x;
+    uint row = gl_WorkGroupID.x;
+    uint base = row * pc.N;
+
+    // Max reduction
+    float local_max = -1e30;
+    for (uint i = tid; i < pc.N; i += 64)
+        local_max = max(local_max, x[base + i]);
+    scratch[tid] = local_max;
+    barrier();
+    for (uint s = 32; s > 0; s >>= 1) {
+        if (tid < s) scratch[tid] = max(scratch[tid], scratch[tid + s]);
+        barrier();
+    }
+    float m = scratch[0];
+
+    // Exp and sum
+    float local_sum = 0.0;
+    for (uint i = tid; i < pc.N; i += 64)
+        local_sum += exp(x[base + i] - m);
+    scratch[tid] = local_sum;
+    barrier();
+    for (uint s = 32; s > 0; s >>= 1) {
+        if (tid < s) scratch[tid] += scratch[tid + s];
+        barrier();
+    }
+    float inv = 1.0 / scratch[0];
+
+    // Write
+    for (uint i = tid; i < pc.N; i += 64)
+        y[base + i] = exp(x[base + i] - m) * inv;
+}

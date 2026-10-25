@@ -11,4 +11,5 @@ else
   echo "No SPIR-V compiler found. Install glslangValidator or glslc." >&2
   exit 1
 fi
-echo "Wrote matmul.spv"
+glslangValidator -V softmax.comp -o softmax.spv 2>/dev/null || glslc softmax.comp -o softmax.spv
+echo "Wrote matmul.spv and softmax.spv"
