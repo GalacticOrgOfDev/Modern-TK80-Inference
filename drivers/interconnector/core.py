@@ -1,15 +1,14 @@
-"""Core interconnector for the Tesla K80 remaster.
+"""Core interconnector for Modern-TK80-Inference.
 
 Provides a modern interface:
-- Device discovery and die tracking
-- Explicit model placement and dual-die split modes
+- Device discovery (Vulkan, CUDA, CPU)
+- Explicit model placement
 - Translation of modern request formats
-- Thermal and performance monitoring
-- Hybrid cluster advertisement
-- Modality routing: LLM, image, voice, agent (video placeholder)
+- Modality routing: LLM, image, voice, agent
 
-Runs on top of the R470 driver + CUDA 11.8 baseline.
-Single-die models for now; dual-die unification later.
+Device selection uses drivers.interconnector.devices.preferred_device so
+an AMD RX 6700 (Vulkan) or any other reported GPU can be used for a
+demo. Creator tools do not require a model.
 """
 
 from __future__ import annotations
@@ -20,7 +19,7 @@ from typing import Any, Callable, Dict, List, Optional, Union
 from tk80.backends import create_backend
 
 from .cluster import advertise
-from .devices import K80Die, discover_dies
+from .devices import Device, discover_devices, preferred_device
 from .modalities import AgentBackend, ImageBackend, VoiceBackend
 from .monitor import PerfTimer, read_all_metrics
 from .split import plan_split
@@ -36,62 +35,70 @@ class InterconnectorError(Exception):
 
 
 class Interconnector:
-    """Modern interface to one or more Tesla K80 dies."""
+    """Modern interface to the devices reported on this machine."""
 
     def __init__(self, die_indices: Optional[List[int]] = None):
-        """future docstring"""
-        self.dies: List[K80Die] = discover_dies()
-        if not self.dies:
-            raise InterconnectorError("No CUDA devices found. Install R470 driver + CUDA 11.8.")
+        """Discover devices and optionally restrict to a subset of indexes.
+
+        Raises InterconnectorError only when no devices at all are reported
+        (should not occur because CPU is always present).
+        """
+        self.devices: List[Device] = discover_devices()
+        if not self.devices:
+            raise InterconnectorError("No devices reported.")
 
         if die_indices is not None:
-            valid = {d.index for d in self.dies}
+            valid = {d.index for d in self.devices}
             missing = [i for i in die_indices if i not in valid]
             if missing:
-                raise InterconnectorError(f"Requested dies not present: {missing}")
-            self.dies = [d for d in self.dies if d.index in die_indices]
+                raise InterconnectorError(f"Requested device indexes not present: {missing}")
+            self.devices = [d for d in self.devices if d.index in die_indices]
 
-        self._models: Dict[int, Any] = {}  # die index -> backend instance
-        self._modality: Dict[int, str] = {}  # die index -> modality name
+        self.preferred = preferred_device(self.devices)
+        self._models: Dict[int, Any] = {}  # device index -> backend instance
+        self._modality: Dict[int, str] = {}  # device index -> modality name
         self._last_perf: Dict[int, Dict[str, Any]] = {}
-        log.info("Interconnector ready with %d die(s)", len(self.dies))
-        for d in self.dies:
+        log.info("Interconnector ready. Preferred device: %s", self.preferred)
+        for d in self.devices:
             log.info("  %s", d)
 
     def loaded_dies(self) -> List[int]:
-        """Indices of dies that currently have a model."""
+        """Indexes of devices that currently have a model."""
         return list(self._models.keys())
 
     def modality_of(self, die: int) -> Optional[str]:
-        """Return the modality loaded on a die, or None."""
+        """Return the modality loaded on a device index, or None."""
         return self._modality.get(die)
 
     def status(self) -> Dict[str, Any]:
-        """Return a snapshot suitable for hybrid cluster monitoring."""
-        metrics = read_all_metrics([d.index for d in self.dies])
+        """Return a snapshot suitable for monitoring."""
+        indexes = [d.index for d in self.devices]
+        metrics = read_all_metrics(indexes)
         return {
-            "dies": [
+            "devices": [
                 {
                     "index": d.index,
                     "name": d.name,
+                    "backend": d.backend,
                     "total_mb": d.total_memory_mb,
                     "free_mb": d.free_memory_mb,
-                    "cc": f"{d.compute_capability[0]}.{d.compute_capability[1]}",
-                    "busy": d.busy,
+                    "device_string": d.device_string,
                     "model_loaded": d.index in self._models,
                     "modality": self._modality.get(d.index),
                 }
-                for d in self.dies
+                for d in self.devices
             ],
+            "preferred": self.preferred,
             "metrics": metrics,
             "models_loaded": list(self._models.keys()),
             "last_perf": self._last_perf,
         }
 
     def advertise(self, node_name: str = "") -> Dict[str, Any]:
-        """Hybrid cluster advertisement."""
-        base = advertise(self.dies, list(self._models.keys()), node_name=node_name)
+        """Cluster advertisement."""
+        base = advertise(self.devices, list(self._models.keys()), node_name=node_name)
         base["capabilities"]["modalities"] = ["llm", "image", "voice", "agent"]
+        base["preferred_device"] = self.preferred
         return base
 
     def load(
@@ -104,7 +111,11 @@ class Interconnector:
         n_gpu_layers: int = -1,
         n_ctx: int = 2048,
     ) -> None:
-        """Load a model. modality is llm, image, voice, or agent."""
+        """Load a model onto the preferred device or an explicit index.
+
+        device_string from discovery is forwarded so a Vulkan build can
+        offload to an AMD GPU. Creator tools do not call this method.
+        """
         free = self.free_dies()
         if die is not None:
             free = [die] if die in free else []
@@ -114,63 +125,54 @@ class Interconnector:
 
         plan = plan_split(split, free, backend)
 
-        # Layer split: one llama instance, both dies marked busy.
+        # Layer split: one llama instance, both targets marked busy.
         if plan["mode"] == "layer":
             primary = plan["dies"][0]
             if primary in self._models:
-                raise InterconnectorError(f"Die {primary} already has a model loaded")
+                raise InterconnectorError(f"Device {primary} already has a model loaded")
             kwargs = {
-                "main_gpu": primary,
+                "device_string": self.preferred,
                 "n_gpu_layers": n_gpu_layers,
                 "n_ctx": n_ctx,
                 "split_mode": 1,
             }
-            log.info("Loading %s as layer-split LLM (primary die %d)", model, primary)
+            log.info("Loading %s as layer-split LLM (primary %d, device %s)", model, primary, self.preferred)
             instance = create_backend("llama", model, **kwargs)
             for target in plan["dies"]:
                 self._models[target] = instance
                 self._modality[target] = "llm"
-                for d in self.dies:
-                    if d.index == target:
-                        d.busy = True
-                        break
-            log.info("Layer-split model loaded on dies %s", plan["dies"])
+            log.info("Layer-split model loaded on %s", plan["dies"])
             return
 
         for target in plan["dies"]:
             if target in self._models:
-                raise InterconnectorError(f"Die {target} already has a model loaded")
+                raise InterconnectorError(f"Device {target} already has a model loaded")
 
-            device = f"cuda:{target}"
+            device_string = self.preferred
             loaded: Any = None
 
             if modality == "llm":
-                load_kwargs: Dict[str, Any] = {}
+                load_kwargs: Dict[str, Any] = {"device_string": device_string}
                 if backend == "llama":
-                    load_kwargs["main_gpu"] = target
                     load_kwargs["n_gpu_layers"] = n_gpu_layers
                     load_kwargs["n_ctx"] = n_ctx
                     load_kwargs["split_mode"] = 0
-                elif backend == "pytorch":
-                    load_kwargs["device"] = device
-                else:
-                    raise InterconnectorError(f"unknown backend: {backend}")
                 loaded = create_backend(backend, model, **load_kwargs)
 
             elif modality == "image":
-                loaded = ImageBackend(model, device=device)
+                loaded = ImageBackend(model, device=device_string)
 
             elif modality == "voice":
-                loaded = VoiceBackend(model, device=device)
+                loaded = VoiceBackend(model, device=device_string)
 
             elif modality == "agent":
                 if backend == "pytorch":
-                    llm = create_backend("pytorch", model, device=device)
+                    llm = create_backend("pytorch", model, device_string=device_string)
                 else:
                     llm = create_backend(
                         "llama",
                         model,
-                        main_gpu=target,
+                        device_string=device_string,
                         n_gpu_layers=n_gpu_layers,
                         n_ctx=n_ctx,
                         split_mode=0,
@@ -180,25 +182,20 @@ class Interconnector:
             else:
                 raise InterconnectorError(f"Unknown modality: {modality}")
 
-            log.info("Loading %s on die %d (modality=%s)", model, target, modality)
+            log.info("Loading %s on device %d (modality=%s, device=%s)", model, target, modality, device_string)
             self._models[target] = loaded
             self._modality[target] = modality
 
-            for d in self.dies:
-                if d.index == target:
-                    d.busy = True
-                    break
-
-        log.info("Model loaded (mode=%s, dies=%s, modality=%s)", plan["mode"], plan["dies"], modality)
+        log.info("Model loaded (mode=%s, devices=%s, modality=%s)", plan["mode"], plan["dies"], modality)
 
     def unload(self, die: int) -> None:
-        """Unload the model from a die.
+        """Unload the model from a device index.
 
-        If the same instance is shared across dies (layer split), all dies
-        holding that instance are cleared.
+        If the same instance is shared (layer split), all indexes holding
+        that instance are cleared.
         """
         if die not in self._models:
-            raise InterconnectorError(f"No model on die {die}")
+            raise InterconnectorError(f"No model on device {die}")
 
         instance = self._models[die]
         shared = [idx for idx, m in self._models.items() if m is instance]
@@ -206,19 +203,15 @@ class Interconnector:
         for idx in shared:
             del self._models[idx]
             self._modality.pop(idx, None)
-            for d in self.dies:
-                if d.index == idx:
-                    d.busy = False
-                    break
 
-        log.info("Unloaded model from die(s) %s", shared)
+        log.info("Unloaded model from device(s) %s", shared)
 
     def generate(
         self,
         request: Union[str, Dict[str, Any]],
         die: Optional[int] = None,
     ) -> Any:
-        """Route to the correct modality on the chosen die."""
+        """Route to the correct modality on the chosen device."""
         if not self._models:
             raise InterconnectorError("No models loaded")
 
@@ -228,7 +221,7 @@ class Interconnector:
             die = next(iter(self._models))
 
         if die not in self._models:
-            raise InterconnectorError(f"No model on die {die}")
+            raise InterconnectorError(f"No model on device {die}")
 
         modality = self._modality.get(die, "llm")
         backend = self._models[die]
@@ -274,9 +267,9 @@ class Interconnector:
 
         timer.end(tokens=approx)
         self._last_perf[die] = timer.report()
-        log.info("Die %d (%s): %s", die, modality, self._last_perf[die])
+        log.info("Device %d (%s): %s", die, modality, self._last_perf[die])
         return result
 
     def free_dies(self) -> List[int]:
-        """Return indices of dies that do not currently have a model."""
-        return [d.index for d in self.dies if d.index not in self._models]
+        """Return indexes of devices that do not currently have a model."""
+        return [d.index for d in self.devices if d.index not in self._models]
