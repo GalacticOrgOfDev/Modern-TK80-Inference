@@ -25,12 +25,12 @@ LEVEL_BUCKETS = 64
 
 
 def platform_supports_asio() -> bool:
-    """future docstring"""
+    """platform supports asio."""
     return platform.system() == "Windows"
 
 
 def _sd():
-    """future docstring"""
+    """sd."""
     try:
         import sounddevice as sd  # type: ignore
 
@@ -40,7 +40,7 @@ def _sd():
 
 
 def probe_asio() -> Dict[str, Any]:
-    """future docstring"""
+    """Probe whether an ASIO host is available and return a status dict."""
     if not platform_supports_asio():
         return {
             "available": False,
@@ -78,7 +78,7 @@ def probe_asio() -> Dict[str, Any]:
 
 
 def list_asio_devices() -> List[Dict[str, Any]]:
-    """future docstring"""
+    """Return available ASIO input devices, or an empty list if none are present."""
     sd = _sd()
     if sd is None or not platform_supports_asio():
         return []
@@ -105,7 +105,7 @@ def list_asio_devices() -> List[Dict[str, Any]]:
 
 
 def find_focusrite(devices: Optional[List[Dict[str, Any]]] = None) -> Optional[Dict[str, Any]]:
-    """future docstring"""
+    """find focusrite."""
     items = devices if devices is not None else list_asio_devices()
     for d in items:
         name = str(d.get("name", "")).lower()
@@ -115,7 +115,7 @@ def find_focusrite(devices: Optional[List[Dict[str, Any]]] = None) -> Optional[D
 
 
 def asio_profile(sample_rate: int, buffer: int) -> Dict[str, Any]:
-    """future docstring"""
+    """Return the ASIO buffer and latency profile for the current settings."""
     if buffer not in ASIO_BUFFERS:
         buffer = DEFAULT_BUFFER
     latency_ms = round((buffer / float(sample_rate)) * 1000.0, 2)
@@ -137,7 +137,7 @@ class AsioRecorder:
     """Open the Focusrite ASIO input and write a WAV."""
 
     def __init__(self) -> None:
-        """future docstring"""
+        """init."""
         self._stream = None
         self._wave: Optional[wave.Wave_write] = None
         self._lock = threading.Lock()
@@ -152,11 +152,11 @@ class AsioRecorder:
 
     @property
     def recording(self) -> bool:
-        """future docstring"""
+        """recording."""
         return self._stream is not None
 
     def levels(self) -> Dict[str, Any]:
-        """future docstring"""
+        """Return recent peak levels while recording."""
         with self._lock:
             peaks = list(self._levels)
             peak = self._peak
@@ -174,7 +174,7 @@ class AsioRecorder:
         channels: int = 2,
         device_index: Optional[int] = None,
     ) -> Dict[str, Any]:
-        """future docstring"""
+        """Start ASIO recording on the given device index."""
         if self.recording:
             raise RuntimeError("already recording")
         sd = _sd()
@@ -200,7 +200,7 @@ class AsioRecorder:
 
         def callback(indata, frames, time_info, status) -> None:  # noqa: ARG001
             if status:
-                """future docstring"""
+                """callback."""
                 self.error = str(status)
             # Peak of this block, normalized 0..1.
             try:
@@ -247,7 +247,7 @@ class AsioRecorder:
         }
 
     def stop(self) -> Dict[str, Any]:
-        """future docstring"""
+        """Stop recording and return the path of the captured WAV."""
         if not self.recording:
             raise RuntimeError("not recording")
         stream = self._stream
