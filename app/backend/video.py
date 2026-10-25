@@ -283,20 +283,28 @@ def design_vfx(prompt: str) -> Dict[str, Any]:
 
 
 def make_vfx(name: str, description: str = "", params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """Create a custom VFX by name and write a starter stub with parameters.
+    """Create a custom VFX by name and write a process module.
 
-    Returns the effect record. The stub is a short Python process outline
-    that later encode or shader stages can expand.
+    Returns the effect record. The written module defines process(frame)
+    which tags the frame with the effect name and parameters.
     """
     safe = _safe_name(name)
     desc = description.strip() or f"Custom VFX: {safe}"
     params = params or {}
     stub = (
-        f"# VFX stub: {safe}\n"
-        f"# {desc}\n"
-        f"# params: {params}\n"
-        f"# process(frame):\n"
-        f"#   return apply_{safe}(frame, params)\n"
+        f'''"""Custom VFX: {safe}.\n\n{desc}\n"""\n'''
+        f"PARAMS = {params!r}\n\n"
+        f"def process(frame, params=None):\n"
+        f'    """Apply {safe} to a frame dict and return it.\n\n'
+        f'    Args:\n        frame: Frame dict with at least an id.\n'
+        f'        params: Optional override of PARAMS.\n    """\n'
+        f"    p = dict(PARAMS)\n"
+        f"    if params:\n"
+        f"        p.update(params)\n"
+        f"    frame = dict(frame)\n"
+        f"    frame['vfx'] = {safe!r}\n"
+        f"    frame['vfx_params'] = p\n"
+        f"    return frame\n"
     )
     dest = VFX_DIR / f"{safe}.py"
     if dest.exists():
