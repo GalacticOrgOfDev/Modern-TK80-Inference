@@ -17,37 +17,37 @@ ANIM_FORMATS = ("json", "gltf", "fbx", "bvh")
 
 
 def suffix(path: Path | str) -> str:
-    """future docstring"""
+    """suffix."""
     return Path(path).suffix.lower()
 
 
 def is_audio(path: Path | str) -> bool:
-    """future docstring"""
+    """Return True if the path is a supported audio file."""
     return suffix(path) in AUDIO_STORE
 
 
 def is_processable_audio(path: Path | str) -> bool:
-    """future docstring"""
+    """is processable audio."""
     return suffix(path) in AUDIO_PROCESS
 
 
 def is_video(path: Path | str) -> bool:
-    """future docstring"""
+    """Return True if the path is a supported video file."""
     return suffix(path) in VIDEO_STORE
 
 
 def is_model(path: Path | str) -> bool:
-    """future docstring"""
+    """is model."""
     return suffix(path) in MODEL_STORE
 
 
 def is_anim(fmt: str) -> bool:
-    """future docstring"""
+    """is anim."""
     return fmt.lower() in ANIM_FORMATS
 
 
 def catalog() -> Dict[str, List[str]]:
-    """future docstring"""
+    """Return the supported format catalog for audio and video."""
     return {
         "audio_store": list(AUDIO_STORE),
         "audio_process": list(AUDIO_PROCESS),
