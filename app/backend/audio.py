@@ -49,7 +49,7 @@ SCARLETT_PROFILES = {
 
 
 def default_master() -> Dict[str, Any]:
-    """future docstring"""
+    """Return the default master bus settings."""
     return {
         "gain": 1.0,
         "mute": False,
@@ -58,7 +58,7 @@ def default_master() -> Dict[str, Any]:
 
 
 def detect_scarlett(label: str) -> Optional[Dict[str, Any]]:
-    """future docstring"""
+    """Detect a Focusrite Scarlett device and return its profile, or None."""
     if not label:
         return None
     text = label.lower()
@@ -151,13 +151,13 @@ def apply_fade(samples: List[int], rate: int, channels: int, fade_in: float = 0.
 
 
 def _read_wav(path: Path) -> Tuple[int, int, int, bytes]:
-    """future docstring"""
+    """read wav."""
     with wave.open(str(path), "rb") as w:
         return w.getframerate(), w.getnchannels(), w.getsampwidth(), w.readframes(w.getnframes())
 
 
 def _write_wav(path: Path, pcm: bytes, rate: int, channels: int, sampwidth: int = 2) -> Path:
-    """future docstring"""
+    """write wav."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with wave.open(str(path), "wb") as w:
         w.setnchannels(channels)
@@ -168,7 +168,7 @@ def _write_wav(path: Path, pcm: bytes, rate: int, channels: int, sampwidth: int 
 
 
 def wav_duration(path: Path) -> Optional[float]:
-    """future docstring"""
+    """wav duration."""
     try:
         with wave.open(str(path), "rb") as w:
             frames = w.getnframes()
@@ -179,7 +179,7 @@ def wav_duration(path: Path) -> Optional[float]:
 
 
 def wav_peaks(path: Path, buckets: int = 64) -> List[float]:
-    """future docstring"""
+    """wav peaks."""
     try:
         rate, channels, width, raw = _read_wav(path)
         if width != 2 or not raw:
@@ -205,7 +205,7 @@ def wav_peaks(path: Path, buckets: int = 64) -> List[float]:
 
 
 def default_effects() -> Dict[str, Any]:
-    """future docstring"""
+    """default effects."""
     return {
         "normalize": {"enabled": False, "target": 0.95},
         "compress": {"enabled": False, "threshold": 0.5, "ratio": 4.0, "makeup": 1.0},
@@ -222,7 +222,7 @@ def make_clip(
     sample_rate: int = DEFAULT_SAMPLE_RATE,
     position: float = 0.0,
 ) -> Dict[str, Any]:
-    """future docstring"""
+    """Build a clip dict from an audio file path."""
     dur = duration
     peaks: List[float] = []
     rel = ""
@@ -256,7 +256,7 @@ def make_track(
     channel: str = "stereo",
     sample_rate: int = DEFAULT_SAMPLE_RATE,
 ) -> Dict[str, Any]:
-    """future docstring"""
+    """Build a track dict with the given name, channel, and sample rate."""
     if channel not in CHANNELS:
         channel = "stereo"
     return {
@@ -275,12 +275,12 @@ def make_track(
 
 
 def _samples(pcm: bytes) -> List[int]:
-    """future docstring"""
+    """samples."""
     return [struct.unpack_from("<h", pcm, i)[0] for i in range(0, len(pcm) - 1, 2)]
 
 
 def _pack(samples: List[int]) -> bytes:
-    """future docstring"""
+    """pack."""
     out = bytearray()
     for s in samples:
         out += struct.pack("<h", max(-32768, min(32767, int(s))))
@@ -295,7 +295,7 @@ def process_clip(
     gain: float = 1.0,
     out_name: str = "",
 ) -> Path:
-    """future docstring"""
+    """Apply an edit action to a clip and return the updated clip dict."""
     path = _to_wav(path)
     rate, channels, width, raw = _read_wav(path)
     if width != 2:
@@ -424,7 +424,7 @@ def mix_arrangement(
 
 
 def _compress_sample(v: float, thresh: float, ratio: float) -> float:
-    """future docstring"""
+    """compress sample."""
     a = abs(v)
     if a <= thresh:
         return v
