@@ -4,26 +4,30 @@ This module is the torch alternative for workloads that must run on an
 AMD GPU (RX 6700 and others) without ROCm. It does not wrap PyTorch.
 
 Current contract:
-- Discover Vulkan devices the same way devices.py does (vulkaninfo --summary).
-- Hold a simple host-side buffer that can be uploaded later.
-- ImageGenerator looks for an external Vulkan diffusion binary on PATH
-  (stable-diffusion-vulkan, sd-vulkan, or similar). When found it is
-  invoked with the prompt and device index. When not found it raises
-  a clear error naming the missing binary. No silent CPU fallback.
+- Discover Vulkan devices via vulkaninfo --summary.
+- VulkanTensor holds shape, dtype, and a host buffer. add, mul, and
+  reshape run on the host today; the methods are the call shape that
+  later shader dispatch will replace.
+- ImageGenerator looks for an external Vulkan diffusion binary on PATH.
+  When found it is invoked; when not found it raises. No silent CPU
+  fallback.
 
-Later passes can add real shader dispatch or a bundled binary.
+Shader dispatch and device memory are not implemented in this pass.
 """
 
 from __future__ import annotations
 
 import logging
 import shutil
+import struct
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Sequence, Tuple, Union
 
 log = logging.getLogger("tk80.interconnector.vulkan_compute")
+
+DTYPE_SIZES = {"float32": 4, "float16": 2, "int32": 4, "uint8": 1}
 
 
 @dataclass
@@ -58,7 +62,6 @@ def discover_vulkan_devices() -> List[VulkanDevice]:
         return []
 
     devices: List[VulkanDevice] = []
-    # Minimal parse: GPU lines that contain a name.
     for line in result.stdout.splitlines():
         line = line.strip()
         if line.startswith("GPU") and ":" in line:
@@ -101,6 +104,112 @@ class VulkanBuffer:
         if end > self.size_bytes:
             raise ValueError("read exceeds buffer size")
         return bytes(self._data[offset:end])
+
+
+class VulkanTensor:
+    """Custom tensor backed by a VulkanBuffer.
+
+    Stores shape and dtype. Arithmetic (add, mul) and reshape currently
+    execute on the host. The method signatures are the contract that a
+    later shader dispatch pass will implement on device.
+    """
+
+    def __init__(
+        self,
+        shape: Sequence[int],
+        dtype: str = "float32",
+        device_index: int = 0,
+        data: Optional[bytes] = None,
+    ):
+        if dtype not in DTYPE_SIZES:
+            raise ValueError(f"unsupported dtype: {dtype}")
+        if any(d < 0 for d in shape):
+            raise ValueError("shape dimensions must be non-negative")
+        self.shape: Tuple[int, ...] = tuple(shape)
+        self.dtype = dtype
+        self.device_index = device_index
+        self.numel = 1
+        for d in self.shape:
+            self.numel *= d
+        self.itemsize = DTYPE_SIZES[dtype]
+        self.buffer = VulkanBuffer(self.numel * self.itemsize, device_index)
+        if data is not None:
+            if len(data) != self.buffer.size_bytes:
+                raise ValueError("data length does not match shape and dtype")
+            self.buffer.write(data)
+
+    def __repr__(self) -> str:
+        return f"VulkanTensor(shape={self.shape}, dtype={self.dtype}, device={self.device_index})"
+
+    def _unpack(self) -> List[float]:
+        """Return host values as a flat list of floats."""
+        raw = self.buffer.read()
+        if self.dtype == "float32":
+            count = len(raw) // 4
+            return list(struct.unpack(f"<{count}f", raw))
+        if self.dtype == "int32":
+            count = len(raw) // 4
+            return [float(x) for x in struct.unpack(f"<{count}i", raw)]
+        if self.dtype == "uint8":
+            return [float(b) for b in raw]
+        # float16 not unpacked in this pass
+        raise NotImplementedError(f"unpack not implemented for {self.dtype}")
+
+    def _pack(self, values: Sequence[float]) -> bytes:
+        """Pack a flat list of floats into the tensor dtype."""
+        if self.dtype == "float32":
+            return struct.pack(f"<{len(values)}f", *values)
+        if self.dtype == "int32":
+            return struct.pack(f"<{len(values)}i", *[int(v) for v in values])
+        if self.dtype == "uint8":
+            return bytes(int(max(0, min(255, v))) for v in values)
+        raise NotImplementedError(f"pack not implemented for {self.dtype}")
+
+    def add(self, other: Union["VulkanTensor", float]) -> "VulkanTensor":
+        """Element-wise add. Returns a new tensor of the same shape and dtype."""
+        if isinstance(other, VulkanTensor):
+            if other.shape != self.shape or other.dtype != self.dtype:
+                raise ValueError("add requires matching shape and dtype")
+            a = self._unpack()
+            b = other._unpack()
+            result = [x + y for x, y in zip(a, b)]
+        else:
+            a = self._unpack()
+            result = [x + float(other) for x in a]
+        out = VulkanTensor(self.shape, self.dtype, self.device_index)
+        out.buffer.write(self._pack(result))
+        return out
+
+    def mul(self, other: Union["VulkanTensor", float]) -> "VulkanTensor":
+        """Element-wise multiply. Returns a new tensor of the same shape and dtype."""
+        if isinstance(other, VulkanTensor):
+            if other.shape != self.shape or other.dtype != self.dtype:
+                raise ValueError("mul requires matching shape and dtype")
+            a = self._unpack()
+            b = other._unpack()
+            result = [x * y for x, y in zip(a, b)]
+        else:
+            a = self._unpack()
+            result = [x * float(other) for x in a]
+        out = VulkanTensor(self.shape, self.dtype, self.device_index)
+        out.buffer.write(self._pack(result))
+        return out
+
+    def reshape(self, shape: Sequence[int]) -> "VulkanTensor":
+        """Return a new tensor with the same data and a new shape.
+
+        The product of the new dimensions must equal numel.
+        """
+        new_numel = 1
+        for d in shape:
+            if d < 0:
+                raise ValueError("reshape dimensions must be non-negative")
+            new_numel *= d
+        if new_numel != self.numel:
+            raise ValueError(f"reshape numel mismatch: {new_numel} != {self.numel}")
+        out = VulkanTensor(shape, self.dtype, self.device_index)
+        out.buffer.write(self.buffer.read())
+        return out
 
 
 class ImageGenerator:
