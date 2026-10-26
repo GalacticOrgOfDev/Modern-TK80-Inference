@@ -9,5 +9,5 @@ python-multipart
 pydantic
 pyyaml
 numpy
-"""
-file_path="/workspace/artifacts/Modern-TK80-Inference/requirements-core.txt"
+pywebview
+sounddevice
