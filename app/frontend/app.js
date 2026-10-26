@@ -1097,14 +1097,13 @@ async function playClip(clip, fromSec) {
     const dst = rev.getChannelData(ch);
     for (let i = 0; i < src.length; i++) dst[i] = src[src.length - 1 - i];
   }
-  const offset = Math.max(0, rev.duration - into);
   reverseSource = audioCtx.createBufferSource();
   reverseSource.buffer = rev;
   const gain = audioCtx.createGain();
   gain.gain.value = Math.min(1, clip.gain || 1);
   reverseSource.connect(gain).connect(audioCtx.destination);
-  reverseSource.start(0, offset);
-  startPlayhead(clipStart + into, -1);
+  reverseSource.start(0, into);
+  startPlayhead(clipStart + into, 1);
 }
 
 (document.getElementById("audio-play")||{}).onclick =  () => {
