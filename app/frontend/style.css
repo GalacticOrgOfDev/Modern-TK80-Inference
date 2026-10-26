@@ -304,3 +304,5 @@ hr { border: none; border-top: 1px solid #2a2a2a; width: 100%; margin: 6px 0; }
   background: #e6c200; z-index: 5; pointer-events: none; left: 0;
 }
 .daw-arrange { position: relative; }
+
+.daw-clip.reversed { background: #6b4a1a; }

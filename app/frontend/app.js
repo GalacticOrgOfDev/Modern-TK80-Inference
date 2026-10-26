@@ -526,17 +526,22 @@ function drawArrange() {
     area.addEventListener("click", (ev) => {
       if (ev.target.classList.contains("daw-clip")) return;
       const rect = area.getBoundingClientRect();
-      setPlayhead((ev.clientX - rect.left + area.parentElement.scrollLeft) / PX_PER_SEC);
+      const sec = (ev.clientX - rect.left + area.parentElement.scrollLeft) / PX_PER_SEC;
+      setPlayhead(sec);
+      if (playerPlaying()) {
+        const clip = audioClips.find((c) => c.id === selectedClip) || audioClips[0];
+        if (clip) playClip(clip, sec);
+      }
     });
   }
   const px = 40;
   for (const c of audioClips) {
     const div = document.createElement("div");
-    div.className = "daw-clip" + (c.mute ? " muted" : "");
+    div.className = "daw-clip" + (c.mute ? " muted" : "") + (c.reversed ? " reversed" : "");
     div.style.left = ((c.position || 0) * px) + "px";
     div.style.width = Math.max(24, (c.duration || 1) * px) + "px";
     div.style.top = ((c.track_id || 0) * 36 + 4) + "px";
-    div.textContent = c.name || ("#" + c.id);
+    div.textContent = (c.reversed ? "REV " : "") + (c.name || ("#" + c.id));
     div.onclick = () => selectClip(c);
     area.appendChild(div);
   }
@@ -1081,7 +1086,9 @@ async function playClip(clip, fromSec) {
     return;
   }
   player.pause();
+  player.src = "";
   if (!audioCtx) audioCtx = new AudioContext();
+  if (audioCtx.state === "suspended") await audioCtx.resume();
   const res = await fetch(`/api/audio/file/${clip.id}?v=${Date.now()}`);
   const decoded = await audioCtx.decodeAudioData(await res.arrayBuffer());
   const rev = audioCtx.createBuffer(decoded.numberOfChannels, decoded.length, decoded.sampleRate);
