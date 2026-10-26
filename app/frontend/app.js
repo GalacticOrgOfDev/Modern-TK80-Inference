@@ -356,7 +356,7 @@ function showTrackMenu(e, track) {
       <button data-act="gain-up">+1</button>
     </div>
     <button data-act="reverse">Reverse: off</button>
-    <button data-act="silence">Silence</button>
+    <button data-act="silence">Silence: off</button>
     <button data-act="mute">Mute clip</button>
     <button data-act="fx">Open FX</button>
   `;
@@ -371,6 +371,8 @@ function showTrackMenu(e, track) {
   if (readout) readout.textContent = (db >= 0 ? "+" : "") + db.toFixed(1) + " dB";
   const revBtn = menu.querySelector('[data-act="reverse"]');
   if (revBtn) revBtn.textContent = "Reverse: " + (clip && clip.reversed ? "on" : "off");
+  const silBtn = menu.querySelector('[data-act="silence"]');
+  if (silBtn) silBtn.textContent = "Silence: " + (clip && clip.silenced ? "on" : "off");
   e.stopPropagation();
 }
 document.addEventListener("click", (e) => {
@@ -402,8 +404,16 @@ document.addEventListener("click", (e) => {
       clip.reversed = !clip.reversed;
       api("/api/audio/clips/reverse", { method: "POST", body: JSON.stringify({ clip_id: clip.id }) });
       e.target.textContent = "Reverse: " + (clip.reversed ? "on" : "off");
-      const playing = (playerPlaying()) ;
-      if (playing) playClip(clip, playheadSec);
+      if (playerPlaying()) playClip(clip, playheadSec);
+      return;
+    }
+    if (act === "silence") {
+      const clip = audioClips.find((c) => c.track_id === id);
+      if (!clip) { alert("No clip on this track"); return; }
+      clip.silenced = !clip.silenced;
+      api("/api/audio/clips/silence", { method: "POST", body: JSON.stringify({ clip_id: clip.id }) });
+      e.target.textContent = "Silence: " + (clip.silenced ? "on" : "off");
+      if (playerPlaying()) playClip(clip, playheadSec);
       return;
     }
     m.hidden = true;
@@ -537,11 +547,11 @@ function drawArrange() {
   const px = 40;
   for (const c of audioClips) {
     const div = document.createElement("div");
-    div.className = "daw-clip" + (c.mute ? " muted" : "") + (c.reversed ? " reversed" : "");
+    div.className = "daw-clip" + (c.mute ? " muted" : "") + (c.reversed ? " reversed" : "") + (c.silenced ? " silenced" : "");
     div.style.left = ((c.position || 0) * px) + "px";
     div.style.width = Math.max(24, (c.duration || 1) * px) + "px";
     div.style.top = ((c.track_id || 0) * 36 + 4) + "px";
-    div.textContent = (c.reversed ? "REV " : "") + (c.name || ("#" + c.id));
+    div.textContent = (c.silenced ? "SIL " : "") + (c.reversed ? "REV " : "") + (c.name || ("#" + c.id));
     div.onclick = () => selectClip(c);
     area.appendChild(div);
   }
@@ -1076,6 +1086,12 @@ async function playClip(clip, fromSec) {
   const player = document.getElementById("audio-player");
   if (reverseSource) { try { reverseSource.stop(); } catch (e) {} reverseSource = null; }
   const start = fromSec != null ? fromSec : playheadSec;
+  if (clip.silenced) {
+    player.pause();
+    player.src = "";
+    startPlayhead(start, 1);
+    return;
+  }
   const clipStart = clip.position || 0;
   const into = Math.max(0, Math.min(clip.duration || 0, start - clipStart));
   if (!clip.reversed) {

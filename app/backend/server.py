@@ -1266,6 +1266,17 @@ def clip_reverse(body: ClipFlagRequest) -> Dict[str, Any]:
     return clip
 
 
+
+@app.post("/api/audio/clips/silence")
+def clip_silence(body: ClipFlagRequest) -> Dict[str, Any]:
+    """Toggle a clip's silenced flag. Does not rewrite the source file."""
+    if body.clip_id < 0 or body.clip_id >= len(_audio_clips):
+        raise HTTPException(status_code=404, detail="clip not found")
+    clip = _audio_clips[body.clip_id]
+    clip["silenced"] = not clip.get("silenced", False)
+    return clip
+
+
 @app.post("/api/audio/clips/mute")
 def clip_mute(body: ClipMuteRequest) -> Dict[str, Any]:
     """clip mute."""
