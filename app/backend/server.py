@@ -98,7 +98,9 @@ _ic: Optional[Interconnector] = None
 _fusion: Optional[DieFusionCore] = None
 
 _chat: List[Dict[str, str]] = []
-_audio_tracks: List[Dict[str, Any]] = []
+_audio_tracks: List[Dict[str, Any]] = [
+    make_track(i, f"Audio {i + 1}", "stereo", 44100) for i in range(4)
+]
 _audio_clips: List[Dict[str, Any]] = []
 _undo_stack: List[Dict[str, Any]] = []
 _MAX_UNDO = 20

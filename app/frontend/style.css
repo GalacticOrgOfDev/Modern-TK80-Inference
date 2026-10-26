@@ -266,3 +266,10 @@ hr { border: none; border-top: 1px solid #2a2a2a; width: 100%; margin: 6px 0; }
 .drawer { display: none; padding: 8px; max-height: 180px; overflow: auto; }
 .drawer.open { display: block; }
 #agent-prompt { width: 100%; min-height: 48px; background: #1a1a1a; color: #eee; border: 1px solid #333; }
+
+.daw-headers { display: flex; flex-direction: column; }
+.daw-headers .track-list { flex: 0 0 auto; }
+.daw-headers .master-row { margin-top: auto; order: 99; border-top: 1px solid #333; }
+.daw-headers .add-track-btn { order: 50; }
+.track .pan { width: 50px; }
+.track .lvl { width: 70px; }
