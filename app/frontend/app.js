@@ -275,8 +275,10 @@ async function refreshTracks() {
       <span class="track-name">#${t.id} ${t.name}</span>
       <button class="mute" title="Mute">${t.mute ? "M" : "M"}</button>
       <button class="solo" title="Solo">${t.solo ? "S" : "S"}</button>
-      <input class="lvl" type="range" min="0" max="2" step="0.01" value="${t.gain || 1}" title="${gainToDb(t.gain || 1)}" />
-      <input class="pan" type="range" min="-1" max="1" step="0.01" value="${t.channel === "left" ? -1 : t.channel === "right" ? 1 : 0}" title="${t.channel === "left" ? "Left" : t.channel === "right" ? "Right" : "Stereo"}" />
+      <input class="lvl" type="range" min="0" max="2" step="0.01" value="${t.gain || 1}" />
+      <span class="db">${gainToDb(t.gain || 1)}</span>
+      <input class="pan" type="range" min="-1" max="1" step="0.01" value="${t.channel === "left" ? -1 : t.channel === "right" ? 1 : 0}" />
+      <span class="pan-label">${t.channel === "left" ? "L" : t.channel === "right" ? "R" : "C"}</span>
       <button class="fx" title="FX">fx</button>
       <select class="arm-sel" title="Arm / input">
         <option value="">arm</option>
@@ -289,7 +291,8 @@ async function refreshTracks() {
     `;
     row.querySelector(".track-name").onclick = () => { selectedTrack = t.id; refreshTracks(); };
     const lvl = row.querySelector(".lvl");
-    lvl.oninput = () => { lvl.title = gainToDb(Number(lvl.value)); };
+    const db = row.querySelector(".db");
+    lvl.oninput = () => { db.textContent = gainToDb(Number(lvl.value)); };
     lvl.onchange = async () => {
       await api(`/api/audio/tracks/${t.id}`, {
         method: "POST",
@@ -297,39 +300,24 @@ async function refreshTracks() {
       });
     };
     const pan = row.querySelector(".pan");
-    pan.oninput = () => { pan.title = panLabel(Number(pan.value)); };
+    const panLabelEl = row.querySelector(".pan-label");
+    pan.oninput = () => { panLabelEl.textContent = panLabel(Number(pan.value))[0]; };
     pan.onchange = async () => {
       const v = Number(pan.value);
       const channel = v < -0.33 ? "left" : v > 0.33 ? "right" : "stereo";
+      panLabelEl.textContent = channel === "left" ? "L" : channel === "right" ? "R" : "C";
       await api(`/api/audio/tracks/${t.id}`, {
         method: "POST",
         body: JSON.stringify({ channel }),
       });
     };
-    row.querySelector(".lvl").onchange = async (e) => {
-      await api(`/api/audio/tracks/${t.id}`, {
-        method: "POST",
-        body: JSON.stringify({ gain: Number(e.target.value) }),
-      });
-    };
-    row.querySelector(".arm").onclick = async () => {
-      const device = document.getElementById("audio-devices");
-      const opt = device.selectedOptions[0];
-      const asio_index = opt && opt.value !== "" ? Number(opt.value) : null;
-      try {
+    row.querySelector(".arm-sel").onchange = async (e) => {
+      if (e.target.value === "arm") {
         await api(`/api/audio/tracks/${t.id}`, {
           method: "POST",
-          body: JSON.stringify({
-            armed: !t.armed,
-            asio_index,
-            device_label: opt ? opt.textContent : null,
-            sample_rate: studioRate,
-          }),
+          body: JSON.stringify({ armed: !t.armed }),
         });
-        selectedTrack = t.id;
         await refreshTracks();
-      } catch (e) {
-        alert(e.message);
       }
     };
     row.querySelector(".solo").onclick = async () => {
