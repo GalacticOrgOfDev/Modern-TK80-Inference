@@ -2,34 +2,31 @@
 
 Summary of the arrangement view. Implementation follows this document one pass at a time.
 
-## Track column
+## Done
 
-- Master is always the last row, pinned at the bottom.
-- At least four child tracks exist on open. A + button under the last child adds another.
-- Each child track has: mute, solo, level slider with a live dB readout, pan slider with an L/C/R label, an FX button, and an arm dropdown.
-- Right-click on a track opens a context menu (trim, gain, reverse, silence, mute clip, open FX).
-- Tracks can be dragged by their header to reorder the child list. Master stays last.
-- The left edge of the arrangement (the boundary between the track column and the timeline) is a grab handle. Dragging it sets the track-column width.
-- The top and bottom edge of a track row is a grab handle. Dragging it sets that track's height. The matching timeline lane grows with it.
+- Master pinned at the bottom. Four child tracks on open. + adds another.
+- Each track has mute, solo, level with a live dB readout, pan with L/C/R, FX, and arm.
+- Right-click menu opens. Reverse, normalize, and gain rewrite the clip file.
+- Scarlett / Focusrite devices are listed from any host. Badge shows the name.
+- Library holds stock instruments. Generate instrument sends a prompt to the VST maker.
+- Playback cache-busts so an edited file is what plays.
 
-## Timeline
+## Remaining, in order
 
-- Horizontal lines run across the timeline at the top and bottom of every track lane, aligned with the track rows.
-- Clips can be clicked and dragged along their lane to a new start position.
-- While recording, a waveform grows in the lane of the armed track, left to right, as samples arrive.
+1. Gain control with measurement. Right-click Gain currently applies a fixed +6 dB. The menu needs a control that shows the current clip gain in dB and steps it up or down by a chosen amount (for example 1 dB or 3 dB). The applied value is written into the clip and the readout updates.
+2. Equalizer wired to the clip. The 30-band EQ panel must send its band gains to the effect endpoint and rewrite the clip. An empty gains list does nothing.
+3. Track reorder by drag. Drag a child track header to a new index. Master stays last.
+4. Clip drag on the timeline. Drag a clip along its lane to a new start position.
+5. Lane lines. Horizontal lines across the timeline at the top and bottom of every track lane.
+6. Column width handle. Drag the edge between the track column and the timeline to set the column width.
+7. Track height handle. Drag the top or bottom edge of a track row to set that track's height. The matching lane grows with it.
+8. Recording waveform. While recording, a waveform grows in the armed track's lane as samples arrive.
 
-## Drawers
+## Effect wiring rule
 
-- Bottom tabs: Project, Sound, Mixer, Library, Agent.
-- Library holds the stock instruments (kick, snare, hat, bass, lead, pad) and any generated instruments.
-- Generate instrument takes a text prompt and sends it to the VST maker as an instrument. It does not pick from the stock list.
+An effect is wired when it has named parameters, a visible control for each parameter, a unit (dB, ms, ratio), and a call that writes the result into the clip file. A label in a list is not wired.
 
-## Devices
+## Out of scope
 
-- Any input whose name contains Focusrite or Scarlett is listed, including WASAPI names such as "Analogue 1 + 2 (Focusrite USB Audio)".
-- The Scarlett badge shows the device name when one is present.
-
-## Out of scope for this document
-
+- Using or copying third-party plugin binaries.
 - VST binary compile (needs the Steinberg SDK on the machine).
-- Validated glTF/FBX/BVH export.
