@@ -37,6 +37,7 @@ function setupTabs() {
   });
 }
 setupTabs();
+refreshTracks();
 
 function bind(id, event, fn) {
   const el = document.getElementById(id);
@@ -400,7 +401,7 @@ function renderFxList() {
   });
 }
 
-document.getElementById("fx-add-btn").onclick = () => {
+(document.getElementById("fx-add-btn")||{}).onclick =  () => {
   if (fxTrackId == null) return;
   const kind = document.getElementById("fx-add").value;
   const names = { eq: "30-band EQ", normalize: "Normalize", compress: "Compress", delay: "Delay", reverb: "Reverb", vst: "VST plugin" };
@@ -409,7 +410,7 @@ document.getElementById("fx-add-btn").onclick = () => {
   if (kind === "eq") document.getElementById("eq-panel").style.display = "block";
   renderFxList();
 };
-document.getElementById("fx-close").onclick = () => {
+(document.getElementById("fx-close")||{}).onclick =  () => {
   document.getElementById("track-fx").classList.remove("open");
 };
 
@@ -539,7 +540,7 @@ document.getElementById("asio-buffer").onchange = async (e) => {
 };
 
 // Master
-document.getElementById("master-apply").onclick = async () => {
+(document.getElementById("master-apply")||{}).onclick =  async () => {
   try {
     master = await api("/api/audio/master", {
       method: "POST",
@@ -559,7 +560,7 @@ document.getElementById("master-apply").onclick = async () => {
 };
 
 // Music
-document.getElementById("bpm-set").onclick = async () => {
+(document.getElementById("bpm-set")||{}).onclick =  async () => {
   try {
     const data = await api("/api/music/bpm", {
       method: "POST",
@@ -569,7 +570,7 @@ document.getElementById("bpm-set").onclick = async () => {
     document.getElementById("bpm-pill").textContent = `${bpm} BPM`;
   } catch (e) { alert(e.message); }
 };
-document.getElementById("bpm-detect").onclick = async () => {
+(document.getElementById("bpm-detect")||{}).onclick =  async () => {
   try {
     const data = await api(`/api/music/bpm/detect?clip_id=${selectedClip}`, { method: "POST" });
     bpm = data.applied;
@@ -579,7 +580,7 @@ document.getElementById("bpm-detect").onclick = async () => {
       `Detected ${data.bpm} BPM (confidence ${data.confidence})`;
   } catch (e) { alert(e.message); }
 };
-document.getElementById("instrument-gen").onclick = async () => {
+(document.getElementById("instrument-gen")||{}).onclick =  async () => {
   try {
     const clip = await api("/api/music/instrument", {
       method: "POST",
@@ -593,7 +594,7 @@ document.getElementById("instrument-gen").onclick = async () => {
     await refreshClips();
   } catch (e) { alert(e.message); }
 };
-document.getElementById("loop-gen").onclick = async () => {
+(document.getElementById("loop-gen")||{}).onclick =  async () => {
   try {
     const clip = await api("/api/music/loop", {
       method: "POST",
@@ -607,7 +608,7 @@ document.getElementById("loop-gen").onclick = async () => {
     await refreshClips();
   } catch (e) { alert(e.message); }
 };
-document.getElementById("pattern-render").onclick = async () => {
+(document.getElementById("pattern-render")||{}).onclick =  async () => {
   try {
     const clip = await api(`/api/music/render?track_id=${selectedTrack}&bars=1`, { method: "POST" });
     selectedClip = clip.id;
@@ -616,7 +617,7 @@ document.getElementById("pattern-render").onclick = async () => {
 };
 
 // Chat
-document.getElementById("llm-load").onclick = async () => {
+(document.getElementById("llm-load")||{}).onclick =  async () => {
   try {
     await api("/api/load", {
       method: "POST",
@@ -631,19 +632,19 @@ document.getElementById("llm-load").onclick = async () => {
     await refreshStatus();
   } catch (e) { alert(e.message); }
 };
-document.getElementById("llm-unload").onclick = async () => {
+(document.getElementById("llm-unload")||{}).onclick =  async () => {
   try {
     await api(`/api/unload?die=${Number(document.getElementById("llm-die").value)}`, { method: "POST" });
     await refreshStatus();
   } catch (e) { alert(e.message); }
 };
-document.getElementById("llm-clear").onclick = async () => {
+(document.getElementById("llm-clear")||{}).onclick =  async () => {
   await api("/api/chat/clear", { method: "POST" });
   chatHistory = [];
   renderChat();
   showToolIndicator(null);
 };
-document.getElementById("llm-send").onclick = async () => {
+(document.getElementById("llm-send")||{}).onclick =  async () => {
   const input = document.getElementById("llm-input");
   const text = input.value.trim();
   if (!text) return;
@@ -675,24 +676,24 @@ document.getElementById("llm-send").onclick = async () => {
 };
 
 // Tracks and devices
-document.getElementById("toggle-settings").onclick = () => {
+(document.getElementById("toggle-settings")||{}).onclick =  () => {
   document.getElementById("settings-drawer").classList.toggle("open");
 };
-document.getElementById("audio-new-track").onclick = async () => {
+(document.getElementById("audio-new-track")||{}).onclick =  async () => {
   const name = document.getElementById("track-name").value || "Track";
   const channel = document.getElementById("track-channel").value;
   const t = await api(`/api/audio/tracks?name=${encodeURIComponent(name)}&channel=${channel}`, { method: "POST" });
   selectedTrack = t.id;
   await refreshTracks();
 };
-document.getElementById("audio-del-track").onclick = async () => {
+(document.getElementById("audio-del-track")||{}).onclick =  async () => {
   if (selectedTrack == null) { alert("Select a track first"); return; }
   await api(`/api/audio/tracks/${selectedTrack}`, { method: "DELETE" });
   selectedTrack = null;
   await refreshTracks();
   await refreshClips();
 };
-document.getElementById("audio-refresh-devices").onclick = detectDevices;
+(document.getElementById("audio-refresh-devices")||{}).onclick =  detectDevices;
 
 // Audio clips
 const _al = document.getElementById("audio-load"); if (_al) _al.onclick = async () => {
@@ -709,7 +710,7 @@ const _al = document.getElementById("audio-load"); if (_al) _al.onclick = async 
   } catch (e) { alert(e.message); }
 };
 
-document.getElementById("audio-upload").onclick = async () => {
+(document.getElementById("audio-upload")||{}).onclick =  async () => {
   const file = document.getElementById("audio-file").files[0];
   if (!file) { alert("Select an audio file"); return; }
   const fd = new FormData();
@@ -757,13 +758,13 @@ async function audioEdit(action) {
     document.getElementById("audio-transport-status").textContent = `${action} applied to #${clip.id}`;
   } catch (e) { alert(e.message); }
 }
-document.getElementById("audio-trim").onclick = () => audioEdit("trim");
-document.getElementById("audio-gain-btn").onclick = () => audioEdit("gain");
-document.getElementById("audio-reverse").onclick = () => audioEdit("reverse");
-document.getElementById("audio-silence").onclick = () => audioEdit("silence");
-document.getElementById("audio-set-position").onclick = () => audioEdit("position");
+(document.getElementById("audio-trim")||{}).onclick =  () => audioEdit("trim");
+(document.getElementById("audio-gain-btn")||{}).onclick =  () => audioEdit("gain");
+(document.getElementById("audio-reverse")||{}).onclick =  () => audioEdit("reverse");
+(document.getElementById("audio-silence")||{}).onclick =  () => audioEdit("silence");
+(document.getElementById("audio-set-position")||{}).onclick =  () => audioEdit("position");
 
-document.getElementById("audio-clip-mute").onclick = async () => {
+(document.getElementById("audio-clip-mute")||{}).onclick =  async () => {
   const clip = audioClips.find((c) => c.id === selectedClip);
   if (!clip) return;
   try {
@@ -786,10 +787,10 @@ async function applyEffect(kind, params) {
     document.getElementById("audio-transport-status").textContent = `${kind} applied to #${clip.id}`;
   } catch (e) { alert(e.message); }
 }
-document.getElementById("fx-normalize").onclick = () => applyEffect("normalize", { target: 0.95 });
-document.getElementById("fx-compress").onclick = () =>
+(document.getElementById("fx-normalize")||{}).onclick =  () => applyEffect("normalize", { target: 0.95 });
+(document.getElementById("fx-compress")||{}).onclick =  () =>
   applyEffect("compress", { threshold: 0.5, ratio: 4, makeup: 1.2 });
-document.getElementById("fx-morph").onclick = () =>
+(document.getElementById("fx-morph")||{}).onclick =  () =>
   applyEffect("morph", { points: [[0, 0.2], [0.25, 1], [0.5, 0.4], [0.75, 1], [1, 0.2]] });
 
 // 30-band EQ: 100 Hz to 20 kHz, log spaced
@@ -833,7 +834,7 @@ if (eqSliders) {
     eqSliders.appendChild(band);
   }
 }
-document.getElementById("fx-eq").onclick = () => {
+(document.getElementById("fx-eq")||{}).onclick =  () => {
   const gains = [];
   document.querySelectorAll("#eq-sliders input").forEach((el) => gains.push(Number(el.value)));
   applyEffect("eq", { gains });
@@ -915,7 +916,7 @@ if (palette) {
     if (kind) e.dataTransfer.setData("kind", kind);
   };
 }
-const canvas = document.getElementById("vst-canvas");
+const canvas = document.getElementById("vst-canvas"); if (!canvas) { /* no vst canvas */ } else 
 if (canvas) {
   canvas.ondragover = (e) => e.preventDefault();
   canvas.ondrop = async (e) => {
@@ -935,7 +936,7 @@ if (canvas) {
 }
 loadVstUI();
 
-document.getElementById("audio-play").onclick = () => {
+(document.getElementById("audio-play")||{}).onclick =  () => {
   const clip = audioClips.find((c) => c.id === selectedClip);
   if (!clip || !clip.path) {
     document.getElementById("audio-transport-status").textContent = "No file on this clip";
@@ -950,7 +951,7 @@ document.getElementById("audio-play").onclick = () => {
     `Playing #${clip.id} @ ${clip.sample_rate || studioRate} Hz`;
 };
 
-document.getElementById("audio-play-mix").onclick = async () => {
+(document.getElementById("audio-play-mix")||{}).onclick =  async () => {
   try {
     const clip = await api("/api/audio/mix", { method: "POST" });
     selectedClip = clip.id;
@@ -964,7 +965,7 @@ document.getElementById("audio-play-mix").onclick = async () => {
   } catch (e) { alert(e.message); }
 };
 
-document.getElementById("audio-bounce").onclick = async () => {
+(document.getElementById("audio-bounce")||{}).onclick =  async () => {
   try {
     const clip = await api("/api/audio/bounce", {
       method: "POST",
@@ -995,13 +996,13 @@ async function stopRecording() {
   document.getElementById("audio-transport-status").textContent = "Stopped";
 }
 
-document.getElementById("audio-stop").onclick = async () => {
+(document.getElementById("audio-stop")||{}).onclick =  async () => {
   const player = document.getElementById("audio-player");
   player.pause();
   await stopRecording();
 };
 
-document.getElementById("audio-record").onclick = async () => {
+(document.getElementById("audio-record")||{}).onclick =  async () => {
   const track = audioTracks.find((t) => t.id === selectedTrack && t.armed);
   if (!track) {
     alert("Arm a track and select an ASIO device first");
@@ -1028,7 +1029,7 @@ document.getElementById("audio-record").onclick = async () => {
 };
 
 // Video
-document.getElementById("video-load").onclick = async () => {
+(document.getElementById("video-load")||{}).onclick =  async () => {
   try {
     await api("/api/load", {
       method: "POST",
@@ -1041,7 +1042,7 @@ document.getElementById("video-load").onclick = async () => {
     document.getElementById("video-output").textContent = "Image model loaded for frames.";
   } catch (e) { alert(e.message); }
 };
-document.getElementById("video-add").onclick = async () => {
+(document.getElementById("video-add")||{}).onclick =  async () => {
   await api("/api/video/edit", {
     method: "POST",
     body: JSON.stringify({
@@ -1052,7 +1053,7 @@ document.getElementById("video-add").onclick = async () => {
   });
   await refreshFrames();
 };
-document.getElementById("video-gen").onclick = async () => {
+(document.getElementById("video-gen")||{}).onclick =  async () => {
   const prompt = document.getElementById("video-prompt").value;
   try {
     const data = await api("/api/generate", {
@@ -1077,7 +1078,7 @@ document.getElementById("video-gen").onclick = async () => {
     document.getElementById("video-output").textContent = String(e);
   }
 };
-document.getElementById("video-delete").onclick = async () => {
+(document.getElementById("video-delete")||{}).onclick =  async () => {
   await api("/api/video/edit", {
     method: "POST",
     body: JSON.stringify({
@@ -1087,7 +1088,7 @@ document.getElementById("video-delete").onclick = async () => {
   });
   await refreshFrames();
 };
-document.getElementById("video-set-dur").onclick = async () => {
+(document.getElementById("video-set-dur")||{}).onclick =  async () => {
   await api("/api/video/edit", {
     method: "POST",
     body: JSON.stringify({
@@ -1098,7 +1099,7 @@ document.getElementById("video-set-dur").onclick = async () => {
   });
   await refreshFrames();
 };
-document.getElementById("video-set-vfx").onclick = async () => {
+(document.getElementById("video-set-vfx")||{}).onclick =  async () => {
   const vfx = document.getElementById("video-vfx").value;
   await api("/api/video/edit", {
     method: "POST",
@@ -1110,13 +1111,13 @@ document.getElementById("video-set-vfx").onclick = async () => {
   });
   await refreshFrames();
 };
-document.getElementById("video-export").onclick = async () => {
+(document.getElementById("video-export")||{}).onclick =  async () => {
   try {
     const data = await api("/api/video/export?name=timeline", { method: "POST" });
     document.getElementById("video-output").textContent = JSON.stringify(data, null, 2);
   } catch (e) { alert(e.message); }
 };
-document.getElementById("video-upload").onclick = async () => {
+(document.getElementById("video-upload")||{}).onclick =  async () => {
   const file = document.getElementById("video-file").files[0];
   if (!file) { alert("Select an MP4"); return; }
   const fd = new FormData();
@@ -1129,7 +1130,7 @@ document.getElementById("video-upload").onclick = async () => {
     await refreshFrames();
   } catch (e) { alert(e.message); }
 };
-document.getElementById("video-split").onclick = async () => {
+(document.getElementById("video-split")||{}).onclick =  async () => {
   const frame = document.getElementById("video-frame-id").value || "0";
   try {
     const data = await api(`/api/video/frames`);
@@ -1139,7 +1140,7 @@ document.getElementById("video-split").onclick = async () => {
     document.getElementById("video-output").textContent = JSON.stringify(result, null, 2);
   } catch (e) { alert(e.message); }
 };
-document.getElementById("text-add").onclick = async () => {
+(document.getElementById("text-add")||{}).onclick =  async () => {
   const content = document.getElementById("text-content").value || "text";
   const texture = document.getElementById("text-texture").value || "plain";
   const position = document.getElementById("text-pos").value || "0";
@@ -1150,18 +1151,18 @@ document.getElementById("text-add").onclick = async () => {
 };
 
 // Fusion
-document.getElementById("fusion-activate").onclick = async () => {
+(document.getElementById("fusion-activate")||{}).onclick =  async () => {
   const strategy = document.getElementById("fusion-strategy").value;
   try {
     const data = await api(`/api/fusion/activate?strategy=${strategy}`, { method: "POST" });
     document.getElementById("fusion-status").textContent = JSON.stringify(data, null, 2);
   } catch (e) { alert(e.message); }
 };
-document.getElementById("fusion-deactivate").onclick = async () => {
+(document.getElementById("fusion-deactivate")||{}).onclick =  async () => {
   await api("/api/fusion/deactivate", { method: "POST" });
   await refreshFusion();
 };
-document.getElementById("fusion-refresh").onclick = refreshFusion;
+(document.getElementById("fusion-refresh")||{}).onclick =  refreshFusion;
 
 setupTabs();
 
