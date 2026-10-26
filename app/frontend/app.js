@@ -1083,13 +1083,16 @@ async function playClip(clip, fromSec) {
   player.pause();
   if (!audioCtx) audioCtx = new AudioContext();
   const res = await fetch(`/api/audio/file/${clip.id}?v=${Date.now()}`);
-  const buf = await audioCtx.decodeAudioData(await res.arrayBuffer());
-  const offset = Math.max(0, (clip.duration || buf.duration) - into);
-  for (let ch = 0; ch < buf.numberOfChannels; ch++) {
-    buf.getChannelData(ch).reverse();
+  const decoded = await audioCtx.decodeAudioData(await res.arrayBuffer());
+  const rev = audioCtx.createBuffer(decoded.numberOfChannels, decoded.length, decoded.sampleRate);
+  for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
+    const src = decoded.getChannelData(ch);
+    const dst = rev.getChannelData(ch);
+    for (let i = 0; i < src.length; i++) dst[i] = src[src.length - 1 - i];
   }
+  const offset = Math.max(0, rev.duration - into);
   reverseSource = audioCtx.createBufferSource();
-  reverseSource.buffer = buf;
+  reverseSource.buffer = rev;
   const gain = audioCtx.createGain();
   gain.gain.value = Math.min(1, clip.gain || 1);
   reverseSource.connect(gain).connect(audioCtx.destination);
@@ -1154,11 +1157,34 @@ async function stopRecording() {
   document.getElementById("audio-transport-status").textContent = "Stopped";
 }
 
-(document.getElementById("audio-stop")||{}).onclick =  async () => {
+function haltPlayback() {
   const player = document.getElementById("audio-player");
-  player.pause();
+  if (player) player.pause();
+  if (reverseSource) { try { reverseSource.stop(); } catch (e) {} reverseSource = null; }
+  stopPlayhead();
+}
+
+(document.getElementById("audio-stop")||{}).onclick =  async () => {
+  haltPlayback();
   await stopRecording();
 };
+
+function nudge(sec) {
+  haltPlayback();
+  setPlayhead(playheadSec + sec);
+}
+
+function clipSpan() {
+  if (!audioClips.length) return { start: 0, end: 0 };
+  const start = Math.min(...audioClips.map((c) => c.position || 0));
+  const end = Math.max(...audioClips.map((c) => (c.position || 0) + (c.duration || 0)));
+  return { start, end };
+}
+
+(document.getElementById("audio-to-start")||{}).onclick = () => { haltPlayback(); setPlayhead(clipSpan().start); };
+(document.getElementById("audio-to-end")||{}).onclick = () => { haltPlayback(); setPlayhead(clipSpan().end); };
+(document.getElementById("audio-rew")||{}).onclick = () => nudge(-1);
+(document.getElementById("audio-ff")||{}).onclick = () => nudge(1);
 
 (document.getElementById("audio-record")||{}).onclick =  async () => {
   const track = audioTracks.find((t) => t.id === selectedTrack && t.armed);
