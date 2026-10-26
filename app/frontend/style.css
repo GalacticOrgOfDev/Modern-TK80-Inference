@@ -298,3 +298,9 @@ hr { border: none; border-top: 1px solid #2a2a2a; width: 100%; margin: 6px 0; }
   font-size: 11px; color: #9f9; min-width: 52px; font-variant-numeric: tabular-nums;
 }
 .track-context .gain-step button { width: auto; padding: 2px 6px; }
+
+.playhead {
+  position: absolute; top: 0; bottom: 0; width: 2px;
+  background: #e6c200; z-index: 5; pointer-events: none; left: 0;
+}
+.daw-arrange { position: relative; }

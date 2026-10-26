@@ -402,6 +402,8 @@ document.addEventListener("click", (e) => {
       clip.reversed = !clip.reversed;
       api("/api/audio/clips/reverse", { method: "POST", body: JSON.stringify({ clip_id: clip.id }) });
       e.target.textContent = "Reverse: " + (clip.reversed ? "on" : "off");
+      const playing = (playerPlaying()) ;
+      if (playing) playClip(clip, playheadSec);
       return;
     }
     m.hidden = true;
@@ -519,6 +521,14 @@ function drawArrange() {
   const area = document.getElementById("daw-clips");
   if (!area) return;
   area.innerHTML = "";
+  if (!area.dataset.seek) {
+    area.dataset.seek = "1";
+    area.addEventListener("click", (ev) => {
+      if (ev.target.classList.contains("daw-clip")) return;
+      const rect = area.getBoundingClientRect();
+      setPlayhead((ev.clientX - rect.left + area.parentElement.scrollLeft) / PX_PER_SEC);
+    });
+  }
   const px = 40;
   for (const c of audioClips) {
     const div = document.createElement("div");
@@ -1017,23 +1027,64 @@ if (canvas) {
 }
 loadVstUI();
 
+
+const PX_PER_SEC = 40;
+let playheadSec = 0;
+let playStartWall = 0;
+let playStartSec = 0;
+let playDir = 1;
+let playTimer = null;
+
+function setPlayhead(sec) {
+  playheadSec = Math.max(0, sec);
+  const el = document.getElementById("playhead");
+  if (el) el.style.left = (playheadSec * PX_PER_SEC) + "px";
+}
+
+function startPlayhead(fromSec, dir) {
+  playStartSec = fromSec;
+  playDir = dir;
+  playStartWall = performance.now();
+  if (playTimer) cancelAnimationFrame(playTimer);
+  const tick = () => {
+    const elapsed = (performance.now() - playStartWall) / 1000;
+    setPlayhead(playStartSec + elapsed * playDir);
+    playTimer = requestAnimationFrame(tick);
+  };
+  playTimer = requestAnimationFrame(tick);
+}
+
+function playerPlaying() {
+  const p = document.getElementById("audio-player");
+  return (p && !p.paused) || reverseSource != null;
+}
+
+function stopPlayhead() {
+  if (playTimer) cancelAnimationFrame(playTimer);
+  playTimer = null;
+}
+
 let audioCtx = null;
 let reverseSource = null;
 
-async function playClip(clip) {
+async function playClip(clip, fromSec) {
   const player = document.getElementById("audio-player");
   if (reverseSource) { try { reverseSource.stop(); } catch (e) {} reverseSource = null; }
+  const start = fromSec != null ? fromSec : playheadSec;
+  const clipStart = clip.position || 0;
+  const into = Math.max(0, Math.min(clip.duration || 0, start - clipStart));
   if (!clip.reversed) {
     player.src = `/api/audio/file/${clip.id}?v=${Date.now()}`;
-    player.currentTime = 0;
     player.volume = Math.min(1, clip.gain || 1);
-    player.play();
+    player.onloadedmetadata = () => { player.currentTime = into; player.play(); };
+    startPlayhead(clipStart + into, 1);
     return;
   }
   player.pause();
   if (!audioCtx) audioCtx = new AudioContext();
   const res = await fetch(`/api/audio/file/${clip.id}?v=${Date.now()}`);
   const buf = await audioCtx.decodeAudioData(await res.arrayBuffer());
+  const offset = Math.max(0, (clip.duration || buf.duration) - into);
   for (let ch = 0; ch < buf.numberOfChannels; ch++) {
     buf.getChannelData(ch).reverse();
   }
@@ -1042,7 +1093,8 @@ async function playClip(clip) {
   const gain = audioCtx.createGain();
   gain.gain.value = Math.min(1, clip.gain || 1);
   reverseSource.connect(gain).connect(audioCtx.destination);
-  reverseSource.start();
+  reverseSource.start(0, offset);
+  startPlayhead(clipStart + into, -1);
 }
 
 (document.getElementById("audio-play")||{}).onclick =  () => {
