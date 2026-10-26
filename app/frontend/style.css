@@ -290,3 +290,11 @@ hr { border: none; border-top: 1px solid #2a2a2a; width: 100%; margin: 6px 0; }
 .track .pan { width: 60px; }
 .track .pan-label { font-size: 10px; color: #adf; min-width: 12px; }
 .track-context { z-index: 1000; }
+
+.track-context .gain-step {
+  display: flex; align-items: center; gap: 4px; padding: 4px 8px;
+}
+.track-context .gain-readout {
+  font-size: 11px; color: #9f9; min-width: 52px; font-variant-numeric: tabular-nums;
+}
+.track-context .gain-step button { width: auto; padding: 2px 6px; }
