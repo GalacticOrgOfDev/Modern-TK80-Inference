@@ -36,6 +36,12 @@ function setupTabs() {
     });
   });
 }
+setupTabs();
+
+function bind(id, event, fn) {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener(event, fn);
+}
 
 async function refreshStatus() {
   try {
@@ -639,7 +645,7 @@ document.getElementById("audio-del-track").onclick = async () => {
 document.getElementById("audio-refresh-devices").onclick = detectDevices;
 
 // Audio clips
-document.getElementById("audio-load").onclick = async () => {
+const _al = document.getElementById("audio-load"); if (_al) _al.onclick = async () => {
   try {
     await api("/api/load", {
       method: "POST",
@@ -668,7 +674,7 @@ document.getElementById("audio-upload").onclick = async () => {
   } catch (e) { alert(e.message); }
 };
 
-document.getElementById("audio-transcribe").onclick = async () => {
+const _at = document.getElementById("audio-transcribe"); if (_at) _at.onclick = async () => {
   const clip = audioClips.find((c) => c.id === selectedClip);
   if (!clip || !clip.path) { alert("Select an uploaded clip"); return; }
   try {
@@ -783,7 +789,7 @@ document.getElementById("fx-eq").onclick = () => {
   applyEffect("eq", { gains });
 };
 
-document.getElementById("vst-make").onclick = async () => {
+const _vm = document.getElementById("vst-make"); if (_vm) _vm.onclick = async () => {
   const name = document.getElementById("vst-name").value.trim() || "MyPlugin";
   const plugin_type = document.getElementById("vst-type").value;
   const effect = document.getElementById("vst-effect").value;
@@ -807,7 +813,7 @@ async function loadVstUI() {
   } catch (e) {}
 }
 function renderVstCanvas() {
-  const canvas = document.getElementById("vst-canvas");
+  const canvas = document.getElementById("vst-canvas"); if (canvas)
   if (!canvas || !vstProject) return;
   canvas.innerHTML = "";
   for (const o of vstProject.objects || []) {
@@ -831,19 +837,19 @@ function renderVstCanvas() {
     objects: vstProject.objects,
   }, null, 2);
 }
-document.getElementById("vst-ui-reset").onclick = async () => {
+const _vr = document.getElementById("vst-ui-reset"); if (_vr) _vr.onclick = async () => {
   const name = document.getElementById("vst-ui-name").value.trim() || "MyPlugin";
   vstProject = await api(`/api/vst/ui/reset?name=${encodeURIComponent(name)}`, { method: "POST" });
   renderVstCanvas();
 };
-document.getElementById("vst-ui-export").onclick = async () => {
+const _ve = document.getElementById("vst-ui-export"); if (_ve) _ve.onclick = async () => {
   try {
     const result = await api("/api/vst/ui/export", { method: "POST" });
     document.getElementById("audio-transport-status").textContent = `Exported ${result.path}`;
     document.getElementById("audio-output").textContent = JSON.stringify(result, null, 2);
   } catch (e) { alert(e.message); }
 };
-document.getElementById("vst-bind").onclick = async () => {
+const _vb = document.getElementById("vst-bind"); if (_vb) _vb.onclick = async () => {
   const id = Number(document.getElementById("vst-bind-id").value);
   const param = document.getElementById("vst-bind-param").value.trim();
   if (!param) return;
@@ -852,7 +858,7 @@ document.getElementById("vst-bind").onclick = async () => {
     await loadVstUI();
   } catch (e) { alert(e.message); }
 };
-const palette = document.getElementById("vst-palette");
+const palette = document.getElementById("vst-palette"); if (palette)
 if (palette) {
   palette.ondragstart = (e) => {
     const kind = e.target.dataset.kind;
