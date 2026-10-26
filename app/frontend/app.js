@@ -350,7 +350,11 @@ function showTrackMenu(e, track) {
   if (!menu) return;
   menu.innerHTML = `
     <button data-act="trim">Trim</button>
-    <button data-act="gain">Gain</button>
+    <div class="gain-step">
+      <span class="gain-readout">+0.0 dB</span>
+      <button data-act="gain-down">-1</button>
+      <button data-act="gain-up">+1</button>
+    </div>
     <button data-act="reverse">Reverse</button>
     <button data-act="silence">Silence</button>
     <button data-act="mute">Mute clip</button>
@@ -360,6 +364,11 @@ function showTrackMenu(e, track) {
   menu.style.top = e.clientY + "px";
   menu.hidden = false;
   menu.dataset.track = String(track.id);
+  const clip = audioClips.find((c) => c.track_id === track.id);
+  const db = clip ? 20 * Math.log10(Math.max(0.001, clip.gain || 1)) : 0;
+  menu.dataset.gainDb = String(db);
+  const readout = menu.querySelector(".gain-readout");
+  if (readout) readout.textContent = (db >= 0 ? "+" : "") + db.toFixed(1) + " dB";
   e.stopPropagation();
 }
 document.addEventListener("click", (e) => {
@@ -371,19 +380,23 @@ document.addEventListener("click", (e) => {
     const id = Number(m.dataset.track);
     if (act === "gain-up" || act === "gain-down") {
       const cur = Number(m.dataset.gainDb || "0");
-      const next = cur + (act === "gain-up" ? 1 : -1);
+      const next = Math.max(-24, Math.min(12, cur + (act === "gain-up" ? 1 : -1)));
       m.dataset.gainDb = String(next);
       const readout = m.querySelector(".gain-readout");
       if (readout) readout.textContent = (next >= 0 ? "+" : "") + next.toFixed(1) + " dB";
+      const gain = Math.pow(10, next / 20);
+      const clip = audioClips.find((c) => c.track_id === id);
+      if (clip) {
+        clip.gain = gain;
+        api(`/api/audio/clips/gain`, { method: "POST", body: JSON.stringify({ clip_id: clip.id, gain }) });
+        const player = document.getElementById("audio-player");
+        if (player && !player.paused) player.volume = Math.min(1, gain);
+      }
       return;
     }
     m.hidden = true;
     if (act === "fx") openTrackFx(id);
-    else if (act === "gain-apply") {
-      const db = Number(m.dataset.gainDb || "0");
-      const gain = Math.pow(10, db / 20);
-      audioEdit("gain", id, gain);
-    } else if (typeof audioEdit === "function") audioEdit(act, id);
+    else if (typeof audioEdit === "function") audioEdit(act, id);
     return;
   }
   m.hidden = true;

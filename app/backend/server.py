@@ -1235,6 +1235,22 @@ def audio_file(clip_id: int):
     return FileResponse(path, headers={"Cache-Control": "no-store"})
 
 
+
+class ClipGainRequest(BaseModel):
+    clip_id: int
+    gain: float
+
+
+@app.post("/api/audio/clips/gain")
+def clip_gain(body: ClipGainRequest) -> Dict[str, Any]:
+    """Set a clip's playback gain. Does not rewrite the source file."""
+    if body.clip_id < 0 or body.clip_id >= len(_audio_clips):
+        raise HTTPException(status_code=404, detail="clip not found")
+    clip = _audio_clips[body.clip_id]
+    clip["gain"] = max(0.0, min(4.0, body.gain))
+    return clip
+
+
 @app.post("/api/audio/clips/mute")
 def clip_mute(body: ClipMuteRequest) -> Dict[str, Any]:
     """clip mute."""
