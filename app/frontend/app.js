@@ -272,6 +272,7 @@ async function refreshTracks() {
   for (const t of audioTracks) {
     const row = document.createElement("div");
     row.className = "track" + (t.id === selectedTrack ? " selected" : "") + (t.armed ? " armed" : "");
+    row.dataset.id = String(t.id);
     const scar = t.scarlett ? " · Scarlett" : "";
     const idx = t.asio_index != null ? ` #${t.asio_index}` : "";
     row.innerHTML = `
@@ -358,17 +359,32 @@ function showTrackMenu(e, track) {
   menu.style.left = e.clientX + "px";
   menu.style.top = e.clientY + "px";
   menu.hidden = false;
-  menu.querySelectorAll("button").forEach((b) => {
-    b.onclick = () => {
-      menu.hidden = true;
-      if (b.dataset.act === "fx") openTrackFx(track.id);
-      else if (typeof audioEdit === "function") audioEdit(b.dataset.act);
-    };
-  });
+  menu.dataset.track = String(track.id);
+  e.stopPropagation();
 }
-document.addEventListener("click", () => {
+document.addEventListener("click", (e) => {
   const m = document.getElementById("track-context");
-  if (m) m.hidden = true;
+  if (!m || m.hidden) return;
+  if (m.contains(e.target)) {
+    const act = e.target.dataset && e.target.dataset.act;
+    if (act) {
+      m.hidden = true;
+      const id = Number(m.dataset.track);
+      if (act === "fx") openTrackFx(id);
+      else if (typeof audioEdit === "function") audioEdit(act);
+    }
+    return;
+  }
+  m.hidden = true;
+});
+document.addEventListener("contextmenu", (e) => {
+  const row = e.target.closest && e.target.closest(".track");
+  if (!row || row.classList.contains("master-row")) return;
+  const id = Number(row.dataset.id);
+  const track = audioTracks.find((t) => t.id === id);
+  if (!track) return;
+  e.preventDefault();
+  showTrackMenu(e, track);
 });
 
 let trackFx = {};
