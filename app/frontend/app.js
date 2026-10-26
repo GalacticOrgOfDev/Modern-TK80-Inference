@@ -371,7 +371,7 @@ document.addEventListener("click", (e) => {
       m.hidden = true;
       const id = Number(m.dataset.track);
       if (act === "fx") openTrackFx(id);
-      else if (typeof audioEdit === "function") audioEdit(act);
+      else if (typeof audioEdit === "function") audioEdit(act, id);
     }
     return;
   }
@@ -419,7 +419,7 @@ function renderFxList() {
   });
 }
 
-(document.getElementById("fx-add-btn")||{}).onclick =  () => {
+(document.getElementById("fx-add-btn")||{}).onclick = async () => {
   if (fxTrackId == null) return;
   const kind = document.getElementById("fx-add").value;
   const names = { eq: "30-band EQ", normalize: "Normalize", compress: "Compress", delay: "Delay", reverb: "Reverb", vst: "VST plugin" };
@@ -427,6 +427,24 @@ function renderFxList() {
   trackFx[fxTrackId].push({ name: names[kind] || kind, kind });
   if (kind === "eq") document.getElementById("eq-panel").style.display = "block";
   renderFxList();
+  const params = {
+    normalize: { target: 0.95 },
+    compress: { threshold: 0.5, ratio: 4, makeup: 1.2 },
+    delay: { time: 0.25, mix: 0.3 },
+    reverb: { room: 0.4, mix: 0.2 },
+    eq: { gains: [] },
+  }[kind] || {};
+  const clip = clipOnTrack(fxTrackId);
+  if (!clip) { alert("No clip on this track"); return; }
+  try {
+    const updated = await api("/api/audio/clips/effect", {
+      method: "POST",
+      body: JSON.stringify({ clip_id: clip.id, kind, params }),
+    });
+    selectedClip = updated.id;
+    await refreshClips();
+    document.getElementById("audio-transport-status").textContent = `${kind} applied to #${updated.id}`;
+  } catch (e) { alert(e.message); }
 };
 (document.getElementById("fx-close")||{}).onclick =  () => {
   document.getElementById("track-fx").classList.remove("open");
@@ -765,20 +783,26 @@ const _at = document.getElementById("audio-transcribe"); if (_at) _at.onclick = 
   }
 };
 
-async function audioEdit(action) {
+function clipOnTrack(trackId) {
+  return audioClips.find((c) => c.track_id === trackId) || audioClips[selectedClip] || audioClips[0];
+}
+
+async function audioEdit(action, trackId) {
+  const clip = clipOnTrack(trackId);
+  if (!clip) { alert("No clip on this track"); return; }
   const body = {
-    clip_id: Number(document.getElementById("audio-clip-id").value),
+    clip_id: clip.id,
     action,
-    start: Number(document.getElementById("audio-start").value),
-    end: Number(document.getElementById("audio-end").value),
-    gain: Number(document.getElementById("audio-gain").value),
-    position: Number(document.getElementById("audio-position").value),
+    start: 0,
+    end: clip.duration || 1,
+    gain: 1.2,
+    position: clip.position || 0,
   };
   try {
-    const clip = await api("/api/audio/edit", { method: "POST", body: JSON.stringify(body) });
-    selectedClip = clip.id;
+    const updated = await api("/api/audio/edit", { method: "POST", body: JSON.stringify(body) });
+    selectedClip = updated.id;
     await refreshClips();
-    document.getElementById("audio-transport-status").textContent = `${action} applied to #${clip.id}`;
+    document.getElementById("audio-transport-status").textContent = `${action} applied to #${updated.id}`;
   } catch (e) { alert(e.message); }
 }
 (document.getElementById("audio-trim")||{}).onclick =  () => audioEdit("trim");
