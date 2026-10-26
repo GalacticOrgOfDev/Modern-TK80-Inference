@@ -78,7 +78,12 @@ def probe_asio() -> Dict[str, Any]:
 
 
 def list_asio_devices() -> List[Dict[str, Any]]:
-    """Return available ASIO input devices, or an empty list if none are present."""
+    """Return input devices, preferring ASIO and always including Focusrite.
+
+    ASIO hosts are listed first. If the PortAudio build has no ASIO host,
+    Focusrite and Scarlett devices on any host (WASAPI, MME) are still
+    returned so the Scarlett 2i2 is recognized.
+    """
     sd = _sd()
     if sd is None or not platform_supports_asio():
         return []
@@ -86,21 +91,28 @@ def list_asio_devices() -> List[Dict[str, Any]]:
     try:
         for i, d in enumerate(sd.query_devices()):
             host = sd.query_hostapis(d["hostapi"])
-            if "asio" not in str(host.get("name", "")).lower():
+            host_name = str(host.get("name", ""))
+            name = str(d.get("name", ""))
+            is_asio = "asio" in host_name.lower()
+            is_focusrite = "focusrite" in name.lower() or "scarlett" in name.lower()
+            if not is_asio and not is_focusrite:
                 continue
-            if int(d.get("max_input_channels", 0)) < 1:
+            if int(d.get("max_input_channels", 0)) < 1 and not is_focusrite:
                 continue
             devices.append(
                 {
                     "index": i,
-                    "name": d.get("name"),
-                    "host": host.get("name"),
+                    "name": name,
+                    "host": host_name,
                     "inputs": int(d.get("max_input_channels", 0)),
                     "default_rate": int(d.get("default_samplerate", 44100)),
+                    "asio": is_asio,
+                    "focusrite": is_focusrite,
                 }
             )
     except Exception:
         return []
+    devices.sort(key=lambda x: (not x["asio"], not x["focusrite"]))
     return devices
 
 
