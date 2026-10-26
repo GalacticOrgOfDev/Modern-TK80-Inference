@@ -240,9 +240,10 @@ async function pushSettings(partial) {
 async function refreshTracks() {
   const data = await api("/api/audio/tracks");
   audioTracks = data.tracks;
-  if (!audioTracks.length) {
-    await api("/api/audio/tracks?name=Audio%201&channel=stereo", { method: "POST" });
-    return refreshTracks();
+  while (audioTracks.length < 4) {
+    await api(`/api/audio/tracks?name=Audio%20${audioTracks.length + 1}&channel=stereo`, { method: "POST" });
+    const again = await api("/api/audio/tracks");
+    audioTracks = again.tracks;
   }
   const list = document.getElementById("track-list");
   list.innerHTML = "";
@@ -253,16 +254,23 @@ async function refreshTracks() {
     const idx = t.asio_index != null ? ` #${t.asio_index}` : "";
     row.innerHTML = `
       <span class="track-name">#${t.id} ${t.name}</span>
-      <select class="ch" data-id="${t.id}">
+      <button class="mute" title="Mute">${t.mute ? "M" : "M"}</button>
+      <button class="solo" title="Solo">${t.solo ? "S" : "S"}</button>
+      <input class="lvl" type="range" min="0" max="2" step="0.05" value="${t.gain || 1}" title="Level" />
+      <select class="ch" title="Channel">
         <option value="stereo" ${t.channel === "stereo" ? "selected" : ""}>Stereo</option>
         <option value="left" ${t.channel === "left" ? "selected" : ""}>Left</option>
         <option value="right" ${t.channel === "right" ? "selected" : ""}>Right</option>
       </select>
-      <input class="lvl" type="range" min="0" max="2" step="0.05" value="${t.gain || 1}" title="Level" />
-      <button class="arm" data-id="${t.id}">${t.armed ? "Armed" : "Arm"}</button>
-      <button class="solo" data-id="${t.id}">${t.solo ? "Soloed" : "Solo"}</button>
-      <button class="mute" data-id="${t.id}">${t.mute ? "M" : "M"}</button>
-      <button class="fx" data-id="${t.id}">fx</button>
+      <button class="fx" title="FX">fx</button>
+      <select class="arm-sel" title="Arm / input">
+        <option value="">arm</option>
+        <option value="arm">Arm for record</option>
+        <option value="monitor">Monitor incoming</option>
+        <option value="takes">Recording: Takes</option>
+        <option value="overdub">Recording: Overdub</option>
+        <option value="replace">Recording: Replace</option>
+      </select>
     `;
     row.querySelector(".track-name").onclick = () => { selectedTrack = t.id; refreshTracks(); };
     row.querySelector(".ch").onchange = async (e) => {
@@ -313,9 +321,38 @@ async function refreshTracks() {
       await refreshTracks();
     };
     row.querySelector(".fx").onclick = () => openTrackFx(t.id);
+    row.oncontextmenu = (e) => { e.preventDefault(); showTrackMenu(e, t); };
     list.appendChild(row);
   }
   updateScarlettBadge();
+}
+
+function showTrackMenu(e, track) {
+  const menu = document.getElementById("track-context");
+  if (!menu) return;
+  menu.innerHTML = `
+    <button data-act="trim">Trim</button>
+    <button data-act="gain">Gain</button>
+    <button data-act="reverse">Reverse</button>
+    <button data-act="silence">Silence</button>
+    <button data-act="mute">Mute clip</button>
+    <button data-act="fx">Open FX</button>
+  `;
+  menu.style.left = e.clientX + "px";
+  menu.style.top = e.clientY + "px";
+  menu.hidden = false;
+  menu.querySelectorAll("button").forEach((b) => {
+    b.onclick = () => {
+      menu.hidden = true;
+      if (b.dataset.act === "fx") openTrackFx(track.id);
+      else if (typeof audioEdit === "function") audioEdit(b.dataset.act);
+    };
+  });
+}
+document.addEventListener("click", () => {
+  const m = document.getElementById("track-context");
+  if (m) m.hidden = true;
+});
 }
 
 let trackFx = {};
@@ -1114,6 +1151,21 @@ document.getElementById("fusion-deactivate").onclick = async () => {
 document.getElementById("fusion-refresh").onclick = refreshFusion;
 
 setupTabs();
+
+document.querySelectorAll(".drawer-tabs button").forEach((btn) => {
+  btn.onclick = () => {
+    document.querySelectorAll(".drawer-tabs button").forEach((b) => b.classList.remove("active"));
+    document.querySelectorAll(".drawer").forEach((d) => d.classList.remove("open"));
+    btn.classList.add("active");
+    const d = document.getElementById("drawer-" + btn.dataset.drawer);
+    if (d) d.classList.add("open");
+  };
+});
+const addInline = document.getElementById("add-track-inline");
+if (addInline) addInline.onclick = async () => {
+  await api("/api/audio/tracks?name=Audio&channel=stereo", { method: "POST" });
+  await refreshTracks();
+};
 loadAudioSettings();
 loadMusic();
 refreshTracks();

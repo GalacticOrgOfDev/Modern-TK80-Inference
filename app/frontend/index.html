@@ -140,8 +140,10 @@
           <div class="daw-headers">
             <div class="daw-ruler-spacer">Tracks</div>
             <div id="track-list" class="track-list"></div>
-            <div class="track master-row">
+            <button id="add-track-inline" class="add-track-btn">+</button>
+            <div class="track master-row" id="master-header">
               <span class="track-name">Master</span>
+              <input type="range" class="lvl" id="master-gain" min="0" max="2" step="0.05" value="1" title="Master level" />
               <button id="master-mute-btn">M</button>
               <button id="master-fx-btn" class="fx-btn">fx</button>
             </div>
@@ -151,6 +153,7 @@
             <div id="daw-clips" class="daw-clips"></div>
           </div>
         </div>
+        <div id="track-context" class="track-context" hidden></div>
         <div id="track-fx" class="track-fx">
           <div class="fx-head">
             <span id="fx-title">Track FX</span>
@@ -172,22 +175,34 @@
           </div>
         </div>
         <div id="sequencer" class="sequencer"></div>
-        <div class="edit-row">
-          <button id="pattern-render">Render pattern</button>
-          <label>Clip #<input id="audio-clip-id" type="number" value="0" /></label>
-          <button id="audio-trim">Trim</button>
-          <button id="audio-gain-btn">Gain</button>
-          <button id="audio-reverse">Reverse</button>
-          <button id="audio-silence">Silence</button>
-          <button id="audio-set-position">Position</button>
-          <button id="audio-clip-mute">Mute clip</button>
-          <button id="fx-normalize">Normalize</button>
-          <button id="fx-compress">Compress</button>
-          <button id="fx-morph">Morph</button>
-        </div>
-        <canvas id="audio-wave" width="640" height="60"></canvas>
+        <canvas id="audio-wave" width="640" height="48"></canvas>
         <pre id="audio-output" hidden></pre>
-      </div>
+      
+        <div class="daw-drawers">
+          <div class="drawer-tabs">
+            <button data-drawer="project">Project</button>
+            <button data-drawer="sound">Sound</button>
+            <button data-drawer="mixer">Mixer</button>
+            <button data-drawer="library">Library</button>
+            <button data-drawer="agent">Agent</button>
+          </div>
+          <div id="drawer-project" class="drawer"><pre id="audio-output"></pre></div>
+          <div id="drawer-sound" class="drawer">
+            <label>Sample rate <select id="sample-rate-dup"><option>44100</option><option>48000</option></select></label>
+            <label>Buffer <select id="asio-buffer-dup"><option>64</option><option>128</option><option>256</option></select></label>
+          </div>
+          <div id="drawer-mixer" class="drawer" id="mixer-strips"></div>
+          <div id="drawer-library" class="drawer">
+            <input id="library-search" placeholder="Search library" />
+            <div id="library-list">No items yet. Import audio to populate.</div>
+          </div>
+          <div id="drawer-agent" class="drawer">
+            <textarea id="agent-prompt" placeholder="Ask the agent about this project"></textarea>
+            <button id="agent-send">Send</button>
+            <pre id="agent-output"></pre>
+          </div>
+        </div>
+</div>
     </section>
 
     <section id="video" class="panel">
