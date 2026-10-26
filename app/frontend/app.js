@@ -129,13 +129,15 @@ function stopLevelPoll() {
   }
 }
 
+let detectedScarlett = null;
+
 function updateScarlettBadge() {
   const badge = document.getElementById("scarlett-badge");
-  const armed = audioTracks.find((t) => t.armed && t.scarlett);
-  if (armed && armed.scarlett) {
+  if (!badge) return;
+  if (detectedScarlett) {
     badge.className = "badge scarlett";
-    badge.textContent = armed.scarlett.name;
-    badge.title = armed.scarlett.notes || "";
+    badge.textContent = detectedScarlett;
+    badge.title = "Focusrite device present";
   } else {
     badge.className = "badge";
     badge.textContent = "No Scarlett detected";
@@ -517,9 +519,14 @@ async function detectDevices() {
     for (const d of devices) {
       const opt = document.createElement("option");
       opt.value = String(d.index);
-      opt.textContent = `${d.name} (${d.inputs} in)`;
+      const host = d.host ? ` [${d.host}]` : "";
+      opt.textContent = `${d.name} (${d.inputs} in)${host}`;
       sel.appendChild(opt);
+      if (d.focusrite || /focusrite|scarlett/i.test(d.name)) {
+        detectedScarlett = d.name;
+      }
     }
+    updateScarlettBadge();
   } catch (e) {
     sel.innerHTML = `<option value="">${e.message}</option>`;
   }
@@ -1186,4 +1193,40 @@ refreshTracks();
 refreshClips();
 refreshFrames();
 detectDevices();
+
+const LIBRARY_INSTRUMENTS = ["kick", "snare", "hat", "bass", "lead", "pad"];
+
+function renderLibrary(filter) {
+  const box = document.getElementById("library-list");
+  if (!box) return;
+  const q = (filter || "").toLowerCase();
+  const items = LIBRARY_INSTRUMENTS.filter((n) => n.includes(q));
+  box.innerHTML = items.map((n) => `<div class="lib-item" data-name="${n}">${n}</div>`).join("") || "No matches";
+  box.querySelectorAll(".lib-item").forEach((el) => {
+    el.onclick = () => {
+      const inst = document.getElementById("instrument");
+      if (inst) inst.value = el.dataset.name;
+    };
+  });
+}
+const libSearch = document.getElementById("library-search");
+if (libSearch) libSearch.oninput = () => renderLibrary(libSearch.value);
+renderLibrary("");
+
+const agentSend = document.getElementById("agent-send");
+if (agentSend) agentSend.onclick = async () => {
+  const prompt = document.getElementById("agent-prompt").value.trim();
+  if (!prompt) return;
+  const out = document.getElementById("agent-output");
+  out.textContent = "Generating instrument via VST...";
+  try {
+    const data = await api("/api/vst/make", {
+      method: "POST",
+      body: JSON.stringify({ name: "AgentInstrument", effect: prompt, plugin_type: "instrument" }),
+    });
+    out.textContent = JSON.stringify(data, null, 2);
+  } catch (e) {
+    out.textContent = e.message;
+  }
+};
 setInterval(() => {}, 15000);
