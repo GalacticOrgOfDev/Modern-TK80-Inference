@@ -353,7 +353,6 @@ document.addEventListener("click", () => {
   const m = document.getElementById("track-context");
   if (m) m.hidden = true;
 });
-}
 
 let trackFx = {};
 let fxTrackId = null;
