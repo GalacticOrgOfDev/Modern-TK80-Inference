@@ -1232,7 +1232,7 @@ def audio_file(clip_id: int):
     path = _audio_clips[clip_id].get("path")
     if not path or not Path(path).exists():
         raise HTTPException(status_code=404, detail="file missing")
-    return FileResponse(path)
+    return FileResponse(path, headers={"Cache-Control": "no-store"})
 
 
 @app.post("/api/audio/clips/mute")
@@ -1294,6 +1294,9 @@ def edit_audio(body: AudioEditRequest) -> Dict[str, Any]:
             new_path = process_clip(Path(path), "reverse")
         elif body.action == "silence":
             new_path = process_clip(Path(path), "silence")
+        elif body.action == "mute":
+            clip["mute"] = not clip.get("mute", False)
+            return clip
         else:
             raise HTTPException(status_code=400, detail="unknown action")
     except ValueError as e:

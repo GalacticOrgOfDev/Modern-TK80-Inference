@@ -795,7 +795,7 @@ async function audioEdit(action, trackId) {
     action,
     start: 0,
     end: clip.duration || 1,
-    gain: 1.2,
+    gain: 2.0,
     position: clip.position || 0,
   };
   try {
@@ -990,7 +990,7 @@ loadVstUI();
     return;
   }
   const player = document.getElementById("audio-player");
-  player.src = `/api/audio/file/${clip.id}`;
+  player.src = `/api/audio/file/${clip.id}?v=${Date.now()}`;
   player.currentTime = 0;
   player.volume = Math.min(1, clip.gain || 1);
   player.play();
@@ -1004,7 +1004,7 @@ loadVstUI();
     selectedClip = clip.id;
     await refreshClips();
     const player = document.getElementById("audio-player");
-    player.src = `/api/audio/file/${clip.id}`;
+    player.src = `/api/audio/file/${clip.id}?v=${Date.now()}`;
     player.currentTime = 0;
     player.volume = 1;
     player.play();
