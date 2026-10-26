@@ -1251,6 +1251,21 @@ def clip_gain(body: ClipGainRequest) -> Dict[str, Any]:
     return clip
 
 
+
+class ClipFlagRequest(BaseModel):
+    clip_id: int
+
+
+@app.post("/api/audio/clips/reverse")
+def clip_reverse(body: ClipFlagRequest) -> Dict[str, Any]:
+    """Toggle a clip's reversed flag. Does not rewrite the source file."""
+    if body.clip_id < 0 or body.clip_id >= len(_audio_clips):
+        raise HTTPException(status_code=404, detail="clip not found")
+    clip = _audio_clips[body.clip_id]
+    clip["reversed"] = not clip.get("reversed", False)
+    return clip
+
+
 @app.post("/api/audio/clips/mute")
 def clip_mute(body: ClipMuteRequest) -> Dict[str, Any]:
     """clip mute."""

@@ -355,7 +355,7 @@ function showTrackMenu(e, track) {
       <button data-act="gain-down">-1</button>
       <button data-act="gain-up">+1</button>
     </div>
-    <button data-act="reverse">Reverse</button>
+    <button data-act="reverse">Reverse: off</button>
     <button data-act="silence">Silence</button>
     <button data-act="mute">Mute clip</button>
     <button data-act="fx">Open FX</button>
@@ -369,6 +369,8 @@ function showTrackMenu(e, track) {
   menu.dataset.gainDb = String(db);
   const readout = menu.querySelector(".gain-readout");
   if (readout) readout.textContent = (db >= 0 ? "+" : "") + db.toFixed(1) + " dB";
+  const revBtn = menu.querySelector('[data-act="reverse"]');
+  if (revBtn) revBtn.textContent = "Reverse: " + (clip && clip.reversed ? "on" : "off");
   e.stopPropagation();
 }
 document.addEventListener("click", (e) => {
@@ -392,6 +394,14 @@ document.addEventListener("click", (e) => {
         const player = document.getElementById("audio-player");
         if (player && !player.paused) player.volume = Math.min(1, gain);
       }
+      return;
+    }
+    if (act === "reverse") {
+      const clip = audioClips.find((c) => c.track_id === id);
+      if (!clip) { alert("No clip on this track"); return; }
+      clip.reversed = !clip.reversed;
+      api("/api/audio/clips/reverse", { method: "POST", body: JSON.stringify({ clip_id: clip.id }) });
+      e.target.textContent = "Reverse: " + (clip.reversed ? "on" : "off");
       return;
     }
     m.hidden = true;
@@ -1007,19 +1017,44 @@ if (canvas) {
 }
 loadVstUI();
 
+let audioCtx = null;
+let reverseSource = null;
+
+async function playClip(clip) {
+  const player = document.getElementById("audio-player");
+  if (reverseSource) { try { reverseSource.stop(); } catch (e) {} reverseSource = null; }
+  if (!clip.reversed) {
+    player.src = `/api/audio/file/${clip.id}?v=${Date.now()}`;
+    player.currentTime = 0;
+    player.volume = Math.min(1, clip.gain || 1);
+    player.play();
+    return;
+  }
+  player.pause();
+  if (!audioCtx) audioCtx = new AudioContext();
+  const res = await fetch(`/api/audio/file/${clip.id}?v=${Date.now()}`);
+  const buf = await audioCtx.decodeAudioData(await res.arrayBuffer());
+  for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+    buf.getChannelData(ch).reverse();
+  }
+  reverseSource = audioCtx.createBufferSource();
+  reverseSource.buffer = buf;
+  const gain = audioCtx.createGain();
+  gain.gain.value = Math.min(1, clip.gain || 1);
+  reverseSource.connect(gain).connect(audioCtx.destination);
+  reverseSource.start();
+}
+
 (document.getElementById("audio-play")||{}).onclick =  () => {
-  const clip = audioClips.find((c) => c.id === selectedClip);
+  const clip = audioClips.find((c) => c.id === selectedClip) || audioClips.find((c) => c.reversed) || audioClips[0];
   if (!clip || !clip.path) {
     document.getElementById("audio-transport-status").textContent = "No file on this clip";
     return;
   }
-  const player = document.getElementById("audio-player");
-  player.src = `/api/audio/file/${clip.id}?v=${Date.now()}`;
-  player.currentTime = 0;
-  player.volume = Math.min(1, clip.gain || 1);
-  player.play();
+  selectedClip = clip.id;
+  playClip(clip);
   document.getElementById("audio-transport-status").textContent =
-    `Playing #${clip.id} @ ${clip.sample_rate || studioRate} Hz`;
+    `Playing #${clip.id}` + (clip.reversed ? " reversed" : "");
 };
 
 (document.getElementById("audio-play-mix")||{}).onclick =  async () => {
