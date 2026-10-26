@@ -367,12 +367,23 @@ document.addEventListener("click", (e) => {
   if (!m || m.hidden) return;
   if (m.contains(e.target)) {
     const act = e.target.dataset && e.target.dataset.act;
-    if (act) {
-      m.hidden = true;
-      const id = Number(m.dataset.track);
-      if (act === "fx") openTrackFx(id);
-      else if (typeof audioEdit === "function") audioEdit(act, id);
+    if (!act) return;
+    const id = Number(m.dataset.track);
+    if (act === "gain-up" || act === "gain-down") {
+      const cur = Number(m.dataset.gainDb || "0");
+      const next = cur + (act === "gain-up" ? 1 : -1);
+      m.dataset.gainDb = String(next);
+      const readout = m.querySelector(".gain-readout");
+      if (readout) readout.textContent = (next >= 0 ? "+" : "") + next.toFixed(1) + " dB";
+      return;
     }
+    m.hidden = true;
+    if (act === "fx") openTrackFx(id);
+    else if (act === "gain-apply") {
+      const db = Number(m.dataset.gainDb || "0");
+      const gain = Math.pow(10, db / 20);
+      audioEdit("gain", id, gain);
+    } else if (typeof audioEdit === "function") audioEdit(act, id);
     return;
   }
   m.hidden = true;
