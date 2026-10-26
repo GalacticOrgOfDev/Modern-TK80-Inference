@@ -68,6 +68,7 @@ class Device:
     total_memory_mb: Optional[int]
     free_memory_mb: Optional[int]
     device_string: str
+    busy: bool = False
 
     def __str__(self) -> str:
         free = (
@@ -84,6 +85,11 @@ class Device:
             f"{self.backend}:{self.index} {self.name} | {total} | {free} | "
             f"{self.device_string}"
         )
+
+
+
+# Backward-compatible name. Older modules import K80Die.
+K80Die = Device
 
 
 def _run_vulkaninfo_summary(timeout: float = 10.0) -> Optional[str]:
