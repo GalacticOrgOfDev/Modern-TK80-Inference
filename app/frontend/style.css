@@ -308,3 +308,12 @@ hr { border: none; border-top: 1px solid #2a2a2a; width: 100%; margin: 6px 0; }
 .daw-clip.reversed { background: #6b4a1a; }
 
 .daw-clip.silenced { background: #333; color: #888; }
+
+.track button.on { background: #1a6b4a; color: #fff; }
+.arm-more { padding: 0 4px; }
+.fx-popup {
+  position: fixed; z-index: 1100; background: #1e1e1e; border: 1px solid #444;
+  border-radius: 4px; padding: 8px; min-width: 180px; box-shadow: 0 4px 12px #000a;
+}
+.fx-popup[hidden] { display: none; }
+.fx-popup h4 { margin: 0 0 6px; font-size: 12px; }

@@ -277,71 +277,65 @@ async function refreshTracks() {
     const idx = t.asio_index != null ? ` #${t.asio_index}` : "";
     row.innerHTML = `
       <span class="track-name">#${t.id} ${t.name}</span>
-      <button class="mute" title="Mute">${t.mute ? "M" : "M"}</button>
-      <button class="solo" title="Solo">${t.solo ? "S" : "S"}</button>
+      <button class="mute${t.mute ? " on" : ""}" title="Mute">M</button>
+      <button class="solo${t.solo ? " on" : ""}" title="Solo">S</button>
+      <button class="mon${t.monitor ? " on" : ""}" title="Monitor">🔊</button>
       <input class="lvl" type="range" min="0" max="2" step="0.01" value="${t.gain || 1}" />
       <span class="db">${gainToDb(t.gain || 1)}</span>
-      <input class="pan" type="range" min="-1" max="1" step="0.01" value="${t.channel === "left" ? -1 : t.channel === "right" ? 1 : 0}" />
-      <span class="pan-label">${t.channel === "left" ? "L" : t.channel === "right" ? "R" : "C"}</span>
+      <input class="pan" type="range" min="-1" max="1" step="0.01" value="${t.pan || 0}" />
+      <span class="pan-label">${panLabel(t.pan || 0)[0]}</span>
       <button class="fx" title="FX">fx</button>
-      <select class="arm-sel" title="Arm / input">
-        <option value="">arm</option>
-        <option value="arm">Arm for record</option>
-        <option value="monitor">Monitor incoming</option>
-        <option value="takes">Recording: Takes</option>
-        <option value="overdub">Recording: Overdub</option>
-        <option value="replace">Recording: Replace</option>
-      </select>
+      <button class="arm${t.armed ? " on" : ""}" title="Arm">arm</button>
+      <button class="arm-more" title="Arm type">▾</button>
     `;
     row.querySelector(".track-name").onclick = () => { selectedTrack = t.id; refreshTracks(); };
     const lvl = row.querySelector(".lvl");
     const db = row.querySelector(".db");
-    lvl.oninput = () => { db.textContent = gainToDb(Number(lvl.value)); };
-    lvl.onchange = async () => {
-      await api(`/api/audio/tracks/${t.id}`, {
-        method: "POST",
-        body: JSON.stringify({ gain: Number(lvl.value) }),
-      });
+    lvl.oninput = () => {
+      db.textContent = gainToDb(Number(lvl.value));
+      t.gain = Number(lvl.value);
+      const player = document.getElementById("audio-player");
+      if (player && selectedTrack === t.id) player.volume = Math.min(1, t.gain);
     };
+    lvl.onchange = () => api(`/api/audio/tracks/${t.id}`, { method: "POST", body: JSON.stringify({ gain: Number(lvl.value) }) });
     const pan = row.querySelector(".pan");
     const panLabelEl = row.querySelector(".pan-label");
-    pan.oninput = () => { panLabelEl.textContent = panLabel(Number(pan.value))[0]; };
-    pan.onchange = async () => {
-      const v = Number(pan.value);
-      const channel = v < -0.33 ? "left" : v > 0.33 ? "right" : "stereo";
-      panLabelEl.textContent = channel === "left" ? "L" : channel === "right" ? "R" : "C";
-      await api(`/api/audio/tracks/${t.id}`, {
-        method: "POST",
-        body: JSON.stringify({ channel }),
-      });
+    pan.oninput = () => {
+      t.pan = Number(pan.value);
+      panLabelEl.textContent = panLabel(t.pan)[0];
     };
-    row.querySelector(".arm-sel").onchange = async (e) => {
-      if (e.target.value === "arm") {
-        await api(`/api/audio/tracks/${t.id}`, {
-          method: "POST",
-          body: JSON.stringify({ armed: !t.armed }),
-        });
-        await refreshTracks();
-      }
-    };
+    pan.onchange = () => api(`/api/audio/tracks/${t.id}`, { method: "POST", body: JSON.stringify({ pan: Number(pan.value) }) });
     row.querySelector(".solo").onclick = async () => {
-      await api(`/api/audio/tracks/${t.id}`, {
-        method: "POST",
-        body: JSON.stringify({ solo: !t.solo }),
-      });
-      await refreshTracks();
-    };
-    row.querySelector(".mute").onclick = async () => {
-      await api(`/api/audio/tracks/${t.id}`, {
-        method: "POST",
-        body: JSON.stringify({ mute: !t.mute }),
-      });
+      await api(`/api/audio/tracks/${t.id}`, { method: "POST", body: JSON.stringify({ solo: !t.solo }) });
       await refreshTracks();
       const clip = audioClips.find((c) => c.track_id === t.id);
       if (playerPlaying() && clip) playClip(clip, playheadSec);
     };
-    row.querySelector(".mute").textContent = t.mute ? "M*" : "M";
-    row.querySelector(".fx").onclick = () => openTrackFx(t.id);
+    row.querySelector(".mon").onclick = async () => {
+      t.monitor = !t.monitor;
+      await api(`/api/audio/tracks/${t.id}`, { method: "POST", body: JSON.stringify({ monitor: t.monitor }) });
+      refreshTracks();
+    };
+    row.querySelector(".mute").onclick = async () => {
+      await api(`/api/audio/tracks/${t.id}`, { method: "POST", body: JSON.stringify({ mute: !t.mute }) });
+      await refreshTracks();
+      const clip = audioClips.find((c) => c.track_id === t.id);
+      if (playerPlaying() && clip) playClip(clip, playheadSec);
+    };
+    row.querySelector(".arm").onclick = async () => {
+      await api(`/api/audio/tracks/${t.id}`, { method: "POST", body: JSON.stringify({ armed: !t.armed }) });
+      await refreshTracks();
+    };
+    row.querySelector(".arm-more").onclick = (ev) => {
+      ev.stopPropagation();
+      const menu = document.getElementById("track-context");
+      menu.innerHTML = `<button data-arm="takes">Takes</button><button data-arm="overdub">Overdub</button><button data-arm="replace">Replace</button>`;
+      menu.dataset.track = String(t.id);
+      menu.style.left = ev.clientX + "px";
+      menu.style.top = ev.clientY + "px";
+      menu.hidden = false;
+    };
+    row.querySelector(".fx").onclick = (ev) => openFxPopup(t.id, ev);
     row.oncontextmenu = (e) => { e.preventDefault(); showTrackMenu(e, t); };
     list.appendChild(row);
   }
@@ -504,6 +498,16 @@ document.addEventListener("contextmenu", (e) => {
 
 let trackFx = {};
 let fxTrackId = null;
+
+function openFxPopup(trackId, ev) {
+  const pop = document.getElementById("fx-popup");
+  if (!pop) return;
+  pop.dataset.track = String(trackId);
+  pop.querySelector("h4").textContent = "Track " + trackId + " FX";
+  pop.style.left = (ev.clientX + 8) + "px";
+  pop.style.top = (ev.clientY + 8) + "px";
+  pop.hidden = false;
+}
 
 function openTrackFx(trackId) {
   fxTrackId = trackId;
@@ -1157,7 +1161,8 @@ async function playClip(clip, fromSec) {
   if (reverseSource) { try { reverseSource.stop(); } catch (e) {} reverseSource = null; }
   const start = fromSec != null ? fromSec : playheadSec;
   const track = audioTracks.find((t) => t.id === clip.track_id);
-  if (clip.silenced || clip.mute || (track && track.mute)) {
+  const anySolo = audioTracks.some((t) => t.solo);
+  if (clip.silenced || clip.mute || (track && track.mute) || (anySolo && track && !track.solo)) {
     player.pause();
     player.src = "";
     startPlayhead(start, 1);
@@ -1167,7 +1172,7 @@ async function playClip(clip, fromSec) {
   const into = Math.max(0, Math.min(clip.duration || 0, start - clipStart));
   if (!clip.reversed) {
     player.src = `/api/audio/file/${clip.id}?v=${Date.now()}`;
-    player.volume = Math.min(1, clip.gain || 1);
+    player.volume = Math.min(1, (clip.gain || 1) * ((track && track.gain) || 1));
     player.onloadedmetadata = () => { player.currentTime = into; player.play(); };
     startPlayhead(clipStart + into, 1);
     return;
