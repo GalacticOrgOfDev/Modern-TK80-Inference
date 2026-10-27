@@ -337,12 +337,42 @@ async function refreshTracks() {
         body: JSON.stringify({ mute: !t.mute }),
       });
       await refreshTracks();
+      const clip = audioClips.find((c) => c.track_id === t.id);
+      if (playerPlaying() && clip) playClip(clip, playheadSec);
     };
+    row.querySelector(".mute").textContent = t.mute ? "M*" : "M";
     row.querySelector(".fx").onclick = () => openTrackFx(t.id);
     row.oncontextmenu = (e) => { e.preventDefault(); showTrackMenu(e, t); };
     list.appendChild(row);
   }
   updateScarlettBadge();
+}
+
+
+function showClipMenu(e, clip) {
+  const menu = document.getElementById("track-context");
+  if (!menu) return;
+  menu.innerHTML = `
+    <button data-clip="mute">Mute: ${clip.mute ? "on" : "off"}</button>
+    <button data-clip="normalize">Normalize</button>
+    <div class="gain-step">
+      <span class="gain-readout">+0.0 dB</span>
+      <button data-clip="gain-down">-1</button>
+      <button data-clip="gain-up">+1</button>
+    </div>
+    <button data-clip="split-here">Split here</button>
+    <button data-clip="split-playhead">Split at playhead</button>
+  `;
+  const db = 20 * Math.log10(Math.max(0.001, clip.gain || 1));
+  menu.dataset.gainDb = String(db);
+  menu.dataset.clip = String(clip.id);
+  const readout = menu.querySelector(".gain-readout");
+  if (readout) readout.textContent = (db >= 0 ? "+" : "") + db.toFixed(1) + " dB";
+  menu.style.left = e.clientX + "px";
+  menu.style.top = e.clientY + "px";
+  menu.hidden = false;
+  e.preventDefault();
+  e.stopPropagation();
 }
 
 function showTrackMenu(e, track) {
@@ -379,6 +409,30 @@ document.addEventListener("click", (e) => {
   const m = document.getElementById("track-context");
   if (!m || m.hidden) return;
   if (m.contains(e.target)) {
+    const clipAct = e.target.dataset && e.target.dataset.clip;
+    if (clipAct) {
+      const clip = audioClips.find((c) => c.id === Number(m.dataset.clip));
+      if (!clip) return;
+      if (clipAct === "mute") {
+        clip.mute = !clip.mute;
+        api("/api/audio/clips/mute", { method: "POST", body: JSON.stringify({ clip_id: clip.id, mute: clip.mute }) });
+        e.target.textContent = "Mute: " + (clip.mute ? "on" : "off");
+        drawArrange();
+        if (playerPlaying() && selectedClip === clip.id) playClip(clip, playheadSec);
+        return;
+      }
+      if (clipAct === "gain-up" || clipAct === "gain-down") {
+        const cur = Number(m.dataset.gainDb || "0");
+        const next = Math.max(-24, Math.min(12, cur + (clipAct === "gain-up" ? 1 : -1)));
+        m.dataset.gainDb = String(next);
+        const readout = m.querySelector(".gain-readout");
+        if (readout) readout.textContent = (next >= 0 ? "+" : "") + next.toFixed(1) + " dB";
+        clip.gain = Math.pow(10, next / 20);
+        api("/api/audio/clips/gain", { method: "POST", body: JSON.stringify({ clip_id: clip.id, gain: clip.gain }) });
+        return;
+      }
+      return;
+    }
     const act = e.target.dataset && e.target.dataset.act;
     if (!act) return;
     const id = Number(m.dataset.track);
@@ -553,6 +607,7 @@ function drawArrange() {
     div.style.top = ((c.track_id || 0) * 36 + 4) + "px";
     div.textContent = (c.silenced ? "SIL " : "") + (c.reversed ? "REV " : "") + (c.name || ("#" + c.id));
     div.onclick = () => selectClip(c);
+    div.oncontextmenu = (ev) => { selectClip(c); showClipMenu(ev, c); };
     area.appendChild(div);
   }
   const seq = document.getElementById("sequencer");
@@ -1085,7 +1140,8 @@ async function playClip(clip, fromSec) {
   const player = document.getElementById("audio-player");
   if (reverseSource) { try { reverseSource.stop(); } catch (e) {} reverseSource = null; }
   const start = fromSec != null ? fromSec : playheadSec;
-  if (clip.silenced) {
+  const track = audioTracks.find((t) => t.id === clip.track_id);
+  if (clip.silenced || clip.mute || (track && track.mute)) {
     player.pause();
     player.src = "";
     startPlayhead(start, 1);
