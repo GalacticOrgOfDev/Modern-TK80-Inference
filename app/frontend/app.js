@@ -308,8 +308,9 @@ async function refreshTracks() {
     row.querySelector(".solo").onclick = async () => {
       await api(`/api/audio/tracks/${t.id}`, { method: "POST", body: JSON.stringify({ solo: !t.solo }) });
       await refreshTracks();
-      const clip = audioClips.find((c) => c.track_id === t.id);
-      if (playerPlaying() && clip) playClip(clip, playheadSec);
+      if (!playerPlaying()) return;
+      const playing = audioClips.find((c) => c.id === selectedClip);
+      if (playing) playClip(playing, playheadSec);
     };
     row.querySelector(".mon").onclick = async () => {
       t.monitor = !t.monitor;
@@ -701,14 +702,7 @@ async function detectDevices() {
 }
 
 // Settings
-document.getElementById("sample-rate").onchange = async (e) => {
-  try { await pushSettings({ sample_rate: Number(e.target.value) }); }
-  catch (err) { alert(err.message); }
-};
-document.getElementById("asio-enabled").onchange = async (e) => {
-  try { await pushSettings({ asio: e.target.checked }); }
-  catch (err) { alert(err.message); }
-};
+
 document.getElementById("asio-buffer").onchange = async (e) => {
   try { await pushSettings({ buffer: Number(e.target.value) }); }
   catch (err) { alert(err.message); }
@@ -851,8 +845,36 @@ document.getElementById("asio-buffer").onchange = async (e) => {
 };
 
 // Tracks and devices
-(document.getElementById("toggle-settings")||{}).onclick =  () => {
-  document.getElementById("settings-drawer").classList.toggle("open");
+let settingsSnapshot = null;
+(document.getElementById("toggle-settings")||{}).onclick = () => {
+  const d = document.getElementById("settings-drawer");
+  d.hidden = false;
+  d.classList.add("open");
+  d.style.left = "80px";
+  d.style.top = "60px";
+  settingsSnapshot = {
+    rate: document.getElementById("sample-rate").value,
+    asio: document.getElementById("asio-enabled").checked,
+    buffer: document.getElementById("asio-buffer").value,
+    bpm: document.getElementById("bpm").value,
+  };
+};
+(document.getElementById("settings-cancel")||{}).onclick = () => {
+  if (settingsSnapshot) {
+    document.getElementById("sample-rate").value = settingsSnapshot.rate;
+    document.getElementById("asio-enabled").checked = settingsSnapshot.asio;
+    document.getElementById("asio-buffer").value = settingsSnapshot.buffer;
+    document.getElementById("bpm").value = settingsSnapshot.bpm;
+  }
+  document.getElementById("settings-drawer").hidden = true;
+};
+(document.getElementById("settings-save")||{}).onclick = async () => {
+  await pushSettings({
+    sample_rate: Number(document.getElementById("sample-rate").value),
+    asio: document.getElementById("asio-enabled").checked,
+    buffer: Number(document.getElementById("asio-buffer").value),
+  });
+  document.getElementById("settings-drawer").hidden = true;
 };
 (document.getElementById("audio-new-track")||{}).onclick =  async () => {
   const name = document.getElementById("track-name").value || "Track";
@@ -1506,4 +1528,28 @@ if (agentSend) agentSend.onclick = async () => {
 };
 setInterval(() => {}, 15000);
 
-(document.getElementById("fx-popup-close")||{}).onclick = () => { const p = document.getElementById("fx-popup"); if (p) p.hidden = true; };
+
+
+document.addEventListener("click", (e) => {
+  if (e.target && e.target.id === "fx-popup-close") {
+    document.getElementById("fx-popup").hidden = true;
+  }
+});
+
+(function dragPopup() {
+  const pop = document.getElementById("fx-popup");
+  const head = pop && pop.querySelector(".pop-head");
+  if (!head) return;
+  let dx = 0, dy = 0, drag = false;
+  head.onmousedown = (e) => {
+    drag = true;
+    dx = e.clientX - pop.offsetLeft;
+    dy = e.clientY - pop.offsetTop;
+  };
+  document.addEventListener("mousemove", (e) => {
+    if (!drag) return;
+    pop.style.left = (e.clientX - dx) + "px";
+    pop.style.top = (e.clientY - dy) + "px";
+  });
+  document.addEventListener("mouseup", () => { drag = false; });
+})();

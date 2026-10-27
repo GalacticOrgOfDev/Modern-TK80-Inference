@@ -74,7 +74,8 @@
           <span id="asio-status" class="badge">ASIO off</span>
           <audio id="audio-player"></audio>
         </div>
-        <div id="settings-drawer" class="settings-drawer">
+        <div id="settings-drawer" class="settings-drawer fx-popup">
+          <div class="pop-head"><span>Settings</span></div>
           <label>Sample rate
             <select id="sample-rate">
               <option value="44100" selected>44100</option>
@@ -97,6 +98,7 @@
           <label>BPM<input id="bpm" type="number" value="120" min="40" max="220" /></label>
           <button id="bpm-set">Set</button>
           <button id="bpm-detect">Detect</button>
+          <div class="pop-actions"><button id="settings-save">Save</button><button id="settings-cancel">Cancel</button></div>
           <hr />
           <label>Track name<input id="track-name" value="Track" /></label>
           <label>Channel
@@ -272,11 +274,14 @@
     </section>
   </main>
 
-  <script src="app.js"></script>
-<div id="fx-popup" class="fx-popup" hidden>
-  <h4>FX</h4>
-  <button id="fx-popup-close">Close</button>
-  <div id="fx-popup-list">No effects yet.</div>
+  <div id="fx-popup" class="fx-popup" hidden>
+  <div class="pop-head"><span>Track FX</span><button id="fx-popup-close">×</button></div>
+  <div id="fx-popup-list">
+    <button class="fx-add" data-fx="eq">EQ</button>
+    <button class="fx-add" data-fx="compress">Compressor</button>
+    <button class="fx-add" data-fx="reverb">Reverb</button>
+  </div>
 </div>
+<script src="app.js"></script>
 </body>
 </html>

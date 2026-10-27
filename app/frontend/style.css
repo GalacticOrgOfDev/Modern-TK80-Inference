@@ -317,3 +317,9 @@ hr { border: none; border-top: 1px solid #2a2a2a; width: 100%; margin: 6px 0; }
 }
 .fx-popup[hidden] { display: none; }
 .fx-popup h4 { margin: 0 0 6px; font-size: 12px; }
+
+.pop-head { display: flex; justify-content: space-between; align-items: center; cursor: move; font-size: 12px; padding-bottom: 6px; }
+.pop-head button { background: none; border: none; color: #aaa; cursor: pointer; }
+.pop-actions { display: flex; gap: 6px; margin-top: 8px; }
+.settings-drawer.fx-popup { position: fixed; z-index: 1100; background: #1a1a1a; padding: 10px; }
+.settings-drawer[hidden] { display: none; }
