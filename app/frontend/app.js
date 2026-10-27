@@ -292,12 +292,13 @@ async function refreshTracks() {
     const lvl = row.querySelector(".lvl");
     const db = row.querySelector(".db");
     lvl.oninput = () => {
-      db.textContent = gainToDb(Number(lvl.value));
-      t.gain = Number(lvl.value);
+      const g = Number(lvl.value);
+      db.textContent = gainToDb(g);
+      t.gain = g;
       const player = document.getElementById("audio-player");
-      if (player && selectedTrack === t.id) player.volume = Math.min(1, t.gain);
+      if (player) player.volume = Math.min(1, g * (audioClips.find((c) => c.id === selectedClip) || { gain: 1 }).gain);
+      api(`/api/audio/tracks/${t.id}`, { method: "POST", body: JSON.stringify({ gain: g }) });
     };
-    lvl.onchange = () => api(`/api/audio/tracks/${t.id}`, { method: "POST", body: JSON.stringify({ gain: Number(lvl.value) }) });
     const pan = row.querySelector(".pan");
     const panLabelEl = row.querySelector(".pan-label");
     pan.oninput = () => {
@@ -869,12 +870,15 @@ let settingsSnapshot = null;
   document.getElementById("settings-drawer").hidden = true;
 };
 (document.getElementById("settings-save")||{}).onclick = async () => {
+  const bpm = Number(document.getElementById("bpm").value);
   await pushSettings({
     sample_rate: Number(document.getElementById("sample-rate").value),
     asio: document.getElementById("asio-enabled").checked,
     buffer: Number(document.getElementById("asio-buffer").value),
   });
+  if (bpm) await api("/api/audio/bpm", { method: "POST", body: JSON.stringify({ bpm }) });
   document.getElementById("settings-drawer").hidden = true;
+  document.getElementById("audio-transport-status").textContent = "Settings saved";
 };
 (document.getElementById("audio-new-track")||{}).onclick =  async () => {
   const name = document.getElementById("track-name").value || "Track";

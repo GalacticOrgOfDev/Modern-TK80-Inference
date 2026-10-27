@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+import json as _json
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -777,6 +778,40 @@ def chat_clear() -> Dict[str, str]:
     return {"ok": "cleared"}
 
 
+
+SETTINGS_PATH = Path(__file__).resolve().parents[2] / "uploads" / "settings.json"
+
+
+def _load_settings() -> None:
+    """Load saved settings from disk if present."""
+    global _sample_rate, _asio_enabled, _asio_buffer, _bpm
+    if not SETTINGS_PATH.exists():
+        return
+    try:
+        data = _json.loads(SETTINGS_PATH.read_text())
+    except Exception:
+        return
+    if data.get("sample_rate") in COMMON_RATES:
+        _sample_rate = data["sample_rate"]
+    if "asio" in data:
+        _asio_enabled = bool(data["asio"])
+    if data.get("buffer") in ASIO_BUFFERS:
+        _asio_buffer = data["buffer"]
+    if data.get("bpm"):
+        _bpm = float(data["bpm"])
+
+
+def _save_settings() -> None:
+    """Write the current settings to disk."""
+    SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    SETTINGS_PATH.write_text(_json.dumps({
+        "sample_rate": _sample_rate,
+        "asio": _asio_enabled,
+        "buffer": _asio_buffer,
+        "bpm": _bpm,
+    }))
+
+
 @app.get("/api/audio/settings")
 def audio_settings() -> Dict[str, Any]:
     """audio settings."""
@@ -810,6 +845,7 @@ def set_audio_settings(body: AudioSettingsRequest) -> Dict[str, Any]:
         if body.buffer not in ASIO_BUFFERS:
             raise HTTPException(status_code=400, detail=f"unsupported buffer: {body.buffer}")
         _asio_buffer = body.buffer
+    _save_settings()
     return {
         "sample_rate": _sample_rate,
         "asio": _asio_enabled,
