@@ -478,13 +478,28 @@ document.addEventListener("click", (e) => {
   m.hidden = true;
 });
 document.addEventListener("contextmenu", (e) => {
+  const clipEl = e.target.closest && e.target.closest(".daw-clip");
+  if (clipEl) {
+    const clip = audioClips.find((c) => c.id === Number(clipEl.dataset.id));
+    if (clip) { e.preventDefault(); selectClip(clip); showClipMenu(e, clip); }
+    return;
+  }
   const row = e.target.closest && e.target.closest(".track");
-  if (!row || row.classList.contains("master-row")) return;
-  const id = Number(row.dataset.id);
-  const track = audioTracks.find((t) => t.id === id);
-  if (!track) return;
-  e.preventDefault();
-  showTrackMenu(e, track);
+  if (row && !row.classList.contains("master-row")) {
+    const track = audioTracks.find((t) => t.id === Number(row.dataset.id));
+    if (track) { e.preventDefault(); showTrackMenu(e, track); }
+    return;
+  }
+  const area = e.target.closest && e.target.closest("#daw-clips, .daw-arrange");
+  if (area) {
+    e.preventDefault();
+    const menu = document.getElementById("track-context");
+    if (!menu) return;
+    menu.innerHTML = `<button data-tl="paste">Paste</button><button data-tl="select-all">Select all</button>`;
+    menu.style.left = e.clientX + "px";
+    menu.style.top = e.clientY + "px";
+    menu.hidden = false;
+  }
 });
 
 let trackFx = {};
@@ -601,6 +616,7 @@ function drawArrange() {
   const px = 40;
   for (const c of audioClips) {
     const div = document.createElement("div");
+    div.dataset.id = String(c.id);
     div.className = "daw-clip" + (c.mute ? " muted" : "") + (c.reversed ? " reversed" : "") + (c.silenced ? " silenced" : "");
     div.style.left = ((c.position || 0) * px) + "px";
     div.style.width = Math.max(24, (c.duration || 1) * px) + "px";
@@ -619,13 +635,13 @@ function drawArrange() {
 
 function selectClip(c) {
   selectedClip = c.id;
-  document.getElementById("audio-clip-id").value = c.id;
-  document.getElementById("audio-start").value = c.start;
-  document.getElementById("audio-end").value = c.end;
-  document.getElementById("audio-gain").value = c.gain;
-  document.getElementById("audio-position").value = c.position || 0;
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+  set("audio-clip-id", c.id);
+  set("audio-start", c.start);
+  set("audio-end", c.end);
+  set("audio-gain", c.gain);
+  set("audio-position", c.position || 0);
   drawWave(c);
-  refreshClips();
 }
 
 async function refreshFrames() {
