@@ -1151,6 +1151,7 @@ function setPlayhead(sec) {
   playheadSec = Math.max(0, sec);
   const el = document.getElementById("playhead");
   if (el) el.style.left = (playheadSec * PX_PER_SEC) + "px";
+  if (typeof drawRecClip === "function") drawRecClip();
 }
 
 function startPlayhead(fromSec, dir) {
@@ -1220,14 +1221,26 @@ async function playClip(clip, fromSec) {
   startPlayhead(clipStart + into, 1);
 }
 
-(document.getElementById("audio-play")||{}).onclick =  () => {
-  const clip = audioClips.find((c) => c.id === selectedClip) || audioClips.find((c) => c.reversed) || audioClips[0];
+function setPlayIcon(playing) {
+  const b = document.getElementById("audio-play");
+  if (b) b.textContent = playing ? "❚❚" : "▶";
+}
+
+(document.getElementById("audio-play")||{}).onclick = () => {
+  if (playerPlaying()) {
+    haltPlayback();
+    setPlayIcon(false);
+    document.getElementById("audio-transport-status").textContent = "Paused";
+    return;
+  }
+  const clip = audioClips.find((c) => c.id === selectedClip) || audioClips[0];
   if (!clip || !clip.path) {
     document.getElementById("audio-transport-status").textContent = "No file on this clip";
     return;
   }
   selectedClip = clip.id;
   playClip(clip);
+  setPlayIcon(true);
   document.getElementById("audio-transport-status").textContent =
     `Playing #${clip.id}` + (clip.reversed ? " reversed" : "");
 };
@@ -1284,9 +1297,17 @@ function haltPlayback() {
   stopPlayhead();
 }
 
-(document.getElementById("audio-stop")||{}).onclick =  async () => {
+(document.getElementById("audio-stop")||{}).onclick = async () => {
+  const active = playerPlaying() || asioRecording;
   haltPlayback();
-  await stopRecording();
+  setPlayIcon(false);
+  if (asioRecording) {
+    await stopRecording();
+    removeRecClip();
+    return;
+  }
+  if (!active) setPlayhead(0);
+  document.getElementById("audio-transport-status").textContent = active ? "Stopped" : "Home";
 };
 
 function nudge(sec) {
@@ -1322,6 +1343,9 @@ function clipSpan() {
       body: JSON.stringify({ track_id: track.id }),
     });
     asioRecording = true;
+    recStart = playheadSec;
+    startPlayhead(playheadSec, 1);
+    setPlayIcon(true);
     startLevelPoll();
     const scar = track.scarlett ? ` [${track.scarlett.name}]` : "";
     const dev = info.device ? info.device.name : "device";
@@ -1550,6 +1574,47 @@ document.addEventListener("click", (e) => {
     if (!drag) return;
     pop.style.left = (e.clientX - dx) + "px";
     pop.style.top = (e.clientY - dy) + "px";
+  });
+  document.addEventListener("mouseup", () => { drag = false; });
+})();
+
+let recStart = 0;
+function drawRecClip() {
+  if (!asioRecording) return;
+  const area = document.getElementById("daw-clips");
+  if (!area) return;
+  let el = document.getElementById("rec-clip");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "rec-clip";
+    el.className = "daw-clip recording";
+    area.appendChild(el);
+  }
+  const left = Math.min(recStart, playheadSec);
+  const width = Math.abs(playheadSec - recStart);
+  el.style.left = (left * PX_PER_SEC) + "px";
+  el.style.width = Math.max(4, width * PX_PER_SEC) + "px";
+  el.style.top = "4px";
+  el.textContent = "recording";
+}
+function removeRecClip() {
+  const el = document.getElementById("rec-clip");
+  if (el) el.remove();
+}
+const _tick = startPlayhead;
+
+(function dragTransport() {
+  const bar = document.getElementById("transport");
+  const head = bar && bar.querySelector(".pop-head");
+  if (!head) return;
+  let dx = 0, dy = 0, drag = false;
+  head.onmousedown = (e) => { drag = true; dx = e.clientX - bar.offsetLeft; dy = e.clientY - bar.offsetTop; };
+  document.addEventListener("mousemove", (e) => {
+    if (!drag) return;
+    bar.style.position = "fixed";
+    bar.style.left = (e.clientX - dx) + "px";
+    bar.style.top = (e.clientY - dy) + "px";
+    bar.style.zIndex = "1200";
   });
   document.addEventListener("mouseup", () => { drag = false; });
 })();

@@ -323,3 +323,10 @@ hr { border: none; border-top: 1px solid #2a2a2a; width: 100%; margin: 6px 0; }
 .pop-actions { display: flex; gap: 6px; margin-top: 8px; }
 .settings-drawer.fx-popup { position: fixed; z-index: 1100; background: #1a1a1a; padding: 10px; }
 .settings-drawer[hidden] { display: none; }
+
+.transport {
+  display: inline-flex; align-items: center; gap: 2px;
+  background: #1a1a1a; border: 1px solid #333; border-radius: 4px; padding: 2px 4px;
+}
+.transport .pop-head { cursor: move; padding: 0 4px; color: #888; }
+.daw-clip.recording { background: #6b1a1a; }
