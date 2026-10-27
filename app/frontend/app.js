@@ -876,7 +876,7 @@ let settingsSnapshot = null;
     asio: document.getElementById("asio-enabled").checked,
     buffer: Number(document.getElementById("asio-buffer").value),
   });
-  if (bpm) await api("/api/audio/bpm", { method: "POST", body: JSON.stringify({ bpm }) });
+  if (bpm) await api("/api/music/bpm", { method: "POST", body: JSON.stringify({ bpm }) });
   document.getElementById("settings-drawer").hidden = true;
   document.getElementById("audio-transport-status").textContent = "Settings saved";
 };

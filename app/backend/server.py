@@ -812,6 +812,9 @@ def _save_settings() -> None:
     }))
 
 
+_load_settings()
+
+
 @app.get("/api/audio/settings")
 def audio_settings() -> Dict[str, Any]:
     """audio settings."""
