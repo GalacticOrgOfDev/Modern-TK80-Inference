@@ -1505,3 +1505,5 @@ if (agentSend) agentSend.onclick = async () => {
   }
 };
 setInterval(() => {}, 15000);
+
+(document.getElementById("fx-popup-close")||{}).onclick = () => { const p = document.getElementById("fx-popup"); if (p) p.hidden = true; };
