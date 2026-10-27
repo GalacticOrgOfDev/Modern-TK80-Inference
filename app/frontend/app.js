@@ -356,7 +356,9 @@ function showClipMenu(e, clip) {
       <button data-clip="gain-down">-1</button>
       <button data-clip="gain-up">+1</button>
     </div>
-    <button data-clip="split-here">Split here</button>
+    <button data-clip="trim-in">Trim in at needle</button>
+    <button data-clip="trim-out">Trim out at needle</button>
+    <button data-clip="trim-clear">Clear trim</button>
     <button data-clip="split-playhead">Split at playhead</button>
   `;
   const db = 20 * Math.log10(Math.max(0.001, clip.gain || 1));
@@ -375,7 +377,6 @@ function showTrackMenu(e, track) {
   const menu = document.getElementById("track-context");
   if (!menu) return;
   menu.innerHTML = `
-    <button data-act="trim">Trim</button>
     <div class="gain-step">
       <span class="gain-readout">+0.0 dB</span>
       <button data-act="gain-down">-1</button>
@@ -425,9 +426,32 @@ document.addEventListener("click", (e) => {
         if (readout) readout.textContent = (next >= 0 ? "+" : "") + next.toFixed(1) + " dB";
         clip.gain = Math.pow(10, next / 20);
         api("/api/audio/clips/gain", { method: "POST", body: JSON.stringify({ clip_id: clip.id, gain: clip.gain }) });
+        const player = document.getElementById("audio-player");
+        if (player && selectedClip === clip.id) player.volume = Math.min(1, clip.gain);
         return;
       }
-      return;
+      if (clipAct === "normalize") {
+        const peak = Math.max(...(clip.peaks || [0.5]), 0.01);
+        clip.gain = Math.min(4, 0.95 / peak);
+        api("/api/audio/clips/gain", { method: "POST", body: JSON.stringify({ clip_id: clip.id, gain: clip.gain }) });
+        m.hidden = true;
+        if (playerPlaying()) playClip(clip, playheadSec);
+        return;
+      }
+      if (clipAct === "trim-in" || clipAct === "trim-out" || clipAct === "trim-clear") {
+        const into = Math.max(0, playheadSec - (clip.position || 0));
+        if (clipAct === "trim-in") clip.trim_in = into;
+        if (clipAct === "trim-out") clip.trim_out = into;
+        if (clipAct === "trim-clear") { clip.trim_in = 0; clip.trim_out = clip.duration; }
+        api("/api/audio/clips/trim", { method: "POST", body: JSON.stringify({ clip_id: clip.id, trim_in: clip.trim_in || 0, trim_out: clip.trim_out || clip.duration }) });
+        drawArrange();
+        return;
+      }
+      if (clipAct === "split-playhead") {
+        api("/api/audio/clips/split", { method: "POST", body: JSON.stringify({ clip_id: clip.id, at: playheadSec }) }).then(() => refreshClips());
+        m.hidden = true;
+        return;
+      }
     }
     const act = e.target.dataset && e.target.dataset.act;
     if (!act) return;
@@ -505,7 +529,8 @@ function openFxPopup(trackId, ev) {
   const pop = document.getElementById("fx-popup");
   if (!pop) return;
   pop.dataset.track = String(trackId);
-  pop.querySelector("h4").textContent = "Track " + trackId + " FX";
+  const title = pop.querySelector(".pop-head span");
+  if (title) title.textContent = "Track " + trackId + " FX";
   pop.style.left = (ev.clientX + 8) + "px";
   pop.style.top = (ev.clientY + 8) + "px";
   pop.hidden = false;
@@ -1196,7 +1221,9 @@ async function playClip(clip, fromSec) {
     return;
   }
   const clipStart = clip.position || 0;
-  const into = Math.max(0, Math.min(clip.duration || 0, start - clipStart));
+  const trimIn = clip.trim_in || 0;
+  const trimOut = clip.trim_out || clip.duration || 0;
+  const into = Math.max(trimIn, Math.min(trimOut, start - clipStart));
   if (!clip.reversed) {
     player.src = `/api/audio/file/${clip.id}?v=${Date.now()}`;
     player.volume = Math.min(1, (clip.gain || 1) * ((track && track.gain) || 1));

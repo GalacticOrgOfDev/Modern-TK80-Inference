@@ -1316,6 +1316,49 @@ def clip_silence(body: ClipFlagRequest) -> Dict[str, Any]:
     return clip
 
 
+class ClipTrimRequest(BaseModel):
+    clip_id: int
+    trim_in: float = 0.0
+    trim_out: float = 0.0
+
+
+@app.post("/api/audio/clips/trim")
+def clip_trim(body: ClipTrimRequest) -> Dict[str, Any]:
+    """Set a clip's play window. Does not rewrite the source file."""
+    if body.clip_id < 0 or body.clip_id >= len(_audio_clips):
+        raise HTTPException(status_code=404, detail="clip not found")
+    clip = _audio_clips[body.clip_id]
+    clip["trim_in"] = max(0.0, body.trim_in)
+    clip["trim_out"] = max(clip["trim_in"], body.trim_out or clip.get("duration", 0))
+    return clip
+
+
+class ClipSplitRequest(BaseModel):
+    clip_id: int
+    at: float
+
+
+@app.post("/api/audio/clips/split")
+def clip_split(body: ClipSplitRequest) -> Dict[str, Any]:
+    """Split a clip at a timeline time into two clips sharing the source."""
+    if body.clip_id < 0 or body.clip_id >= len(_audio_clips):
+        raise HTTPException(status_code=404, detail="clip not found")
+    clip = _audio_clips[body.clip_id]
+    start = clip.get("position", 0.0)
+    into = max(0.0, min(clip.get("duration", 0.0), body.at - start))
+    if into <= 0 or into >= clip.get("duration", 0):
+        return {"clips": _audio_clips}
+    right = dict(clip)
+    right["id"] = len(_audio_clips)
+    right["position"] = start + into
+    right["trim_in"] = into
+    right["duration"] = clip.get("duration", 0) - into
+    clip["trim_out"] = into
+    clip["duration"] = into
+    _audio_clips.append(right)
+    return {"clips": _audio_clips}
+
+
 @app.post("/api/audio/clips/mute")
 def clip_mute(body: ClipMuteRequest) -> Dict[str, Any]:
     """clip mute."""
