@@ -1070,8 +1070,7 @@ function startPlayhead(fromSec, dir) {
 }
 
 function playerPlaying() {
-  const p = document.getElementById("audio-player");
-  return (p && !p.paused) || reverseSource != null;
+  return playTimer != null;
 }
 
 function stopPlayhead() {
