@@ -14,7 +14,9 @@ The Modern-TK80 mini DAW is a native Windows desktop studio. Audio I/O is ASIO (
 ## Clips
 
 - Clips live on a track with timeline position, gain, and mute
-- Edits rewrite the WAV: trim, reverse, gain, silence
+- Clip gain, reverse, silence and trim (`/api/audio/clips/gain`, `/reverse`, `/silence`, `/trim`; server.py:1367-1409) and split (`/api/audio/clips/split`, server.py:1417-1449) only set clip fields; the source WAV is not rewritten. Split makes two clips that share the source and divide its trim window (server.py:1436-1447). Mix and bounce (`mix_arrangement`, audio.py:415, called from server.py:1034 and 1050) apply the fields: silenced clips are skipped but still count toward the mix length (audio.py:475, 513), each clip plays its [trim_in, trim_out) window, backwards if reversed (`_clip_window`, audio.py:516, 561-587), and clip gain multiplies track gain (audio.py:518)
+- Legacy `/api/audio/edit` (server.py:1482-1518) still rewrites: trim, gain, reverse and silence each write a new 16-bit WAV with `process_clip` (audio.py:362-397; 16-bit only, audio.py:373) and point the clip at it (`_refresh_clip`, server.py:233-260). Trim and reverse also clear trim_in/trim_out, because the new file bakes them; the reversed flag is left as it was; gain and silence keep every clip field (server.py:1513-1517). Its `position` and `mute` actions change only the clip fields (server.py:1490-1493, 1505-1507)
+- Effect and EQ Apply (`/api/audio/clips/effect`, server.py:1460-1479) still writes a new WAV of the whole source (`apply_effect`, effects.py:313-366) and points the clip at it, keeping gain, trim, reverse, silence, mute and position (`_refresh_clip`, server.py:233-260)
 - Per-clip level fader and mute toggle
 - Waveform peaks from 16-bit WAV, and from 24- and 32-bit integer PCM after the same 16-bit conversion the mix uses
 ## Formats
