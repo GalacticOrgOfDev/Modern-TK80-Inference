@@ -918,11 +918,22 @@ let settingsSnapshot = null;
   await refreshTracks();
 };
 (document.getElementById("audio-del-track")||{}).onclick =  async () => {
-  if (selectedTrack == null) { alert("Select a track first"); return; }
-  await api(`/api/audio/tracks/${selectedTrack}`, { method: "DELETE" });
-  selectedTrack = null;
+  // Only delete a track that is selected and still in the list; never fall back to another id.
+  if (selectedTrack == null || !audioTracks.some((t) => t.id === selectedTrack)) {
+    alert("Select a track first");
+    return;
+  }
+  const id = selectedTrack;
+  try {
+    await api(`/api/audio/tracks/${id}`, { method: "DELETE" });
+    selectedTrack = null;
+  } catch (e) {
+    const status = document.getElementById("audio-transport-status");
+    if (status) status.textContent = `Could not delete track ${id}: ${e.message}`;
+  }
   await refreshTracks();
-  await refreshClips();
+  if (!audioTracks.some((t) => t.id === selectedTrack)) selectedTrack = null;
+  try { await refreshClips(); } catch (e) { /* keep the status message */ }
 };
 (document.getElementById("audio-refresh-devices")||{}).onclick =  detectDevices;
 
@@ -973,7 +984,7 @@ const _at = document.getElementById("audio-transcribe"); if (_at) _at.onclick = 
 };
 
 function clipOnTrack(trackId) {
-  return audioClips.find((c) => c.track_id === trackId) || audioClips[selectedClip] || audioClips[0];
+  return audioClips.find((c) => c.track_id === trackId) || audioClips.find((c) => c.id === selectedClip) || audioClips[0];
 }
 
 async function audioEdit(action, trackId) {
