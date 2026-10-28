@@ -8,7 +8,7 @@ Windows 10+ creator app. Native window via pywebview.
 |-----|-------|--------|
 | Chat | History, tool indicator, direct commands | K80 inference on Connect |
 | Audio | Tracks, clips, ASIO, sequencer, effects, mix, bounce, 30-band EQ | VST binary needs SDK |
-| Video | Timeline, text, VFX stubs, audio split, JSON export | MP4 encode (`encode_mp4()` in `backend/export.py:41-70` exists, but no route calls it; output unverified), real VFX render |
+| Video | Timeline, text, VFX stubs, audio split, JSON export | MP4 encode (`encode_mp4()` in `backend/export.py:41-70` exists, but no route calls it; output unverified), VFX render (`/api/vfx/render` fails: `backend/video.py:229` calls an undefined `_filter_for`) |
 | Fusion | Status and plan | Dual-die data movement |
 
 ## Layout

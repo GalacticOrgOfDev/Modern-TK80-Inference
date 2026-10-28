@@ -12,7 +12,7 @@ Native window via FastAPI and pywebview. Not a browser tab.
 |--------|------------------|----------------|
 | Chat | Multi-turn chat, tool indicator, direct commands | K80 inference when a die is connected |
 | DAW | Tracks, clips, ASIO record, sequencer, instruments, mix, bounce, undo, 30-band EQ | VST binary compile needs the SDK on the machine. VST prompt design is broken since the first commit (returns 501) |
-| Video | Timeline, clips, text, VFX render (ffmpeg), audio split | Validated glTF/FBX/BVH binaries. MP4 encode: a function exists but no route calls it (see Staged below) |
+| Video | Timeline, clips, text, audio split | Validated glTF/FBX/BVH binaries. MP4 encode: a function exists but no route calls it. VFX render: the route exists but fails with ffmpeg present (see Staged below) |
 | Fusion | Status, plan, and an activate/deactivate switch that only sets a flag; no data is moved (`drivers/interconnector/diefusion.py:99-111`) | Dual-die data movement |
 
 Launch:
@@ -57,7 +57,7 @@ Ships:
 
 - Timeline of clips with prompt, duration, and path
 - Built-in VFX names: none, fade, zoom, pan, color_grade, overlay
-- Custom VFX from any prompt (`POST /api/vfx/render?prompt=...`). Keywords map to ffmpeg filters; unknown prompts still produce a playable clip.
+- Custom VFX records by name: `make_vfx()` writes a starter `process(frame)` Python module per effect (`app/backend/video.py:285-321`)
 - Animation writers: JSON, glTF 2.0, BVH, and text FBX.
 - Text objects with texture name, position, style
 - `text_scene` stores a sequence of VFX names on a text object
@@ -72,7 +72,7 @@ Staged:
 
 - Animation export: JSON, glTF 2.0, BVH, and text FBX.
 - MP4 encode is not reachable from the app. `encode_mp4()` exists (`app/backend/export.py:41-70`): it needs ffmpeg on PATH and raises `ValueError("ffmpeg is required to encode MP4")` without it (`export.py:54-55`), then concatenates existing clip files or writes one black segment, with libx264 (`export.py:59-69`). `app/backend/server.py:67` imports it, but no route calls it: there is no `/api/video/encode`, and the frontend never asks for an encode. Whether its output plays is unverified; it has not been run.
-- Custom VFX stubs are not rendered.
+- VFX render does not work. `POST /api/vfx/render` (`app/backend/server.py:1536-1543`) calls `render_vfx()` (`app/backend/video.py:216-235`). Without ffmpeg on PATH it raises `ValueError("ffmpeg is required to render VFX")` (`video.py:224-225`), which the route returns as HTTP 400. With ffmpeg present it calls `_filter_for(text)` (`video.py:229`), which is not defined anywhere in the repo, so it raises `NameError` before ffmpeg runs; the route catches only `ValueError` (`server.py:1542`). The keyword-to-filter table it needs sits unreachable after the `return` in `design_vfx()` (`video.py:263-282`). Verified on the box's Linux ffmpeg only, by calling `render_vfx()` directly; the HTTP status for the `NameError` case is from reading the code, not from a request. The frontend does not call this route. The custom VFX modules written by `make_vfx()` are not rendered either.
 
 ## Tools
 
