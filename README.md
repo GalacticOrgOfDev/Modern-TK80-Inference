@@ -36,7 +36,6 @@ Ships:
 - 16-step sequencer, BPM set/detect, loop generation
 - Clip edits rewrite WAV: trim, reverse, gain, silence, fade
 - Effects: normalize, compress, morph, delay, simple reverb
-- 30-band EQ (100 Hz–20 kHz): UI and plumbing exist, but processing is not yet frequency-selective (boosting one band raises 200 Hz, 1 kHz and 5 kHz equally). Marked shipped again once frequency-selective tests pass.
 - Undo (20 steps)
 - Play mix and bounce to stereo WAV
 - Stored formats: WAV, MP3, FLAC, OGG, AIFF, M4A, AAC, WMA. Non-WAV converts via ffmpeg before edit.
@@ -45,6 +44,7 @@ Staged:
 
 - VST maker writes `.cpp` for VST3/JUCE. Binary `.vst3` requires the Steinberg SDK and a C++ toolchain on the machine (`scripts/install_vst3sdk.sh`, then press).
 - VST UI builder: drag-and-drop knobs, sliders, buttons, labels; bind to parameters; export source plus layout JSON. Same SDK requirement for a binary.
+- 30-band EQ (100 Hz–20 kHz): UI and plumbing exist, but processing is not yet frequency-selective (boosting one band raises 200 Hz, 1 kHz and 5 kHz equally). Moves to Ships once frequency-selective tests pass.
 
 ## Video / VFX
 
