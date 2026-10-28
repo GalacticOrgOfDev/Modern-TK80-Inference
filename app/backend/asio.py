@@ -226,16 +226,28 @@ class AsioRecorder:
                 if peak > self._peak:
                     self._peak = peak
 
-        stream = sd.InputStream(
-            device=device["index"],
-            channels=channels,
-            samplerate=sample_rate,
-            blocksize=buffer,
-            dtype="int16",
-            callback=callback,
-            latency="low",
-        )
-        stream.start()
+        stream = None
+        try:
+            stream = sd.InputStream(
+                device=device["index"],
+                channels=channels,
+                samplerate=sample_rate,
+                blocksize=buffer,
+                dtype="int16",
+                callback=callback,
+                latency="low",
+            )
+            stream.start()
+        except BaseException:
+            # Busy or missing device: release the stream and the WAV handle
+            # so the caller can remove the empty take, then re-raise.
+            if stream is not None:
+                try:
+                    stream.close()
+                except Exception:
+                    pass
+            wf.close()
+            raise
 
         self._stream = stream
         self._wave = wf
