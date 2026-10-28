@@ -85,7 +85,9 @@ def detect_bpm(path: Path) -> Dict[str, Any]:
     try:
         with wave.open(str(path), "rb") as w:
             rate = w.getframerate()
+            width = w.getsampwidth()
             raw = w.readframes(w.getnframes())
+        raw = _audio.pcm_to_int16(raw, width)  # 24/32-bit to 16-bit; 8-bit raises
     except Exception as e:
         return {"bpm": DEFAULT_BPM, "confidence": 0.0, "error": str(e)}
 

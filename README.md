@@ -38,7 +38,7 @@ Ships:
 - Effects: normalize, compress, morph, delay, simple reverb
 - 30-band EQ: RBJ peaking biquads, 30 log-spaced bands from 100 Hz to 20 kHz; bands at or above Nyquist are skipped. 16-bit WAV only. Verified by measurement (sine-wave level tests), not yet judged by ear. Applying it to a 3-minute 44.1 kHz stereo track takes about 7 seconds end to end (measured 7.39 s with 3 bands, 7.37 s with all 30; the EQ step alone 3.6 to 4.3 s). Earlier builds were not frequency-selective: boosting one band raised 200 Hz, 1 kHz and 5 kHz equally.
 - Undo (20 steps)
-- Play mix and bounce to stereo WAV
+- Play mix and bounce to 16-bit stereo WAV. Clips may be 16-, 24- or 32-bit integer PCM WAV (24/32-bit rounded to 16-bit, no dither); 8-bit and 32-bit float WAV are refused with a 400. Clip edits and effects are still 16-bit only
 - Stored formats: WAV, MP3, FLAC, OGG, AIFF, M4A, AAC, WMA. Non-WAV converts via ffmpeg before edit.
 
 Staged:

@@ -1,7 +1,8 @@
 """A clip the mixdown cannot use is an error, never a silent drop.
 
 Before this, mix_arrangement skipped a clip whose file was missing or
-unreadable, was not 16-bit, or did not match the project sample rate, and
+unreadable, was not 16-bit (24- and 32-bit integer PCM now mix, see
+test_mix_bitdepth; 8-bit and float are still refused), or did not match the project sample rate, and
 /api/audio/mix and /api/audio/bounce returned a silent (or empty) mix as
 if nothing had gone wrong. Now mix_arrangement raises UnmixableClipError
 (a ValueError) naming every such clip and why, before it writes a file,
@@ -35,6 +36,15 @@ def _write(path: Path, channels=2, width=2, rate=RATE, value=1000) -> Path:
         else:
             frame = b"\x40" * (width * channels)
         w.writeframes(frame * FRAMES)
+    return path
+
+
+def _write_float(path: Path, channels=2, rate=RATE) -> Path:
+    """An IEEE float WAV (format code 3), which wave cannot write."""
+    data = struct.pack("<f", 0.25) * (channels * FRAMES)
+    fmt = struct.pack("<HHIIHH", 3, channels, rate, rate * 4 * channels, 4 * channels, 32)
+    body = b"WAVE" + b"fmt " + struct.pack("<I", len(fmt)) + fmt + b"data" + struct.pack("<I", len(data)) + data
+    path.write_bytes(b"RIFF" + struct.pack("<I", len(body)) + body)
     return path
 
 
@@ -75,8 +85,8 @@ class _Base(unittest.TestCase):
             return self.clip(cid, p)
         if kind == "8bit":
             return self.clip(cid, _write(self.dir / "b8.wav", width=1))
-        if kind == "24bit":
-            return self.clip(cid, _write(self.dir / "b24.wav", width=3))
+        if kind == "float":
+            return self.clip(cid, _write_float(self.dir / "f32.wav"))
         if kind == "rate":
             return self.clip(cid, _write(self.dir / "r2k.wav", rate=2 * RATE))
         raise AssertionError(kind)
@@ -87,7 +97,7 @@ class MixArrangementRaises(_Base):
         "missing": "missing",
         "unreadable": "unreadable",
         "8bit": "8-bit",
-        "24bit": "24-bit",
+        "float": "32-bit float WAV; only integer PCM can be mixed",
         "rate": "2000 Hz",
     }
 
@@ -109,7 +119,7 @@ class MixArrangementRaises(_Base):
     def test_nothing_written_when_a_clip_is_unmixable(self):
         good = self.clip(1, _write(self.dir / "ok.wav"))
         with self.assertRaises(audio.UnmixableClipError):
-            audio.mix_arrangement([good, self.bad_clip("24bit")], self.tracks, RATE, "mix.wav")
+            audio.mix_arrangement([good, self.bad_clip("float")], self.tracks, RATE, "mix.wav")
         self.assertEqual(list(self.out.iterdir()), [])
 
     def test_every_bad_clip_is_listed(self):
@@ -124,7 +134,7 @@ class MixArrangementRaises(_Base):
         ok = self.clip(1, _write(self.dir / "ok.wav"))
         muted = self.bad_clip("missing", 2)
         muted["mute"] = True
-        silenced = self.bad_clip("24bit", 3)
+        silenced = self.bad_clip("float", 3)
         silenced["silenced"] = True
         audio.mix_arrangement([ok, muted, silenced], tracks, RATE, "a.wav")
         tracks[1]["mute"] = True
@@ -152,6 +162,14 @@ class NormalClipsUnchanged(_Base):
             self.assertLessEqual(abs(samples[2 * i] - 1000), 1)
             self.assertLessEqual(abs(samples[2 * i + 1] - 1001), 1)
         self.assertEqual(samples[-2:], [0, 0])
+
+    def test_24bit_now_mixes(self):
+        """Was an error before 24/32-bit integer PCM support; see test_mix_bitdepth."""
+        clip = self.clip(1, _write(self.dir / "b24.wav", width=3))
+        ch, samples = _read(audio.mix_arrangement([clip], self.tracks, RATE, "mix.wav"))
+        self.assertEqual(ch, 2)
+        self.assertEqual(len(samples), 2 * (FRAMES + 1))
+        self.assertTrue(any(samples))
 
     def test_mono_16bit_goes_to_both_sides(self):
         clip = self.clip(1, _write(self.dir / "mono.wav", channels=1, value=2000))

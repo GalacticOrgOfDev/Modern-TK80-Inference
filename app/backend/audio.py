@@ -16,6 +16,8 @@ import wave
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import numpy as np
+
 from .daw_state import DEFAULT_TRACK_TYPE, TRACK_TYPES
 from .formats import AUDIO_PROCESS, AUDIO_STORE, is_audio, is_processable_audio
 from .paths import reserve_unique, resolve_root, safe_filename
@@ -153,6 +155,67 @@ def apply_fade(samples: List[int], rate: int, channels: int, fade_in: float = 0.
     return out
 
 
+WAVE_FORMAT_IEEE_FLOAT = 3
+WAVE_FORMAT_EXTENSIBLE = 0xFFFE
+FLOAT_WAV_REASON = "32-bit float WAV; only integer PCM can be mixed"
+
+
+def wav_format_code(path: Path) -> Optional[int]:
+    """The WAV format code from the fmt chunk (1 = PCM, 3 = IEEE float).
+
+    For WAVE_FORMAT_EXTENSIBLE the code of the subformat GUID is returned.
+    None if the file is not RIFF/WAVE or has no fmt chunk. Opening a
+    missing file raises FileNotFoundError.
+    """
+    with open(path, "rb") as f:
+        head = f.read(12)
+        if len(head) < 12 or head[:4] != b"RIFF" or head[8:12] != b"WAVE":
+            return None
+        while True:
+            hdr = f.read(8)
+            if len(hdr) < 8:
+                return None
+            size = struct.unpack_from("<I", hdr, 4)[0]
+            if hdr[:4] == b"fmt ":
+                body = f.read(min(size, 40))
+                if len(body) < 2:
+                    return None
+                code = struct.unpack_from("<H", body)[0]
+                if code == WAVE_FORMAT_EXTENSIBLE and len(body) >= 26:
+                    code = struct.unpack_from("<H", body, 24)[0]
+                return code
+            f.seek(size + (size & 1), 1)
+
+
+def pcm_to_int16(raw: bytes, width: int) -> bytes:
+    """Little-endian signed integer PCM of 2, 3 or 4 bytes to 16-bit PCM.
+
+    16-bit is returned unchanged. 24- and 32-bit drop the low 8 or 16 bits
+    by rounding to the nearest 16-bit step, ties to even (integer math, no
+    dither), then clamp to -32768..32767. Only +full scale needs the clamp
+    (0x7FFFFF and 0x7FFFFFFF round up to 32768); -full scale is exactly
+    -32768, so nothing wraps around.
+    """
+    if width == 2:
+        return raw
+    if width not in (3, 4):
+        raise ValueError(f"{8 * width}-bit PCM cannot be converted to 16-bit")
+    n = len(raw) // width
+    if width == 3:
+        b = np.frombuffer(raw[: n * 3], dtype=np.uint8).reshape(n, 3).astype(np.int64)
+        v = b[:, 0] | (b[:, 1] << 8) | (b[:, 2] << 16)
+        v = np.where(v & 0x800000, v - (1 << 24), v)
+        shift = 8
+    else:
+        v = np.frombuffer(raw[: n * 4], dtype="<i4").astype(np.int64)
+        shift = 16
+    q = v >> shift  # floor
+    r = v & ((1 << shift) - 1)
+    half = 1 << (shift - 1)
+    q = q + ((r > half) | ((r == half) & ((q & 1) == 1)))
+    return np.clip(q, -32768, 32767).astype("<i2").tobytes()
+
+
 def _read_wav(path: Path) -> Tuple[int, int, int, bytes]:
     """read wav."""
     with wave.open(str(path), "rb") as w:
@@ -185,8 +248,9 @@ def wav_peaks(path: Path, buckets: int = 64) -> List[float]:
     """wav peaks."""
     try:
         rate, channels, width, raw = _read_wav(path)
-        if width != 2 or not raw:
+        if width not in (2, 3, 4) or not raw:
             return [0.0] * buckets
+        raw = pcm_to_int16(raw, width)
         frames = len(raw) // (2 * max(1, channels))
         if frames == 0:
             return [0.0] * buckets
@@ -366,9 +430,12 @@ def mix_arrangement(
     the right side by 1 + pan, pan > 0 scales the left side by 1 - pan.
     Master compressor is applied to the sum if enabled.
 
-    Every clip that would play must be a readable 16-bit WAV at ``rate``
-    (mono or stereo). If any is not, UnmixableClipError names each one
-    and why, and no file is written. A muted master writes silence
+    Every clip that would play must be a readable 16-, 24- or 32-bit
+    integer PCM WAV at ``rate`` (mono or stereo). 24- and 32-bit are
+    converted to 16-bit first (pcm_to_int16: round to nearest, ties to
+    even, clamp; no dither). 8-bit and 32-bit float WAV are refused. If
+    any clip cannot be mixed, UnmixableClipError names each one and why,
+    and no file is written. A muted master writes silence
     without checking clips. A clip with no path is a placeholder and is
     skipped, as before.
     """
@@ -409,16 +476,23 @@ def mix_arrangement(
             continue
         reason = None
         try:
-            c_rate, c_ch, c_w, raw = _read_wav(Path(clip["path"]))
+            if wav_format_code(Path(clip["path"])) == WAVE_FORMAT_IEEE_FLOAT:
+                reason = FLOAT_WAV_REASON
+            else:
+                c_rate, c_ch, c_w, raw = _read_wav(Path(clip["path"]))
         except FileNotFoundError:
             reason = "file missing"
         except Exception as e:  # wave.Error, EOFError, OSError, ...
             reason = f"unreadable WAV ({type(e).__name__}: {e})"
         else:
-            if c_w != 2:
-                reason = f"{8 * c_w}-bit WAV; only 16-bit can be mixed"
+            if reason:
+                pass
+            elif c_w not in (2, 3, 4):
+                reason = f"{8 * c_w}-bit WAV; only 16-, 24- and 32-bit integer PCM can be mixed"
             elif c_rate != rate:
                 reason = f"sample rate {c_rate} Hz does not match the project's {rate} Hz"
+            else:
+                raw = pcm_to_int16(raw, c_w)
         if reason:
             problems.append({"clip_id": clip.get("id"), "name": clip.get("name", ""), "reason": reason})
         else:

@@ -16,7 +16,7 @@ The Modern-TK80 mini DAW is a native Windows desktop studio. Audio I/O is ASIO (
 - Clips live on a track with timeline position, gain, and mute
 - Edits rewrite the WAV: trim, reverse, gain, silence
 - Per-clip level fader and mute toggle
-- True 16-bit peaks for the waveform
+- Waveform peaks from 16-bit WAV, and from 24- and 32-bit integer PCM after the same 16-bit conversion the mix uses
 ## Formats
 
 Shared catalog in `formats.py`. Endpoint: `GET /api/formats`.
@@ -44,7 +44,7 @@ Applied per clip and written back to a new WAV:
 - Play mix and bounce the arrangement to a stereo WAV
 - Respects track mute/solo/gain/pan, clip mute/gain, channel, position, and master bus
 - Master bus has gain, mute, and compressor
-- Every clip that plays must be a 16-bit WAV at the project sample rate (mono or stereo). If one is not, or its file is missing or unreadable, mix and bounce return 400 naming each clip and why, and write nothing. Mute the clip to mix without it. A muted master still writes silence without checking clips.
+- Every clip that plays must be a 16-, 24- or 32-bit integer PCM WAV at the project sample rate (mono or stereo). 24- and 32-bit are converted to 16-bit before mixing: round to nearest, ties to even, clamped, no dither. The mix output is 16-bit stereo. 8-bit WAV and 32-bit float WAV are refused (float gets its own reason). If a clip cannot be mixed, or its file is missing or unreadable, mix and bounce return 400 naming each clip and why, and write nothing. Mute the clip to mix without it. A muted master still writes silence without checking clips.
 
 ## Instruments and sequencer
 
@@ -109,7 +109,8 @@ Pressing a binary:
 
 ## Limits
 
-- Processing is 16-bit PCM WAV only
+- Clip edits (`/api/audio/edit`) and effects (`/api/audio/clips/effect`, including EQ) are 16-bit PCM WAV only; a 24- or 32-bit clip gets a 400 "only 16-bit WAV is supported". Mix, bounce, waveform peaks and BPM detect read 16-, 24- and 32-bit integer PCM
+- ASIO recording writes 16-bit WAV only (`asio.py` opens the stream as int16)
 - Non-WAV formats are stored; edit decodes them via ffmpeg, mix does not (a non-WAV clip fails the mix as unreadable)
 - No VST host yet; the maker produces source
 - No multi-level undo UI; the stack is tool-driven
