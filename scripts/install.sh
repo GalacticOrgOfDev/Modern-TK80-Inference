@@ -28,4 +28,3 @@ if [[ -x "$ROOT/scripts/build_llama_cuda.sh" ]]; then
 fi
 
 echo "Install pass complete."
-file_path="/workspace/artifacts/Modern-TK80-Inference/scripts/install.sh"

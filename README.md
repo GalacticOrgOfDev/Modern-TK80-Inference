@@ -127,4 +127,3 @@ python -m pytest tests/
 - DAW mix and bounce produce WAV.
 - Video encode and real VFX rendering are staged.
 - Dual-die fusion is a plan, not a runtime.
-file_path="/workspace/artifacts/Modern-TK80-Inference/README.md"

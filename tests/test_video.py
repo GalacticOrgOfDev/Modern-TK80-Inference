@@ -17,4 +17,3 @@ def test_split_audio_rejects_non_video(tmp_path):
     bad.write_text("x")
     with pytest.raises(ValueError):
         split_audio(bad)
-file_path="/workspace/artifacts/Modern-TK80-Inference/tests/test_video.py"

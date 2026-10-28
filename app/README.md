@@ -33,4 +33,3 @@ Connect is manual. The DAW does not need a GPU.
 ## Packaging
 
 `Modern-TK80.exe` via `MTK80Setup.msi`. See `packaging/README.md`.
-file_path="/workspace/artifacts/Modern-TK80-Inference/app/README.md"

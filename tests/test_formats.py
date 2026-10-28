@@ -18,4 +18,3 @@ def test_audio_formats():
     assert is_audio(Path("a.mp3"))
     assert is_processable_audio(Path("a.flac"))
     assert ".wma" in AUDIO_STORE
-file_path="/workspace/artifacts/Modern-TK80-Inference/tests/test_formats.py"

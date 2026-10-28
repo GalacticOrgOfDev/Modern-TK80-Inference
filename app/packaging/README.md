@@ -27,4 +27,3 @@ Target artifact: `Modern-TK80.exe` installed by `MTK80Setup.msi`.
 ## Status
 
 The WiX skeleton is in `Product.wxs`. It is not a signed production MSI yet.
-file_path="/workspace/artifacts/Modern-TK80-Inference/app/packaging/README.md"

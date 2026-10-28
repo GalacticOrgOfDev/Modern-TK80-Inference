@@ -117,4 +117,3 @@ Pressing a binary:
 - No VST host yet; the maker produces source
 - No multi-level undo UI; the stack is tool-driven
 """
-file_path="/workspace/artifacts/Modern-TK80-Inference/app/backend/DAW.md"

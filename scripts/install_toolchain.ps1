@@ -18,4 +18,3 @@ if (-not (Test-Path "$sdk\.git")) {
 Write-Host "SDK at $sdk"
 Write-Host "Accept the Steinberg license at https://github.com/steinbergmedia/vst3sdk"
 Write-Host "Toolchain install complete."
-file_path="/workspace/artifacts/Modern-TK80-Inference/scripts/install_toolchain.ps1"

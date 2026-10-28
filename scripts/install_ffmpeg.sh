@@ -28,4 +28,3 @@ fi
 
 echo "ffmpeg install finished. Open a new shell if the command is not yet visible."
 """
-file_path="/workspace/artifacts/Modern-TK80-Inference/scripts/install_ffmpeg.sh"

@@ -14,4 +14,3 @@ def test_eq_band_count_and_range():
 def test_vst_presets_include_core():
     for name in ("reverb", "delay", "eq", "compressor", "custom"):
         assert name in EFFECT_PRESETS
-file_path="/workspace/artifacts/Modern-TK80-Inference/tests/test_eq_and_vst.py"

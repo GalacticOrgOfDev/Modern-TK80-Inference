@@ -54,4 +54,3 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "Setup complete."
-file_path="/workspace/artifacts/Modern-TK80-Inference/scripts/install.ps1"
