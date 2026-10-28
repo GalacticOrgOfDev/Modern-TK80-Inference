@@ -271,6 +271,7 @@ def make_track(
         "type": track_type,
         "channel": channel,
         "gain": 1.0,
+        "pan": 0.0,
         "mute": False,
         "solo": False,
         "armed": False,
@@ -360,6 +361,9 @@ def mix_arrangement(
     (a silenced clip still counts toward the mix length).
     Each clip plays its trim window, reversed if flagged (see _clip_window).
     Clip gain, track gain, and master gain multiply.
+    Track pan (-1..1, default 0) is a balance control applied after the
+    channel routing: centre leaves both sides as they are, pan < 0 scales
+    the right side by 1 + pan, pan > 0 scales the left side by 1 - pan.
     Master compressor is applied to the sum if enabled.
 
     Every clip that would play must be a readable 16-bit WAV at ``rate``
@@ -439,6 +443,9 @@ def mix_arrangement(
         frame_size = max(1, c_ch)
         gain = float(clip.get("gain", 1.0)) * float(track.get("gain", 1.0))
         channel = track.get("channel", "stereo")
+        pan = max(-1.0, min(1.0, float(track.get("pan") or 0.0)))
+        pan_left = 1.0 - pan if pan > 0 else 1.0
+        pan_right = 1.0 + pan if pan < 0 else 1.0
         pos = int(float(clip.get("position", 0)) * rate)
         frames = len(samples) // frame_size
         for i in range(frames):
@@ -452,8 +459,8 @@ def mix_arrangement(
                 right_s = 0.0
             elif channel == "right":
                 left_s = 0.0
-            left[idx] += left_s
-            right[idx] += right_s
+            left[idx] += left_s * pan_left
+            right[idx] += right_s * pan_right
 
     # Master gain, then optional compressor on the sum.
     comp = master.get("compressor") or {}

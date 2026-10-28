@@ -28,7 +28,7 @@ Requires `pywebview`. Install with `scripts/install.sh` or `pip install -r requi
 
 Ships:
 
-- Tracks with stereo / left / right, level, mute, solo, arm
+- Tracks with stereo / left / right, level, pan (mix and bounce only), mute, solo, arm
 - Master bus with level, mute, compressor
 - ASIO recording (sounddevice). Scarlett 2i2 Gen 1/2 profile when the device name matches
 - Sample rate default 44100 Hz

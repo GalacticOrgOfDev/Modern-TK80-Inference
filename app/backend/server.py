@@ -6,6 +6,7 @@ Modern-TK80 is a Windows desktop app. Audio devices are native ASIO
 
 from __future__ import annotations
 
+import math
 import logging
 from pathlib import Path
 import json as _json
@@ -583,6 +584,7 @@ class TrackUpdate(BaseModel):
     device_label: Optional[str] = None
     sample_rate: Optional[int] = None
     type: Optional[str] = None  # "audio" or "instrument"; "instrument" shows the sequencer
+    pan: Optional[float] = None  # -1 (left) .. 0 (centre) .. 1 (right); applied in mix and bounce
 
 
 class AudioSettingsRequest(BaseModel):
@@ -1265,6 +1267,8 @@ def update_track(track_id: int, body: TrackUpdate) -> Dict[str, Any]:
             raise HTTPException(status_code=400, detail=str(e)) from e
     if "channel" in data and data["channel"] not in ("stereo", "left", "right"):
         raise HTTPException(status_code=400, detail="channel must be stereo, left, or right")
+    if "pan" in data and not (math.isfinite(data["pan"]) and -1.0 <= data["pan"] <= 1.0):
+        raise HTTPException(status_code=400, detail="pan must be between -1 and 1")
     if "sample_rate" in data and data["sample_rate"] not in COMMON_RATES:
         raise HTTPException(status_code=400, detail="unsupported sample rate")
 

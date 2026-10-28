@@ -6,6 +6,7 @@ The Modern-TK80 mini DAW is a native Windows desktop studio. Audio I/O is ASIO (
 
 - Layered tracks with stereo / left / right channeling
 - Per-track gain, mute, and solo
+- Per-track pan, -1 (left) to 1 (right), a balance control: centre leaves both sides as they are, panning scales the far side down. Applied in mix and bounce after the stereo / left / right channeling; the clip preview player does not pan
 - Arm a track for a detected ASIO input
 - Scarlett 2i2 Gen 1/2 profile detection and rate limits
 - Sample rate default 44100 Hz; common rates up to 192 kHz
@@ -41,7 +42,7 @@ Applied per clip and written back to a new WAV:
 ## Mix and bounce
 
 - Play mix and bounce the arrangement to a stereo WAV
-- Respects track mute/solo/gain, clip mute/gain, channel, position, and master bus
+- Respects track mute/solo/gain/pan, clip mute/gain, channel, position, and master bus
 - Master bus has gain, mute, and compressor
 - Every clip that plays must be a 16-bit WAV at the project sample rate (mono or stereo). If one is not, or its file is missing or unreadable, mix and bounce return 400 naming each clip and why, and write nothing. Mute the clip to mix without it. A muted master still writes silence without checking clips.
 
