@@ -78,6 +78,8 @@ Catalog endpoint: `GET /api/vst/presets`.
 
 VST prompt design: broken since the first commit; returns 501. A non-empty `prompt` on `POST /api/audio/vst` or the `make_vst` tool is refused. Use an effect preset.
 
+Agent drawer "Generate instrument": does not work yet. It posts to `/api/vst/make`, which does not exist (the real route is `/api/audio/vst`). Even with the route fixed, free text in `effect` silently falls back to a plain gain stub.
+
 Pressing a binary:
 
 - `scripts/install_vst3sdk.sh` clones the official Steinberg VST3 SDK after you accept the license.
