@@ -10,11 +10,11 @@ generator, not a binary compiler.
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
 from typing import Any, Dict, Optional
 
-VST_DIR = Path(os.environ.get("TK80_VST", "uploads/vst"))
+from .paths import reserve_unique, resolve_root
+
+VST_DIR = resolve_root("TK80_VST", "uploads/vst")
 VST_DIR.mkdir(parents=True, exist_ok=True)
 
 PLUGIN_TYPES = ("instrument", "effect")
@@ -162,12 +162,7 @@ def make_vst(
     params = _fill_preset_params(effect, params)
 
     source = _render_skeleton(safe_name, plugin_type, effect, channels, params)
-    dest = VST_DIR / f"{safe_name}.cpp"
-    if dest.exists():
-        i = 1
-        while dest.exists():
-            dest = VST_DIR / f"{safe_name}_{i}.cpp"
-            i += 1
+    dest = reserve_unique(VST_DIR, f"{safe_name}.cpp")
     dest.write_text(source, encoding="utf-8")
 
     note = (
@@ -180,6 +175,7 @@ def make_vst(
         "type": plugin_type,
         "effect": effect,
         "path": str(dest),
+        "file_name": dest.name,
         "channels": channels,
         "params": params,
         "note": note,

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 from .audio import UPLOAD_DIR, _pack, _read_wav, _samples, _write_wav
+from .paths import reserve_unique, safe_filename
 
 
 def _peak(samples: List[int]) -> int:
@@ -360,8 +361,6 @@ def apply_effect(
     else:
         raise ValueError(f"unknown effect: {kind}")
 
-    name = out_name or f"{path.stem}_{kind}.wav"
-    dest = UPLOAD_DIR / name
-    if dest.exists():
-        dest = UPLOAD_DIR / f"{path.stem}_{kind}_{len(samples)}.wav"
+    name = safe_filename(out_name, "") or f"{path.stem}_{kind}.wav"
+    dest = reserve_unique(UPLOAD_DIR, name)
     return _write_wav(dest, _pack(samples), rate, channels)

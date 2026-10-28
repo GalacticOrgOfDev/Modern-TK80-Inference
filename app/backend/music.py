@@ -13,7 +13,9 @@ import wave
 from pathlib import Path
 from typing import Any, Dict, List
 
-from .audio import DEFAULT_SAMPLE_RATE, UPLOAD_DIR
+from . import audio as _audio
+from .audio import DEFAULT_SAMPLE_RATE
+from .paths import reserve_unique, safe_filename
 
 DEFAULT_BPM = 120
 STEPS = 16
@@ -187,6 +189,9 @@ def generate_loop(
 
 
 def save_pcm(name: str, pcm: bytes, rate: int) -> Path:
-    """Write PCM to a WAV file and return its path."""
-    path = UPLOAD_DIR / name
+    """Write PCM to a new WAV file in the uploads root and return its path.
+
+    The name loses any directory part; a taken name gets _1, _2, ...
+    """
+    path = reserve_unique(_audio.UPLOAD_DIR, safe_filename(name, "render.wav"))
     return write_wav(path, pcm, rate)

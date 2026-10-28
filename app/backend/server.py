@@ -28,11 +28,12 @@ from .asio import (
     list_asio_devices,
     probe_asio,
 )
+from . import audio as _audio_mod
+from .paths import safe_filename
 from .audio import (
     COMMON_RATES,
     DEFAULT_SAMPLE_RATE,
     SCARLETT_PROFILES,
-    UPLOAD_DIR,
     default_master,
     detect_scarlett,
     make_clip,
@@ -967,7 +968,7 @@ def asio_start(body: AsioStartRequest) -> Dict[str, Any]:
     rate = track.get("sample_rate") or _sample_rate
     _validate_rate_for_track(track, rate)
     channels = 2 if track.get("channel") == "stereo" else 1
-    path = UPLOAD_DIR / f"asio_track{track['id']}.wav"
+    path = _audio_mod.UPLOAD_DIR / f"asio_track{track['id']}.wav"
     try:
         info = _asio_recorder.start(
             path,
@@ -1024,7 +1025,7 @@ def mix_audio() -> Dict[str, Any]:
 @app.post("/api/audio/bounce")
 def bounce_audio(body: BounceRequest) -> Dict[str, Any]:
     """bounce audio."""
-    name = Path(body.name).name or "mix.wav"
+    name = safe_filename(body.name, "mix.wav")
     if not name.endswith(".wav"):
         name += ".wav"
     path = mix_arrangement(_audio_clips, _audio_tracks, _sample_rate, name, _master)

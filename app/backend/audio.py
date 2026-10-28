@@ -9,7 +9,6 @@ timeline position, clip mute, and the master bus.
 
 from __future__ import annotations
 
-import os
 import shutil
 import struct
 import subprocess
@@ -19,8 +18,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .daw_state import DEFAULT_TRACK_TYPE, TRACK_TYPES
 from .formats import AUDIO_PROCESS, AUDIO_STORE, is_audio, is_processable_audio
+from .paths import reserve_unique, resolve_root, safe_filename
 
-UPLOAD_DIR = Path(os.environ.get("TK80_UPLOADS", "uploads/audio"))
+# The one uploads root. server.py and music.py read audio.UPLOAD_DIR at call
+# time, so patching it here moves every audio write.
+UPLOAD_DIR = resolve_root("TK80_UPLOADS", "uploads/audio")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 CHANNELS = ("stereo", "left", "right")
@@ -78,16 +80,16 @@ def detect_scarlett(label: str) -> Optional[Dict[str, Any]]:
 
 
 def save_upload(filename: str, data: bytes) -> Path:
-    """Save an uploaded audio file. Accepts WAV or MP3; returns the path."""
-    safe = Path(filename).name
-    dest = UPLOAD_DIR / safe
-    if dest.exists():
-        stem, suffix = dest.stem, dest.suffix
-        i = 1
-        while dest.exists():
-            dest = UPLOAD_DIR / f"{stem}_{i}{suffix}"
-            i += 1
-    dest.write_bytes(data)
+    """Save an uploaded audio file. Accepts WAV or MP3; returns the path.
+
+    The name loses any directory part; a taken name gets _1, _2, ...
+    """
+    dest = reserve_unique(UPLOAD_DIR, safe_filename(filename, "clip.wav"))
+    try:
+        dest.write_bytes(data)
+    except BaseException:
+        dest.unlink(missing_ok=True)
+        raise
     return dest
 
 
@@ -325,10 +327,8 @@ def process_clip(
     else:
         raise ValueError(f"unknown action: {action}")
 
-    name = out_name or f"{path.stem}_{action}.wav"
-    dest = UPLOAD_DIR / name
-    if dest.exists():
-        dest = UPLOAD_DIR / f"{path.stem}_{action}_{frames}.wav"
+    name = safe_filename(out_name, "") or f"{path.stem}_{action}.wav"
+    dest = reserve_unique(UPLOAD_DIR, name)
     return _write_wav(dest, _pack(samples), rate, channels)
 
 
@@ -348,6 +348,7 @@ def mix_arrangement(
     Master compressor is applied to the sum if enabled.
     """
     master = master or default_master()
+    out_name = safe_filename(out_name, "mix.wav")
     track_by_id = {t["id"]: t for t in tracks}
     any_solo = any(t.get("solo") for t in tracks)
 
@@ -371,7 +372,7 @@ def mix_arrangement(
         active.append((clip, track))
 
     if master.get("mute") or length <= 0 or not active:
-        dest = UPLOAD_DIR / out_name
+        dest = reserve_unique(UPLOAD_DIR, out_name)
         return _write_wav(dest, b"", rate, 2)
 
     total = int(length * rate) + 1
@@ -426,9 +427,7 @@ def mix_arrangement(
         rs = int(max(-1.0, min(1.0, right_s)) * 32767)
         out += struct.pack("<hh", ls, rs)
 
-    dest = UPLOAD_DIR / out_name
-    if dest.exists():
-        dest = UPLOAD_DIR / f"mix_{total}.wav"
+    dest = reserve_unique(UPLOAD_DIR, out_name)
     return _write_wav(dest, bytes(out), rate, 2)
 
 
