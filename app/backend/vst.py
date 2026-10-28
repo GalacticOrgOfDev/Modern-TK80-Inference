@@ -127,6 +127,16 @@ def list_library() -> List[Dict[str, Any]]:
     return "custom"
 
 
+PROMPT_DESIGN_UNAVAILABLE = (
+    "VST prompt design is not available: it has been broken since the first "
+    "commit. Leave the prompt empty and pick an effect preset instead."
+)
+
+
+class PromptDesignUnavailable(NotImplementedError):
+    """Raised when make_vst gets a non-empty prompt."""
+
+
 def make_vst(
     name: str,
     plugin_type: str = "effect",
@@ -135,17 +145,14 @@ def make_vst(
     params: Optional[Dict[str, Any]] = None,
     prompt: str = "",
 ) -> Dict[str, Any]:
-    """Write a VST3 source file from a preset or any free-form prompt.
+    """Write a VST3 source file from an effect preset.
 
-    A prompt designs the plugin: type, parameters, and DSP. Unknown
-    descriptions still produce a buildable source with adjustable knobs.
+    Raises:
+        PromptDesignUnavailable: a non-empty prompt was given. Prompt
+        design has never existed, so a prompt cannot design a plugin.
     """
     if prompt:
-        design = design_from_prompt(prompt)
-        name = name if name and name not in ("Plugin", "GeneratedPlugin") else design["name"]
-        plugin_type = design["plugin_type"]
-        effect = design["effect"]
-        params = {**design["params"], **(params or {})}
+        raise PromptDesignUnavailable(PROMPT_DESIGN_UNAVAILABLE)
     if plugin_type not in PLUGIN_TYPES:
         plugin_type = "effect"
     if effect not in EFFECT_PRESETS:

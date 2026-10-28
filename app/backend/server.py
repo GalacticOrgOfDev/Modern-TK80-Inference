@@ -50,7 +50,7 @@ from .daw_state import (
     restore_clip_snapshot,
 )
 from .effects import apply_effect
-from .vst import make_vst, PLUGIN_TYPES, EFFECT_PRESETS, list_library
+from .vst import make_vst, PLUGIN_TYPES, EFFECT_PRESETS, PromptDesignUnavailable, list_library
 from .vst_ui import (
     OBJECT_TYPES,
     add_object,
@@ -338,7 +338,10 @@ Raises:
         prompt = str(args.get("prompt", ""))
         if plugin_type not in PLUGIN_TYPES:
             plugin_type = "effect"
-        result = make_vst(plugin_name, plugin_type, effect, prompt=prompt)
+        try:
+            result = make_vst(plugin_name, plugin_type, effect, prompt=prompt)
+        except PromptDesignUnavailable as e:
+            raise HTTPException(status_code=501, detail=str(e)) from e
         result["name"] = "make_vst"
         return result
 
@@ -1032,13 +1035,12 @@ def create_vst(body: VstRequest) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail=f"plugin_type must be one of {PLUGIN_TYPES}")
     prompt = body.prompt or ""
     effect = body.effect
-    if prompt:
-        from .vst import effect_from_prompt
-        effect = effect_from_prompt(prompt)
     if effect not in EFFECT_PRESETS:
         effect = "custom"
     try:
         result = make_vst(body.name, body.plugin_type, effect, body.channels, body.params, prompt=prompt)
+    except PromptDesignUnavailable as e:
+        raise HTTPException(status_code=501, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     return result
