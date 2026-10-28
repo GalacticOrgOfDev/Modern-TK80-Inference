@@ -48,6 +48,8 @@ Staged:
 - VST prompt design: broken since the first commit; returns 501. A non-empty `prompt` on `POST /api/audio/vst` or the `make_vst` tool is refused. Use an effect preset.
 - Agent drawer "Generate instrument": does not work yet. It posts to `/api/vst/make`, which does not exist (the real route is `/api/audio/vst`). Even with the route fixed, free text in `effect` silently falls back to a plain gain stub.
 
+Scarlett hardware check (not run on hardware yet): `python scripts\scarlett_check.py` on the Windows PC lists host APIs and devices, tries rate x buffer combinations, records at 16/24/32-bit, plays a test tone and, with `--loopback` and a cable from an output to an input, looks for the tone. It writes `scarlett_report.md` with only what it measured. See `scripts/README.md`. Scarlett support stays unverified until that report exists.
+
 ## Video / VFX
 
 Ships:
