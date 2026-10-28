@@ -12,7 +12,7 @@ Native window via FastAPI and pywebview. Not a browser tab.
 |--------|------------------|----------------|
 | Chat | Multi-turn chat, tool indicator, direct commands | K80 inference when a die is connected |
 | DAW | Tracks, clips, ASIO record, sequencer, instruments, mix, bounce, undo, 30-band EQ | VST binary compile needs the SDK on the machine. VST prompt design is broken since the first commit (returns 501) |
-| Video | Timeline, clips, text, VFX render (ffmpeg), audio split, MP4 encode | Validated glTF/FBX/BVH binaries |
+| Video | Timeline, clips, text, VFX render (ffmpeg), audio split | Validated glTF/FBX/BVH binaries. MP4 encode: a function exists but no route calls it (see Staged below) |
 | Fusion | Status, plan, and an activate/deactivate switch that only sets a flag; no data is moved (`drivers/interconnector/diefusion.py:99-111`) | Dual-die data movement |
 
 Launch:
@@ -66,13 +66,12 @@ Ships:
 - Animation clip records
 - Export timeline as JSON manifest
 - Split audio from a video file via ffmpeg (`POST /api/video/split`)
-- Encode timeline to MP4 via ffmpeg (`POST /api/video/encode`)
 - Video store: MP4, MOV, WebM, AVI, MKV, MPEG, WMV
 
 Staged:
 
 - Animation export: JSON, glTF 2.0, BVH, and text FBX.
-- Full MP4 encode is not implemented.
+- MP4 encode is not reachable from the app. `encode_mp4()` exists (`app/backend/export.py:41-70`): it needs ffmpeg on PATH and raises `ValueError("ffmpeg is required to encode MP4")` without it (`export.py:54-55`), then concatenates existing clip files or writes one black segment, with libx264 (`export.py:59-69`). `app/backend/server.py:67` imports it, but no route calls it: there is no `/api/video/encode`, and the frontend never asks for an encode. Whether its output plays is unverified; it has not been run.
 - Custom VFX stubs are not rendered.
 
 ## Tools
