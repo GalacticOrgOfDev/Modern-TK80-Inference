@@ -27,4 +27,3 @@ else
 fi
 
 echo "ffmpeg install finished. Open a new shell if the command is not yet visible."
-"""
