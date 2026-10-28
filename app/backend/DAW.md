@@ -35,7 +35,7 @@ Applied per clip and written back to a new WAV:
 - compressor (threshold, ratio, makeup)
 - morph envelope (time/gain points)
 - delay (time, feedback, mix)
-- 30-band EQ (100 Hz–20 kHz, log-spaced). UI has a vertical slider per band. Hover shows the current ±dB for that band. Apply sends the 30 gains.
+- 30-band EQ (100 Hz–20 kHz, log-spaced). UI has a vertical slider per band. Hover shows the current ±dB for that band. Apply sends the 30 gains. Not yet frequency-selective: boosting one band raises 200 Hz, 1 kHz and 5 kHz equally (`effects.py`). Marked shipped again once frequency-selective tests pass.
 - simple reverb (room, mix)
 
 ## Mix and bounce

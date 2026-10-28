@@ -11,7 +11,7 @@ Native window via FastAPI and pywebview. Not a browser tab.
 | Studio | What ships today | What is staged |
 |--------|------------------|----------------|
 | Chat | Multi-turn chat, tool indicator, direct commands | K80 inference when a die is connected |
-| DAW | Tracks, clips, ASIO record, sequencer, instruments, mix, bounce, 30-band EQ, undo | VST binary compile needs the SDK on the machine |
+| DAW | Tracks, clips, ASIO record, sequencer, instruments, mix, bounce, undo | VST binary compile needs the SDK on the machine. 30-band EQ: UI and plumbing exist, processing is not yet frequency-selective |
 | Video | Timeline, clips, text, VFX render (ffmpeg), audio split, MP4 encode | Validated glTF/FBX/BVH binaries |
 | Fusion | Status and plan | Dual-die data movement |
 | Fusion | Status and activation plan | Real dual-die data movement |
@@ -35,7 +35,8 @@ Ships:
 - Instruments: kick, snare, hat, bass, lead, pad
 - 16-step sequencer, BPM set/detect, loop generation
 - Clip edits rewrite WAV: trim, reverse, gain, silence, fade
-- Effects: normalize, compress, morph, delay, 30-band EQ (100 Hz–20 kHz), simple reverb
+- Effects: normalize, compress, morph, delay, simple reverb
+- 30-band EQ (100 Hz–20 kHz): UI and plumbing exist, but processing is not yet frequency-selective (boosting one band raises 200 Hz, 1 kHz and 5 kHz equally). Marked shipped again once frequency-selective tests pass.
 - Undo (20 steps)
 - Play mix and bounce to stereo WAV
 - Stored formats: WAV, MP3, FLAC, OGG, AIFF, M4A, AAC, WMA. Non-WAV converts via ffmpeg before edit.
