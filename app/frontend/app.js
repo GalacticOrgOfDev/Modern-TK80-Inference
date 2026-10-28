@@ -347,6 +347,7 @@ async function refreshTracks() {
     list.appendChild(row);
   }
   updateScarlettBadge();
+  drawArrange();
 }
 
 
@@ -650,13 +651,17 @@ function drawArrange() {
     });
   }
   const px = 40;
+  // Lane = the track's row in the rendered track list (same order as audioTracks),
+  // so lanes stay aligned with headers when track ids have gaps after deletes.
+  const laneOf = new Map(audioTracks.map((t, i) => [t.id, i]));
   for (const c of audioClips) {
     const div = document.createElement("div");
     div.dataset.id = String(c.id);
     div.className = "daw-clip" + (c.mute ? " muted" : "") + (c.reversed ? " reversed" : "") + (c.silenced ? " silenced" : "");
     div.style.left = ((c.position || 0) * px) + "px";
     div.style.width = Math.max(24, (c.duration || 1) * px) + "px";
-    div.style.top = ((c.track_id || 0) * 36 + 4) + "px";
+    const lane = laneOf.has(c.track_id) ? laneOf.get(c.track_id) : (c.track_id || 0);
+    div.style.top = (lane * 36 + 4) + "px";
     div.textContent = (c.silenced ? "SIL " : "") + (c.reversed ? "REV " : "") + (c.name || ("#" + c.id));
     div.onclick = () => selectClip(c);
     div.oncontextmenu = (ev) => { selectClip(c); showClipMenu(ev, c); };
