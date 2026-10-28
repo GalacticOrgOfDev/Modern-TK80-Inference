@@ -229,32 +229,34 @@ Args:
         )
 
 
-def _refresh_clip(clip: Dict[str, Any], path: Path) -> None:
-    """Rebuild a clip dict from a new file while keeping mute, effects, gain, and position.
+def _refresh_clip(clip: Dict[str, Any], path: Path, reset: tuple = ()) -> None:
+    """Point a clip at a rewritten file, in place.
+
+The file-derived fields (path, name, duration, start, end, peaks) are
+rebuilt from the new file by make_clip. Every other field (gain, mute,
+position, track_id, effects, trim_in, trim_out, reversed, silenced, ...)
+is kept, because apply_effect writes the whole source processed at the same
+length, so they still mean the same thing. Keys in `reset` are removed:
+callers that bake a window or a reversal pass ("trim_in", "trim_out").
 
 Args:
     clip: Existing clip dict.
-    path: New audio file path."""
-    kept = {
-        "mute": clip.get("mute", False),
-        "effects": clip.get("effects"),
-        "gain": clip.get("gain", 1.0),
-        "position": clip.get("position", 0.0),
-        "track_id": clip.get("track_id"),
-    }
+    path: New audio file path.
+    reset: Clip keys to drop because the new file already bakes them."""
     fresh = make_clip(
         clip["id"],
         path.name,
         path,
-        track_id=kept["track_id"],
+        track_id=clip.get("track_id"),
         sample_rate=clip.get("sample_rate", _sample_rate),
-        position=kept["position"],
+        position=clip.get("position", 0.0),
     )
-    fresh["mute"] = kept["mute"]
-    if kept["effects"]:
-        fresh["effects"] = kept["effects"]
-    clip.clear()
-    clip.update(fresh)
+    for key in ("path", "name", "duration", "start", "end", "peaks"):
+        clip[key] = fresh[key]
+    if not clip.get("effects"):
+        clip["effects"] = fresh["effects"]
+    for key in reset:
+        clip.pop(key, None)
 
 
 def _dispatch_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
@@ -1498,9 +1500,11 @@ def edit_audio(body: AudioEditRequest) -> Dict[str, Any]:
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
-    _refresh_clip(clip, new_path)
-    if body.action == "reverse":
-        clip["reversed"] = not clip.get("reversed", False)
+    # trim writes only the window and reverse writes the file reversed, so the
+    # old trim offsets no longer point at the same audio. The reversed flag is
+    # left as it was: the file already holds the reversal.
+    baked = ("trim_in", "trim_out") if body.action in ("trim", "reverse") else ()
+    _refresh_clip(clip, new_path, reset=baked)
     return clip
 
 
