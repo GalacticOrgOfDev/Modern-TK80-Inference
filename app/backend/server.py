@@ -6,6 +6,7 @@ Modern-TK80 is a Windows desktop app. Audio devices are native ASIO
 
 from __future__ import annotations
 
+import copy
 import math
 import logging
 from pathlib import Path
@@ -160,7 +161,7 @@ def get_fusion() -> DieFusionCore:
 
 def _push_undo(kind: str, data: Dict[str, Any]) -> None:
     """Keep a short undo stack for audio edits. Stores a snapshot."""
-    _undo_stack.append({"kind": kind, "data": dict(data)})
+    _undo_stack.append({"kind": kind, "data": copy.deepcopy(data)})
     if len(_undo_stack) > _MAX_UNDO:
         _undo_stack.pop(0)
 
@@ -1433,7 +1434,7 @@ window backwards, so its timeline-left half takes the end of the window."""
     if length <= 0 or into <= 0 or into >= length:
         return {"clips": _audio_clips}
     cut = trim_out - into if clip.get("reversed") else trim_in + into
-    right = dict(clip)
+    right = copy.deepcopy(clip)
     right["id"] = _clip_ids.next_id()
     right["position"] = start + into
     right["duration"] = length - into

@@ -11,6 +11,7 @@ Id rules:
 
 from __future__ import annotations
 
+import copy
 from typing import Any, Dict, Iterable, List, Optional
 
 TRACK_TYPES = ("audio", "instrument")
@@ -92,9 +93,9 @@ def restore_clip_snapshot(
         return "dropped"
     for i, clip in enumerate(clips):
         if clip.get("id") == clip_id:
-            clips[i] = dict(snapshot)
+            clips[i] = copy.deepcopy(snapshot)
             return "replaced"
-    clips.append(dict(snapshot))
+    clips.append(copy.deepcopy(snapshot))
     return "appended"
 
 
