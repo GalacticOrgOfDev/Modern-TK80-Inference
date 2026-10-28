@@ -120,6 +120,11 @@ See `app/packaging/README.md`. Today `app/packaging/Product.wxs` installs only `
 python -m pytest tests/
 ```
 
+pytest was not installed where the counts below were taken, so this command has not been run for them. Results at commit `64b87f7`, Python 3.13, Linux, no GPU or audio hardware:
+
+- `python3 -m unittest discover -s tests -t .` ran 177 and reported `FAILED (errors=1)`. The 177 are 176 real test methods plus one failed import: `tests/test_video.py` imports pytest, which was missing. All 176 test methods passed.
+- A local harness script (not in the repo) imports each test module, runs its unittest cases and also calls its plain `test_` functions, which unittest discovery does not collect. It reported 180 run, 0 failed: the same 176 plus 4 plain functions (2 in `tests/test_formats.py`, 2 in `tests/test_eq_and_vst.py`). It skips `tests/test_video.py` for the same missing pytest, so that file's 2 tests did not run.
+
 ## Status
 
 - App launches without a K80. Connect is a button.
