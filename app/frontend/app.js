@@ -120,9 +120,16 @@ function startLevelPoll() {
     }
     try {
       const data = await api("/api/audio/asio/levels");
+      if (data.recording === false) {
+        // The server says no stream is open; stop polling. Stop still returns the UI to idle.
+        stopLevelPoll();
+        showRecError("ASIO recorder is not running on the server. Press Stop.");
+        return;
+      }
       if (data.peaks && data.peaks.length) drawLive(data.peaks);
     } catch (e) {
-      /* ignore */
+      const text = `ASIO level meter failed: ${e.message}`;
+      if (text !== lastRecError) showRecError(text);
     }
   }, 80);
 }
@@ -132,6 +139,15 @@ function stopLevelPoll() {
     clearInterval(levelTimer);
     levelTimer = null;
   }
+}
+
+// Recording/ASIO problems go to the existing transport status line (textContent, so
+// server text is never parsed as HTML). Repeated identical messages are not rewritten.
+let lastRecError = "";
+function showRecError(text) {
+  lastRecError = text;
+  const status = document.getElementById("audio-transport-status");
+  if (status) status.textContent = text;
 }
 
 let detectedScarlett = null;
@@ -716,9 +732,12 @@ async function detectDevices() {
   try {
     const data = await api("/api/audio/asio/devices");
     const devices = data.devices || [];
+    const probeError = data.probe && data.probe.error;
+    if (probeError) showRecError(`ASIO probe failed: ${probeError}`);
     if (!devices.length) {
       const reason = data.probe && data.probe.reason ? data.probe.reason : "No ASIO inputs";
       sel.innerHTML = `<option value="">${escapeHtml(reason)}</option>`;
+      if (asioEnabled && !probeError) showRecError(`ASIO: ${reason}`);
       return;
     }
     for (const d of devices) {
@@ -734,6 +753,7 @@ async function detectDevices() {
     updateScarlettBadge();
   } catch (e) {
     sel.innerHTML = `<option value="">${escapeHtml(e.message)}</option>`;
+    showRecError(`ASIO device list failed: ${e.message}`);
   }
 }
 
@@ -1332,8 +1352,11 @@ async function stopRecording() {
       await refreshClips();
       document.getElementById("audio-transport-status").textContent =
         `ASIO recorded to track ${info.clip ? info.clip.track_id : "?"}`;
+      // 200 with a driver status (e.g. input overflow) from the stream callback.
+      if (info.error) showRecError(`ASIO recorded to track ${info.clip ? info.clip.track_id : "?"}, driver reported: ${info.error}`);
     } catch (e) {
       asioRecording = false;
+      showRecError(`ASIO stop failed: ${e.message}`);
       alert(e.message);
     }
     return;
@@ -1388,11 +1411,27 @@ function clipSpan() {
     alert("Enable ASIO first. Modern-TK80 records through the native ASIO path.");
     return;
   }
+  let info;
   try {
-    const info = await api("/api/audio/asio/start", {
+    info = await api("/api/audio/asio/start", {
       method: "POST",
       body: JSON.stringify({ track_id: track.id }),
     });
+  } catch (e) {
+    if (/already recording/i.test(e.message)) {
+      // The server has a take open: keep (or enter) recording state so Stop can end it.
+      asioRecording = true;
+    } else {
+      // Back to idle: no stream was opened, so no meter, placeholder clip or recording flag.
+      asioRecording = false;
+      stopLevelPoll();
+      removeRecClip();
+    }
+    showRecError(`ASIO start failed: ${e.message}`);
+    alert("ASIO start failed: " + e.message);
+    return;
+  }
+  try {
     asioRecording = true;
     recStart = playheadSec;
     startPlayhead(playheadSec, 1);
