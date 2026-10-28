@@ -34,7 +34,7 @@ Ships:
 - Sample rate default 44100 Hz
 - Instruments: kick, snare, hat, bass, lead, pad
 - 16-step sequencer, BPM set/detect, loop generation
-- Clip edits rewrite WAV: trim, reverse, gain, silence, fade
+- Clip edits rewrite WAV: trim, reverse, gain, silence. No fade yet: there is no fade endpoint or control
 - Effects: normalize, compress, morph, delay, simple reverb
 - 30-band EQ: RBJ peaking biquads, 30 log-spaced bands from 100 Hz to 20 kHz; bands at or above Nyquist are skipped. 16-bit WAV only. Verified by measurement (sine-wave level tests), not yet judged by ear. Applying it to a 3-minute 44.1 kHz stereo track takes about 7 seconds end to end (measured 7.39 s with 3 bands, 7.37 s with all 30; the EQ step alone 3.6 to 4.3 s). Earlier builds were not frequency-selective: boosting one band raised 200 Hz, 1 kHz and 5 kHz equally.
 - Undo (20 steps)
