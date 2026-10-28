@@ -41,6 +41,14 @@ from .audio import (
     process_clip,
     save_upload,
 )
+from .daw_state import (
+    DEFAULT_TRACK_TYPE,
+    IdCounter,
+    check_track_type,
+    find_by_id,
+    remove_track,
+    restore_clip_snapshot,
+)
 from .effects import apply_effect
 from .vst import make_vst, PLUGIN_TYPES, EFFECT_PRESETS, list_library
 from .vst_ui import (
@@ -103,6 +111,10 @@ _audio_tracks: List[Dict[str, Any]] = [
     make_track(i, f"Audio {i + 1}", "stereo", 44100) for i in range(4)
 ]
 _audio_clips: List[Dict[str, Any]] = []
+# Ids come from counters, never from list length or position, so a deleted
+# track or clip id is never reused. Undo does not touch the counters.
+_track_ids = IdCounter.after(_audio_tracks)
+_clip_ids = IdCounter.after(_audio_clips)
 _undo_stack: List[Dict[str, Any]] = []
 _MAX_UNDO = 20
 _video_frames: List[Dict[str, Any]] = []
@@ -150,23 +162,40 @@ def _push_undo(kind: str, data: Dict[str, Any]) -> None:
         _undo_stack.pop(0)
 
 
-def _restore_undo(entry: Dict[str, Any]) -> None:
-    """Restore a clip from an undo snapshot."""
-    data = entry.get("data") or {}
-    clip_id = data.get("id")
-    if clip_id is None:
-        return
-    for i, c in enumerate(_audio_clips):
-        if c.get("id") == clip_id:
-            _audio_clips[i] = data
-            return
-    _audio_clips.append(data)
+def _restore_undo(entry: Dict[str, Any]) -> str:
+    """Restore a clip from an undo snapshot.
+
+Returns "replaced", "appended", or "dropped". A snapshot for a clip whose
+track has been deleted is dropped rather than brought back."""
+    return restore_clip_snapshot(_audio_clips, _audio_tracks, entry.get("data") or {})
+
+
+def _get_clip(clip_id: Any) -> Dict[str, Any]:
+    """Return the clip with this id.
+
+Raises:
+    HTTPException: 404 when no clip has the id."""
+    clip = find_by_id(_audio_clips, clip_id)
+    if clip is None:
+        raise HTTPException(status_code=404, detail="clip not found")
+    return clip
+
+
+def _get_track(track_id: Any) -> Dict[str, Any]:
+    """Return the track with this id.
+
+Raises:
+    HTTPException: 404 when no track has the id."""
+    track = find_by_id(_audio_tracks, track_id)
+    if track is None:
+        raise HTTPException(status_code=404, detail="track not found")
+    return track
 
 
 def _ensure_track() -> int:
     """Return the id of the first audio track, creating one if none exist."""
     if not _audio_tracks:
-        _audio_tracks.append(make_track(0, "Track 1", "stereo", _sample_rate))
+        _audio_tracks.append(make_track(_track_ids.next_id(), "Track 1", "stereo", _sample_rate))
     return _audio_tracks[0]["id"]
 
 
@@ -240,8 +269,9 @@ Raises:
         note = int(args.get("note", 60))
         duration = float(args.get("duration", 0.4))
         pcm = render_instrument(instrument, duration, _sample_rate, note)
-        path = save_pcm(f"{instrument}_{len(_audio_clips)}.wav", pcm, _sample_rate)
-        clip = make_clip(len(_audio_clips), path.name, path, track_id=track_id, sample_rate=_sample_rate)
+        clip_id = _clip_ids.next_id()
+        path = save_pcm(f"{instrument}_{clip_id}.wav", pcm, _sample_rate)
+        clip = make_clip(clip_id, path.name, path, track_id=track_id, sample_rate=_sample_rate)
         clip["instrument"] = instrument
         clip["note"] = note
         _audio_clips.append(clip)
@@ -251,8 +281,9 @@ Raises:
         style = str(args.get("style", "basic"))
         bars = int(args.get("bars", 1))
         pcm = generate_loop(_bpm, bars, _sample_rate, style)
-        path = save_pcm(f"loop_{style}_{len(_audio_clips)}.wav", pcm, _sample_rate)
-        clip = make_clip(len(_audio_clips), path.name, path, track_id=track_id, sample_rate=_sample_rate)
+        clip_id = _clip_ids.next_id()
+        path = save_pcm(f"loop_{style}_{clip_id}.wav", pcm, _sample_rate)
+        clip = make_clip(clip_id, path.name, path, track_id=track_id, sample_rate=_sample_rate)
         clip["bpm"] = _bpm
         clip["style"] = style
         _audio_clips.append(clip)
@@ -261,17 +292,20 @@ Raises:
     if name == "render_pattern":
         bars = int(args.get("bars", 1))
         pcm = render_pattern(_pattern, _bpm, _sample_rate, bars)
-        path = save_pcm(f"pattern_{len(_audio_clips)}.wav", pcm, _sample_rate)
-        clip = make_clip(len(_audio_clips), path.name, path, track_id=track_id, sample_rate=_sample_rate)
+        clip_id = _clip_ids.next_id()
+        path = save_pcm(f"pattern_{clip_id}.wav", pcm, _sample_rate)
+        clip = make_clip(clip_id, path.name, path, track_id=track_id, sample_rate=_sample_rate)
         clip["bpm"] = _bpm
         _audio_clips.append(clip)
         return {"ok": True, "name": name, "clip": clip}
 
     if name == "detect_bpm":
-        clip_id = int(args.get("clip_id", len(_audio_clips) - 1))
-        if clip_id < 0 or clip_id >= len(_audio_clips):
-            raise HTTPException(status_code=404, detail="clip not found")
-        raw_path = _audio_clips[clip_id].get("path")
+        raw_id = args.get("clip_id")
+        if raw_id is None:
+            if not _audio_clips:
+                raise HTTPException(status_code=404, detail="clip not found")
+            raw_id = _audio_clips[-1]["id"]
+        raw_path = _get_clip(int(raw_id)).get("path")
         if not raw_path:
             raise HTTPException(status_code=400, detail="clip has no file")
         result = detect_bpm(Path(str(raw_path)))
@@ -457,8 +491,8 @@ Raises:
         if not _undo_stack:
             return {"ok": False, "name": name, "note": "nothing to undo"}
         entry = _undo_stack.pop()
-        _restore_undo(entry)
-        return {"ok": True, "name": name, "undone": entry}
+        outcome = _restore_undo(entry)
+        return {"ok": True, "name": name, "undone": entry, "restored": outcome}
 
     raise HTTPException(status_code=400, detail=f"unknown tool: {name}")
 
@@ -527,6 +561,7 @@ class TrackUpdate(BaseModel):
     asio_index: Optional[int] = None
     device_label: Optional[str] = None
     sample_rate: Optional[int] = None
+    type: Optional[str] = None  # "audio" or "instrument"; "instrument" shows the sequencer
 
 
 class AudioSettingsRequest(BaseModel):
@@ -897,9 +932,7 @@ def asio_start(body: AsioStartRequest) -> Dict[str, Any]:
     global _asio_track_id
     if not _asio_enabled:
         raise HTTPException(status_code=400, detail="ASIO is not enabled")
-    track = next((t for t in _audio_tracks if t["id"] == body.track_id), None)
-    if track is None:
-        raise HTTPException(status_code=404, detail="track not found")
+    track = _get_track(body.track_id)
     if not track.get("armed"):
         raise HTTPException(status_code=400, detail="track is not armed")
     if _asio_recorder.recording:
@@ -938,7 +971,7 @@ def asio_stop() -> Dict[str, Any]:
     _asio_track_id = None
     path = Path(info["path"]) if info.get("path") else None
     clip = make_clip(
-        len(_audio_clips),
+        _clip_ids.next_id(),
         path.name if path else "asio.wav",
         path,
         track_id=track_id,
@@ -956,7 +989,7 @@ def asio_stop() -> Dict[str, Any]:
 def mix_audio() -> Dict[str, Any]:
     """mix audio."""
     path = mix_arrangement(_audio_clips, _audio_tracks, _sample_rate, "mix.wav", _master)
-    clip = make_clip(len(_audio_clips), path.name, path, track_id=None, sample_rate=_sample_rate)
+    clip = make_clip(_clip_ids.next_id(), path.name, path, track_id=None, sample_rate=_sample_rate)
     clip["mix"] = True
     _audio_clips.append(clip)
     return clip
@@ -969,7 +1002,7 @@ def bounce_audio(body: BounceRequest) -> Dict[str, Any]:
     if not name.endswith(".wav"):
         name += ".wav"
     path = mix_arrangement(_audio_clips, _audio_tracks, _sample_rate, name, _master)
-    clip = make_clip(len(_audio_clips), path.name, path, track_id=None, sample_rate=_sample_rate)
+    clip = make_clip(_clip_ids.next_id(), path.name, path, track_id=None, sample_rate=_sample_rate)
     clip["mix"] = True
     _audio_clips.append(clip)
     return clip
@@ -1168,29 +1201,35 @@ def list_tracks() -> Dict[str, Any]:
 
 
 @app.post("/api/audio/tracks")
-def create_track(name: str = "Track", channel: str = "stereo") -> Dict[str, Any]:
-    """create track."""
-    track = make_track(len(_audio_tracks), name, channel, _sample_rate)
+def create_track(name: str = "Track", channel: str = "stereo", type: str = DEFAULT_TRACK_TYPE) -> Dict[str, Any]:
+    """Create a track with a fresh id. type is "audio" or "instrument"."""
+    try:
+        track_type = check_track_type(type)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    track = make_track(_track_ids.next_id(), name, channel, _sample_rate, track_type)
     _audio_tracks.append(track)
     return track
 
 
 @app.delete("/api/audio/tracks/{track_id}")
 def delete_track(track_id: int) -> Dict[str, Any]:
-    """delete track."""
-    global _audio_tracks, _audio_clips
-    _audio_tracks = [t for t in _audio_tracks if t["id"] != track_id]
-    _audio_clips = [c for c in _audio_clips if c.get("track_id") != track_id]
+    """Delete a track and its clips. Other ids are unchanged."""
+    if not remove_track(_audio_tracks, _audio_clips, track_id):
+        raise HTTPException(status_code=404, detail="track not found")
     return {"tracks": _audio_tracks}
 
 
 @app.post("/api/audio/tracks/{track_id}")
 def update_track(track_id: int, body: TrackUpdate) -> Dict[str, Any]:
     """update track."""
-    track = next((t for t in _audio_tracks if t["id"] == track_id), None)
-    if track is None:
-        raise HTTPException(status_code=404, detail="track not found")
+    track = _get_track(track_id)
     data = body.model_dump(exclude_none=True)
+    if "type" in data:
+        try:
+            check_track_type(data["type"])
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
     if "channel" in data and data["channel"] not in ("stereo", "left", "right"):
         raise HTTPException(status_code=400, detail="channel must be stereo, left, or right")
     if "sample_rate" in data and data["sample_rate"] not in COMMON_RATES:
@@ -1236,7 +1275,7 @@ def add_clip(
     if track_id is None:
         track_id = _ensure_track()
     clip = make_clip(
-        len(_audio_clips),
+        _clip_ids.next_id(),
         name,
         Path(path) if path else None,
         duration,
@@ -1258,7 +1297,7 @@ async def upload_audio(
         track_id = _ensure_track()
     data = await file.read()
     dest = save_upload(file.filename or "clip.wav", data)
-    clip = make_clip(len(_audio_clips), dest.name, dest, track_id=track_id, sample_rate=_sample_rate)
+    clip = make_clip(_clip_ids.next_id(), dest.name, dest, track_id=track_id, sample_rate=_sample_rate)
     _audio_clips.append(clip)
     return clip
 
@@ -1266,9 +1305,7 @@ async def upload_audio(
 @app.get("/api/audio/file/{clip_id}")
 def audio_file(clip_id: int):
     """audio file."""
-    if clip_id < 0 or clip_id >= len(_audio_clips):
-        raise HTTPException(status_code=404, detail="clip not found")
-    path = _audio_clips[clip_id].get("path")
+    path = _get_clip(clip_id).get("path")
     if not path or not Path(path).exists():
         raise HTTPException(status_code=404, detail="file missing")
     return FileResponse(path, headers={"Cache-Control": "no-store"})
@@ -1283,9 +1320,7 @@ class ClipGainRequest(BaseModel):
 @app.post("/api/audio/clips/gain")
 def clip_gain(body: ClipGainRequest) -> Dict[str, Any]:
     """Set a clip's playback gain. Does not rewrite the source file."""
-    if body.clip_id < 0 or body.clip_id >= len(_audio_clips):
-        raise HTTPException(status_code=404, detail="clip not found")
-    clip = _audio_clips[body.clip_id]
+    clip = _get_clip(body.clip_id)
     clip["gain"] = max(0.0, min(4.0, body.gain))
     return clip
 
@@ -1298,9 +1333,7 @@ class ClipFlagRequest(BaseModel):
 @app.post("/api/audio/clips/reverse")
 def clip_reverse(body: ClipFlagRequest) -> Dict[str, Any]:
     """Toggle a clip's reversed flag. Does not rewrite the source file."""
-    if body.clip_id < 0 or body.clip_id >= len(_audio_clips):
-        raise HTTPException(status_code=404, detail="clip not found")
-    clip = _audio_clips[body.clip_id]
+    clip = _get_clip(body.clip_id)
     clip["reversed"] = not clip.get("reversed", False)
     return clip
 
@@ -1309,9 +1342,7 @@ def clip_reverse(body: ClipFlagRequest) -> Dict[str, Any]:
 @app.post("/api/audio/clips/silence")
 def clip_silence(body: ClipFlagRequest) -> Dict[str, Any]:
     """Toggle a clip's silenced flag. Does not rewrite the source file."""
-    if body.clip_id < 0 or body.clip_id >= len(_audio_clips):
-        raise HTTPException(status_code=404, detail="clip not found")
-    clip = _audio_clips[body.clip_id]
+    clip = _get_clip(body.clip_id)
     clip["silenced"] = not clip.get("silenced", False)
     return clip
 
@@ -1325,9 +1356,7 @@ class ClipTrimRequest(BaseModel):
 @app.post("/api/audio/clips/trim")
 def clip_trim(body: ClipTrimRequest) -> Dict[str, Any]:
     """Set a clip's play window. Does not rewrite the source file."""
-    if body.clip_id < 0 or body.clip_id >= len(_audio_clips):
-        raise HTTPException(status_code=404, detail="clip not found")
-    clip = _audio_clips[body.clip_id]
+    clip = _get_clip(body.clip_id)
     clip["trim_in"] = max(0.0, body.trim_in)
     clip["trim_out"] = max(clip["trim_in"], body.trim_out or clip.get("duration", 0))
     return clip
@@ -1341,15 +1370,13 @@ class ClipSplitRequest(BaseModel):
 @app.post("/api/audio/clips/split")
 def clip_split(body: ClipSplitRequest) -> Dict[str, Any]:
     """Split a clip at a timeline time into two clips sharing the source."""
-    if body.clip_id < 0 or body.clip_id >= len(_audio_clips):
-        raise HTTPException(status_code=404, detail="clip not found")
-    clip = _audio_clips[body.clip_id]
+    clip = _get_clip(body.clip_id)
     start = clip.get("position", 0.0)
     into = max(0.0, min(clip.get("duration", 0.0), body.at - start))
     if into <= 0 or into >= clip.get("duration", 0):
         return {"clips": _audio_clips}
     right = dict(clip)
-    right["id"] = len(_audio_clips)
+    right["id"] = _clip_ids.next_id()
     right["position"] = start + into
     right["trim_in"] = into
     right["duration"] = clip.get("duration", 0) - into
@@ -1362,9 +1389,7 @@ def clip_split(body: ClipSplitRequest) -> Dict[str, Any]:
 @app.post("/api/audio/clips/mute")
 def clip_mute(body: ClipMuteRequest) -> Dict[str, Any]:
     """clip mute."""
-    if body.clip_id < 0 or body.clip_id >= len(_audio_clips):
-        raise HTTPException(status_code=404, detail="clip not found")
-    clip = _audio_clips[body.clip_id]
+    clip = _get_clip(body.clip_id)
     clip["mute"] = body.mute
     return clip
 
@@ -1372,9 +1397,7 @@ def clip_mute(body: ClipMuteRequest) -> Dict[str, Any]:
 @app.post("/api/audio/clips/effect")
 def clip_effect(body: EffectRequest) -> Dict[str, Any]:
     """clip effect."""
-    if body.clip_id < 0 or body.clip_id >= len(_audio_clips):
-        raise HTTPException(status_code=404, detail="clip not found")
-    clip = _audio_clips[body.clip_id]
+    clip = _get_clip(body.clip_id)
     path = clip.get("path")
     if not path or not Path(path).exists():
         raise HTTPException(status_code=400, detail="clip has no file")
@@ -1396,9 +1419,7 @@ def clip_effect(body: EffectRequest) -> Dict[str, Any]:
 @app.post("/api/audio/edit")
 def edit_audio(body: AudioEditRequest) -> Dict[str, Any]:
     """edit audio."""
-    if body.clip_id < 0 or body.clip_id >= len(_audio_clips):
-        raise HTTPException(status_code=404, detail="clip not found")
-    clip = _audio_clips[body.clip_id]
+    clip = _get_clip(body.clip_id)
     path = clip.get("path")
     if not path or not Path(path).exists():
         raise HTTPException(status_code=400, detail="clip has no file")

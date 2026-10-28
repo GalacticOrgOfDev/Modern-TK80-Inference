@@ -17,6 +17,7 @@ import wave
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from .daw_state import DEFAULT_TRACK_TYPE, TRACK_TYPES
 from .formats import AUDIO_PROCESS, AUDIO_STORE, is_audio, is_processable_audio
 
 UPLOAD_DIR = Path(os.environ.get("TK80_UPLOADS", "uploads/audio"))
@@ -255,13 +256,17 @@ def make_track(
     name: str,
     channel: str = "stereo",
     sample_rate: int = DEFAULT_SAMPLE_RATE,
+    track_type: str = DEFAULT_TRACK_TYPE,
 ) -> Dict[str, Any]:
-    """Build a track dict with the given name, channel, and sample rate."""
+    """Build a track dict with the given name, channel, sample rate, and type."""
     if channel not in CHANNELS:
         channel = "stereo"
+    if track_type not in TRACK_TYPES:
+        track_type = DEFAULT_TRACK_TYPE
     return {
         "id": track_id,
         "name": name,
+        "type": track_type,
         "channel": channel,
         "gain": 1.0,
         "mute": False,
