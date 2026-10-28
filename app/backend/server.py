@@ -619,6 +619,7 @@ class VstRequest(BaseModel):
     effect: str = "custom"
     channels: int = 2
     params: Dict[str, Any] = {}
+    prompt: str = ""
 
 
 class MasterRequest(BaseModel):
