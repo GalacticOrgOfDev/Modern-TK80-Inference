@@ -6,6 +6,7 @@ All operate on 16-bit PCM and return a new WAV path.
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -137,6 +138,114 @@ def eq_frequencies() -> List[float]:
     return [EQ_LOW * (ratio ** i) for i in range(EQ_BANDS)]
 
 
+# Bandwidth of one band in octaves: the spacing between neighbouring centres.
+EQ_OCTAVES = math.log2(EQ_HIGH / EQ_LOW) / (EQ_BANDS - 1) if EQ_BANDS > 1 else 1.0
+# RBJ cookbook Q for that bandwidth, so neighbouring bands meet near their -3 dB points.
+EQ_Q = math.sqrt(2.0 ** EQ_OCTAVES) / (2.0 ** EQ_OCTAVES - 1.0)
+# Lowest linear gain accepted (-60 dB), the same floor the DAW page uses for dB labels.
+EQ_MIN_GAIN = 0.001
+
+
+def _clean_gains(gains: List[float] | None) -> List[float]:
+    """Return 30 linear gains. Missing or bad values are flat (1.0); <= 0 floors to -60 dB."""
+    clean: List[float] = []
+    for g in list(gains or [])[:EQ_BANDS]:
+        try:
+            v = float(g)
+        except (TypeError, ValueError):
+            v = 1.0
+        if not math.isfinite(v):
+            v = 1.0
+        clean.append(max(EQ_MIN_GAIN, v))
+    while len(clean) < EQ_BANDS:
+        clean.append(1.0)
+    return clean
+
+
+def peaking_coeffs(f0: float, gain: float, rate: int, q: float = EQ_Q) -> Tuple[float, float, float, float, float]:
+    """RBJ Audio EQ Cookbook peaking filter, normalised so a0 = 1.
+
+    gain is linear (2.0 = +6.02 dB at f0). Returns (b0, b1, b2, a1, a2).
+    """
+    a = math.sqrt(gain)  # A = 10 ** (dBgain / 40)
+    w0 = 2.0 * math.pi * f0 / rate
+    alpha = math.sin(w0) / (2.0 * q)
+    cw = math.cos(w0)
+    a0 = 1.0 + alpha / a
+    return (
+        (1.0 + alpha * a) / a0,
+        (-2.0 * cw) / a0,
+        (1.0 - alpha * a) / a0,
+        (-2.0 * cw) / a0,
+        (1.0 - alpha / a) / a0,
+    )
+
+
+def eq_bands_active(rate: int, gains: List[float] | None) -> List[Tuple[float, float, float, float, float]]:
+    """Biquad coefficients for each band that changes the sound.
+
+    Flat bands (gain 1.0) and bands at or above Nyquist are skipped.
+    """
+    out = []
+    if rate <= 0:
+        return out
+    for f0, g in zip(eq_frequencies(), _clean_gains(gains)):
+        if g == 1.0 or f0 >= rate / 2.0:
+            continue
+        out.append(peaking_coeffs(f0, g, rate))
+    return out
+
+
+def _cascade_ir(coeffs: List[Tuple[float, float, float, float, float]]) -> "Any":
+    """Impulse response of the biquad cascade, long enough that the tail is below 1e-10.
+
+    Built from the exact transfer function on a dense FFT grid. The grid is at
+    least twice the decay length, so time aliasing is below 1e-20.
+    """
+    import numpy as np
+
+    rmax = 0.0
+    for _b0, _b1, _b2, a1, a2 in coeffs:
+        rmax = max(rmax, float(np.max(np.abs(np.roots([1.0, a1, a2])))))
+    if rmax >= 1.0:
+        raise ValueError("EQ band is unstable")
+    decay = int(math.ceil(math.log(1e-10) / math.log(rmax))) if rmax > 0 else 1
+    m = 1024
+    while m < 2 * decay:
+        m *= 2
+    z1 = np.exp(-2j * np.pi * np.arange(m // 2 + 1) / m)  # z^-1 on the grid
+    z2 = z1 * z1
+    h = np.ones_like(z1)
+    for b0, b1, b2, a1, a2 in coeffs:
+        h *= (b0 + b1 * z1 + b2 * z2) / (1.0 + a1 * z1 + a2 * z2)
+    return np.fft.irfft(h, m)[:decay]
+
+
+def _convolve(x: "Any", ir: "Any") -> "Any":
+    """Causal linear convolution of x with ir, cut to len(x) (overlap-add, bounded memory)."""
+    import numpy as np
+
+    n = len(x)
+    m = len(ir)
+    size = 1 << 15
+    while size < 2 * m:
+        size *= 2
+    block = size // 2  # tail of each block (m - 1 samples) fits in the next block
+    nblocks = -(-n // block)
+    padded = np.zeros(nblocks * block + block, dtype=np.float64)
+    padded[:n] = x
+    out = np.zeros_like(padded)
+    spec = np.fft.rfft(ir, size)
+    step = max(1, (1 << 22) // size)  # blocks per batch, about 4M samples
+    for k0 in range(0, nblocks, step):
+        k1 = min(nblocks, k0 + step)
+        chunk = padded[k0 * block : k1 * block].reshape(k1 - k0, block)
+        y = np.fft.irfft(np.fft.rfft(chunk, size, axis=1) * spec, size, axis=1)
+        out[k0 * block : k1 * block] += y[:, :block].reshape(-1)
+        out[(k0 + 1) * block : (k1 + 1) * block] += y[:, block:].reshape(-1)
+    return out[:n]
+
+
 def eq_30(
     samples: List[int],
     rate: int,
@@ -146,46 +255,36 @@ def eq_30(
     """30-band EQ from 100 Hz to 20 kHz.
 
     gains is a list of 30 linear gains (1.0 = flat). Missing or bad values default to 1.0.
+    Each band is an RBJ peaking biquad at eq_frequencies()[i] with Q = EQ_Q.
+    Flat bands and bands at or above Nyquist are skipped. Channels are filtered
+    independently. Output is rounded and clamped to 16-bit.
     """
-    freqs = eq_frequencies()
-    if not gains:
-        gains = [1.0] * EQ_BANDS
-    clean: List[float] = []
-    for g in list(gains)[:EQ_BANDS]:
-        try:
-            clean.append(max(0.0, float(g)))
-        except (TypeError, ValueError):
-            clean.append(1.0)
-    while len(clean) < EQ_BANDS:
-        clean.append(1.0)
-    gains = clean
+    coeffs = eq_bands_active(rate, gains)
+    if not coeffs or not samples:
+        return list(samples)
+
+    import numpy as np
 
     frame_size = max(1, channels)
     frames = len(samples) // frame_size
-    out: List[int] = []
-    # Estimate local frequency from zero crossings and pick the nearest band.
-    prev = 0
-    for i in range(frames):
-        base = i * frame_size
-        # Use first channel for the estimate.
-        s = samples[base]
-        period = 0
-        if (prev <= 0 < s) or (prev >= 0 > s):
-            period = i
-        prev = s
-        # Fallback: map sample magnitude into a band if no crossing yet.
-        band = 0
-        if period > 0 and rate > 0:
-            est = rate / max(1, period)
-            # Find nearest center.
-            band = min(range(EQ_BANDS), key=lambda b: abs(freqs[b] - est))
-        else:
-            mag = abs(s) / 32767.0
-            band = min(EQ_BANDS - 1, int(mag * EQ_BANDS))
-        g = gains[band]
-        for c in range(frame_size):
-            v = samples[base + c] * g
-            out.append(int(max(-32768, min(32767, v))))
+    data = np.asarray(samples, dtype=np.float64)
+    body = data[: frames * frame_size].reshape(frames, frame_size)
+    ir = _cascade_ir(coeffs)
+    for c in range(frame_size):
+        body[:, c] = _convolve(body[:, c], ir)
+    # Any trailing partial frame is passed through unchanged.
+    return np.clip(np.rint(data), -32768, 32767).astype(np.int64).tolist()
+
+
+def biquad_reference(samples: List[float], coeffs: List[Tuple[float, float, float, float, float]]) -> List[float]:
+    """Direct-form I biquad cascade, one sample at a time. Slow; used by tests to check eq_30."""
+    out = [float(s) for s in samples]
+    for b0, b1, b2, a1, a2 in coeffs:
+        x1 = x2 = y1 = y2 = 0.0
+        for i, x0 in enumerate(out):
+            y0 = b0 * x0 + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2
+            x2, x1, y2, y1 = x1, x0, y1, y0
+            out[i] = y0
     return out
 
 
@@ -249,8 +348,7 @@ def apply_effect(
         raw_gains = params.get("gains") or params.get("bands") or [1.0] * EQ_BANDS
         if not isinstance(raw_gains, list):
             raw_gains = [1.0] * EQ_BANDS
-        gains_list = [float(g) for g in raw_gains]
-        samples = eq_30(samples, rate, channels, gains_list)
+        samples = eq_30(samples, rate, channels, raw_gains)  # eq_30 cleans bad values
     elif kind == "reverb":
         samples = reverb_simple(
             samples,
