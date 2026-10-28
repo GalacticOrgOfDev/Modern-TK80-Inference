@@ -813,7 +813,13 @@ def chat(body: ChatRequest) -> Dict[str, Any]:
 
     call = parse_tool_call(text)
     if call:
-        tool_result = _dispatch_tool(call["name"], call.get("args", {}))
+        try:
+            tool_result = _dispatch_tool(call["name"], call.get("args", {}))
+        except HTTPException as e:
+            # A 501 (e.g. a make_vst prompt) is the tool's answer, not a failed chat turn.
+            if e.status_code != 501:
+                raise
+            tool_result = {"name": call["name"], "error": e.detail}
         text = f"{text}\n\n{_tool_summary(tool_result)}"
 
     _chat.append({"role": "assistant", "content": text})
