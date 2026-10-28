@@ -34,9 +34,11 @@ Ships:
 - Sample rate default 44100 Hz
 - Instruments: kick, snare, hat, bass, lead, pad
 - 16-step sequencer, BPM set/detect, loop generation
-- Clip edits rewrite WAV: trim, reverse, gain, silence. No fade yet: there is no fade endpoint or control
-- Effects: normalize, compress, morph, delay, simple reverb
-- 30-band EQ: RBJ peaking biquads, 30 log-spaced bands from 100 Hz to 20 kHz; bands at or above Nyquist are skipped. 16-bit WAV only. Verified by measurement (sine-wave level tests), not yet judged by ear. Applying it to a 3-minute 44.1 kHz stereo track takes about 7 seconds end to end (measured 7.39 s with 3 bands, 7.37 s with all 30; the EQ step alone 3.6 to 4.3 s). Earlier builds were not frequency-selective: boosting one band raised 200 Hz, 1 kHz and 5 kHz equally.
+- Clip gain, reverse, silence, mute and trim from the clip and track menus are stored as clip fields and applied at mix and bounce time; the source file is not rewritten, and each can be stepped back or toggled off. Gain steps in 1 dB from -24 to +12 dB with a dB readout in the clip menu (stored as a 0 to 4 linear factor). Live playback of these in the app was not checked in a browser; the preview player's volume is capped at 1, so gain above 0 dB is heard only in the mix. By `docs/DAW_END_GOAL.md` these are not done yet: it asks for the changes to be live on the playing clip, and that is unverified
+- `/api/audio/edit` (trim, gain, reverse, silence) still rewrites the WAV. No button in the current UI calls it. Its reverse also sets the reversed flag, so the mix plays the rewritten file backwards again, i.e. forwards
+- No fade yet: there is no fade endpoint or control
+- Effects: normalize, compress, morph, delay, simple reverb. Apply writes a new WAV and points the clip at it; removable only through undo
+- 30-band EQ: real filters, but Apply still writes a new file, so it is not done by `docs/DAW_END_GOAL.md` (band gains must drive playback). RBJ peaking biquads, 30 log-spaced bands from 100 Hz to 20 kHz; bands at or above Nyquist are skipped. 16-bit WAV only. Verified by measurement (sine-wave level tests), not yet judged by ear. Applying it to a 3-minute 44.1 kHz stereo track takes about 7 seconds end to end (measured 7.39 s with 3 bands, 7.37 s with all 30; the EQ step alone 3.6 to 4.3 s). Earlier builds were not frequency-selective: boosting one band raised 200 Hz, 1 kHz and 5 kHz equally.
 - Undo (20 steps)
 - Play mix and bounce to 16-bit stereo WAV. Clips may be 16-, 24- or 32-bit integer PCM WAV (24/32-bit rounded to 16-bit, no dither); 8-bit and 32-bit float WAV are refused with a 400. Clip edits and effects are still 16-bit only
 - Stored formats: WAV, MP3, FLAC, OGG, AIFF, M4A, AAC, WMA. Non-WAV converts via ffmpeg before edit.
@@ -46,7 +48,7 @@ Staged:
 - VST maker writes `.cpp` for VST3/JUCE. Binary `.vst3` requires the Steinberg SDK and a C++ toolchain on the machine (`scripts/install_vst3sdk.sh`, then press).
 - VST UI builder: drag-and-drop knobs, sliders, buttons, labels; bind to parameters; export source plus layout JSON. Same SDK requirement for a binary.
 - VST prompt design: broken since the first commit; returns 501. A non-empty `prompt` on `POST /api/audio/vst` or the `make_vst` tool is refused. Use an effect preset.
-- Agent drawer "Generate instrument": does not work yet. It posts to `/api/vst/make`, which does not exist (the real route is `/api/audio/vst`). Even with the route fixed, free text in `effect` silently falls back to a plain gain stub.
+- Agent drawer "Generate instrument": does not work yet (`docs/DAW_END_GOAL.md` lists "Generate instrument sends a prompt" under Done; the code says otherwise). It posts to `/api/vst/make`, which does not exist (the real route is `/api/audio/vst`). Even with the route fixed, free text in `effect` silently falls back to a plain gain stub.
 
 Scarlett hardware check (not run on hardware yet): `python scripts\scarlett_check.py` on the Windows PC lists host APIs and devices, tries rate x buffer combinations, records at 16/24/32-bit, plays a test tone and, with `--loopback` and a cable from an output to an input, looks for the tone. It writes `scarlett_report.md` with only what it measured. See `scripts/README.md`. Scarlett support stays unverified until that report exists.
 
