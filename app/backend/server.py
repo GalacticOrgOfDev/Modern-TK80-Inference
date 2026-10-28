@@ -1384,19 +1384,35 @@ class ClipSplitRequest(BaseModel):
 
 @app.post("/api/audio/clips/split")
 def clip_split(body: ClipSplitRequest) -> Dict[str, Any]:
-    """Split a clip at a timeline time into two clips sharing the source."""
+    """Split a clip at a timeline time into two clips sharing the source.
+
+The clip plays the source window [trim_in, trim_out) at its position (see
+audio._clip_window). The cut lands `into` seconds into that window, so the
+two halves together play exactly what the clip played. An unset trim_out
+means the window ends at trim_in + duration. A reversed clip plays its
+window backwards, so its timeline-left half takes the end of the window."""
     clip = _get_clip(body.clip_id)
-    start = clip.get("position", 0.0)
-    into = max(0.0, min(clip.get("duration", 0.0), body.at - start))
-    if into <= 0 or into >= clip.get("duration", 0):
+    start = float(clip.get("position", 0.0))
+    trim_in = max(0.0, float(clip.get("trim_in") or 0.0))
+    trim_out = float(clip.get("trim_out") or 0.0)
+    if trim_out <= 0:
+        trim_out = trim_in + float(clip.get("duration", 0.0))
+    length = trim_out - trim_in
+    into = body.at - start
+    if length <= 0 or into <= 0 or into >= length:
         return {"clips": _audio_clips}
+    cut = trim_out - into if clip.get("reversed") else trim_in + into
     right = dict(clip)
     right["id"] = _clip_ids.next_id()
     right["position"] = start + into
-    right["trim_in"] = into
-    right["duration"] = clip.get("duration", 0) - into
-    clip["trim_out"] = into
+    right["duration"] = length - into
     clip["duration"] = into
+    if clip.get("reversed"):
+        clip["trim_in"], clip["trim_out"] = cut, trim_out
+        right["trim_in"], right["trim_out"] = trim_in, cut
+    else:
+        clip["trim_in"], clip["trim_out"] = trim_in, cut
+        right["trim_in"], right["trim_out"] = cut, trim_out
     _audio_clips.append(right)
     return {"clips": _audio_clips}
 
