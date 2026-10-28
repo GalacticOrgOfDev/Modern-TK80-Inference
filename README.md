@@ -112,7 +112,7 @@ Torch and llama-cpp need Python 3.11-3.14.
 
 Target: `Modern-TK80.exe` installed by `MTK80Setup.msi`.
 
-See `app/packaging/README.md`. The MSI installs the app and its Python dependencies.
+See `app/packaging/README.md`. Today `app/packaging/Product.wxs` installs only `Modern-TK80.exe` to `Program Files\Modern-TK80` (`Product.wxs:22-25`): no custom action, no Python, no wheels. Planned, not built: a separate, self-contained MSI that bundles Python and the wheels. `scripts/install.ps1` is a developer bootstrap run by hand, not part of the MSI.
 
 ## Tests
 
