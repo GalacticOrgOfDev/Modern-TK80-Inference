@@ -13,8 +13,7 @@ Native window via FastAPI and pywebview. Not a browser tab.
 | Chat | Multi-turn chat, tool indicator, direct commands | K80 inference when a die is connected |
 | DAW | Tracks, clips, ASIO record, sequencer, instruments, mix, bounce, undo, 30-band EQ | VST binary compile needs the SDK on the machine. VST prompt design is broken since the first commit (returns 501) |
 | Video | Timeline, clips, text, VFX render (ffmpeg), audio split, MP4 encode | Validated glTF/FBX/BVH binaries |
-| Fusion | Status and plan | Dual-die data movement |
-| Fusion | Status and activation plan | Real dual-die data movement |
+| Fusion | Status, plan, and an activate/deactivate switch that only sets a flag; no data is moved (`drivers/interconnector/diefusion.py:99-111`) | Dual-die data movement |
 
 Launch:
 
