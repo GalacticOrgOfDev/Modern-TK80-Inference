@@ -21,7 +21,7 @@ The Modern-TK80 mini DAW is a native Windows desktop studio. Audio I/O is ASIO (
 Shared catalog in `formats.py`. Endpoint: `GET /api/formats`.
 
 - Audio store and process: WAV, MP3, FLAC, OGG, AIFF, M4A, AAC, WMA
-- Non-WAV files are converted to 16-bit WAV via ffmpeg before edit or mix
+- Non-WAV files are converted to 16-bit WAV via ffmpeg before edit (not before mix)
 - ffmpeg is required for non-WAV processing
 - Video store: MP4, MOV, WebM, AVI, MKV, MPEG, WMV
 - Model store: OBJ, glTF, GLB, FBX
@@ -43,6 +43,7 @@ Applied per clip and written back to a new WAV:
 - Play mix and bounce the arrangement to a stereo WAV
 - Respects track mute/solo/gain, clip mute/gain, channel, position, and master bus
 - Master bus has gain, mute, and compressor
+- Every clip that plays must be a 16-bit WAV at the project sample rate (mono or stereo). If one is not, or its file is missing or unreadable, mix and bounce return 400 naming each clip and why, and write nothing. Mute the clip to mix without it. A muted master still writes silence without checking clips.
 
 ## Instruments and sequencer
 
@@ -108,7 +109,7 @@ Pressing a binary:
 ## Limits
 
 - Processing is 16-bit PCM WAV only
-- Non-WAV formats are stored but not decoded for mix or edit
+- Non-WAV formats are stored; edit decodes them via ffmpeg, mix does not (a non-WAV clip fails the mix as unreadable)
 - No VST host yet; the maker produces source
 - No multi-level undo UI; the stack is tool-driven
 """

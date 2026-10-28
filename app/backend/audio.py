@@ -332,6 +332,21 @@ def process_clip(
     return _write_wav(dest, _pack(samples), rate, channels)
 
 
+class UnmixableClipError(ValueError):
+    """One or more clips in a mixdown cannot be mixed.
+
+    problems is a list of {"clip_id", "name", "reason"}; the message names
+    every clip so an HTTP 400 detail is enough for the user to find them.
+    """
+
+    def __init__(self, problems: List[Dict[str, Any]]):
+        self.problems = problems
+        one = len(problems) == 1
+        noun, them = ("clip", "it") if one else ("clips", "them")
+        parts = "; ".join(f"#{p['clip_id']} {p['name']}: {p['reason']}" for p in problems)
+        super().__init__(f"cannot mix {len(problems)} {noun} (mute {them} to mix without {them}): {parts}")
+
+
 def mix_arrangement(
     clips: List[Dict[str, Any]],
     tracks: List[Dict[str, Any]],
@@ -346,6 +361,12 @@ def mix_arrangement(
     Each clip plays its trim window, reversed if flagged (see _clip_window).
     Clip gain, track gain, and master gain multiply.
     Master compressor is applied to the sum if enabled.
+
+    Every clip that would play must be a readable 16-bit WAV at ``rate``
+    (mono or stereo). If any is not, UnmixableClipError names each one
+    and why, and no file is written. A muted master writes silence
+    without checking clips. A clip with no path is a placeholder and is
+    skipped, as before.
     """
     master = master or default_master()
     out_name = safe_filename(out_name, "mix.wav")
@@ -371,7 +392,37 @@ def mix_arrangement(
             length = end
         active.append((clip, track))
 
-    if master.get("mute") or length <= 0 or not active:
+    if master.get("mute") or not active:
+        dest = reserve_unique(UPLOAD_DIR, out_name)
+        return _write_wav(dest, b"", rate, 2)
+
+    # Read every clip that will play before writing anything, so a clip
+    # that cannot be mixed is an error instead of a silent gap.
+    loaded: Dict[int, Tuple[int, int, bytes]] = {}
+    problems: List[Dict[str, Any]] = []
+    for clip, _track in active:
+        if clip.get("silenced"):
+            continue
+        reason = None
+        try:
+            c_rate, c_ch, c_w, raw = _read_wav(Path(clip["path"]))
+        except FileNotFoundError:
+            reason = "file missing"
+        except Exception as e:  # wave.Error, EOFError, OSError, ...
+            reason = f"unreadable WAV ({type(e).__name__}: {e})"
+        else:
+            if c_w != 2:
+                reason = f"{8 * c_w}-bit WAV; only 16-bit can be mixed"
+            elif c_rate != rate:
+                reason = f"sample rate {c_rate} Hz does not match the project's {rate} Hz"
+        if reason:
+            problems.append({"clip_id": clip.get("id"), "name": clip.get("name", ""), "reason": reason})
+        else:
+            loaded[id(clip)] = (c_ch, c_rate, raw)
+    if problems:
+        raise UnmixableClipError(problems)
+
+    if length <= 0:
         dest = reserve_unique(UPLOAD_DIR, out_name)
         return _write_wav(dest, b"", rate, 2)
 
@@ -383,12 +434,7 @@ def mix_arrangement(
     for clip, track in active:
         if clip.get("silenced"):
             continue
-        try:
-            c_rate, c_ch, c_w, raw = _read_wav(Path(clip["path"]))
-        except Exception:
-            continue
-        if c_w != 2 or c_rate != rate:
-            continue
+        c_ch, c_rate, raw = loaded[id(clip)]
         samples = _clip_window(_samples(raw), max(1, c_ch), c_rate, clip)
         frame_size = max(1, c_ch)
         gain = float(clip.get("gain", 1.0)) * float(track.get("gain", 1.0))

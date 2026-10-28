@@ -39,6 +39,7 @@ from .audio import (
     make_clip,
     make_track,
     mix_arrangement,
+    UnmixableClipError,
     process_clip,
     save_upload,
 )
@@ -1014,8 +1015,11 @@ def asio_stop() -> Dict[str, Any]:
 
 @app.post("/api/audio/mix")
 def mix_audio() -> Dict[str, Any]:
-    """mix audio."""
-    path = mix_arrangement(_audio_clips, _audio_tracks, _sample_rate, "mix.wav", _master)
+    """mix audio. 400 naming each clip that cannot be mixed (nothing is written)."""
+    try:
+        path = mix_arrangement(_audio_clips, _audio_tracks, _sample_rate, "mix.wav", _master)
+    except UnmixableClipError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     clip = make_clip(_clip_ids.next_id(), path.name, path, track_id=None, sample_rate=_sample_rate)
     clip["mix"] = True
     _audio_clips.append(clip)
@@ -1024,11 +1028,14 @@ def mix_audio() -> Dict[str, Any]:
 
 @app.post("/api/audio/bounce")
 def bounce_audio(body: BounceRequest) -> Dict[str, Any]:
-    """bounce audio."""
+    """bounce audio. 400 naming each clip that cannot be mixed (nothing is written)."""
     name = safe_filename(body.name, "mix.wav")
     if not name.endswith(".wav"):
         name += ".wav"
-    path = mix_arrangement(_audio_clips, _audio_tracks, _sample_rate, name, _master)
+    try:
+        path = mix_arrangement(_audio_clips, _audio_tracks, _sample_rate, name, _master)
+    except UnmixableClipError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     clip = make_clip(_clip_ids.next_id(), path.name, path, track_id=None, sample_rate=_sample_rate)
     clip["mix"] = True
     _audio_clips.append(clip)
