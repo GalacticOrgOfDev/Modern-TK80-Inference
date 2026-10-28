@@ -8,7 +8,8 @@ standard library only; numpy is not needed.
 It lists host APIs and devices, tries sample rate x buffer size
 combinations on one device, records at 16-, 24- and 32-bit, plays a test
 tone, and (only with --loopback and a cable) checks that the tone comes
-back on an input. It writes a Markdown report with PASS / FAIL / SKIPPED
+back on an input; it warns first and needs a typed yes or --confirm-loopback.
+It writes a Markdown report with PASS / FAIL / SKIPPED
 per step and the raw exception text. The report holds only values the
 library returned or that were measured from captured samples.
 
@@ -49,6 +50,16 @@ DETECT_MIN_FRACTION = 0.5
 SKIP_LEAD_SECONDS = 0.2  # ignore the start of a loopback capture (latency)
 
 REPO = Path(__file__).resolve().parents[1]
+
+LOOPBACK_WARNING = (
+    "WARNING (loopback): before going on, turn the Scarlett's monitor knob and "
+    "output volume down, and the input gain down. A cable from an output to an "
+    "input can cause feedback or a loud tone in your speakers or headphones. "
+    "This script plays a 1 kHz tone at -20 dBFS."
+)
+LOOPBACK_PROMPT = "Type yes to run the loopback step (anything else skips it): "
+LOOPBACK_NOT_CONFIRMED = ("not confirmed; pass --confirm-loopback or type yes at the prompt "
+                          "after turning the monitor and output volume down")
 
 LOOPBACK_HELP = (
     "Loopback needs a physical cable from an output of the interface to one "
@@ -606,11 +617,14 @@ def _play_step(rep: Report, sd, dev: Dict[str, Any], rate: int, buffer: int, sec
 
 
 def _loopback_step(rep: Report, sd, dev: Dict[str, Any], rate: int, buffer: int, seconds: float,
-                   enabled: bool, loop_out: int, loop_in: int) -> None:
+                   enabled: bool, loop_out: int, loop_in: int, confirmed: bool = False) -> None:
     name = "Loopback tone"
     if not enabled:
         rep.add(name, SKIPPED, "not requested (--loopback); needs a physical cable from an output to an input")
         rep.notes.append(LOOPBACK_HELP)
+        return
+    if not confirmed:
+        rep.add(name, SKIPPED, LOOPBACK_NOT_CONFIRMED)
         return
     if loop_out < 1 or loop_out > dev["outputs"] or loop_in < 1 or loop_in > dev["inputs"]:
         rep.add(name, SKIPPED, f"--loop-out {loop_out} / --loop-in {loop_in} outside the device's "
@@ -666,6 +680,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--seconds", type=float, default=1.0, help="length of each record/play/loopback step")
     p.add_argument("--no-play", action="store_true", help="skip the play step (no sound out)")
     p.add_argument("--loopback", action="store_true", help="run the loopback step; needs a cable output -> input")
+    p.add_argument("--confirm-loopback", action="store_true",
+                   help="confirm the monitor and output volume are down; without it --loopback asks (or skips)")
     p.add_argument("--loop-out", type=int, default=1, help="output channel for loopback (from 1)")
     p.add_argument("--loop-in", type=int, default=1, help="input channel for loopback (from 1)")
     p.add_argument("--no-asio-dll", action="store_true", help="do not set SD_ENABLE_ASIO before importing sounddevice")
@@ -686,7 +702,21 @@ def check_report_path(path: Path) -> Optional[str]:
     return None
 
 
-def run_check(args: argparse.Namespace, loader: Callable[[bool], Tuple[Any, Optional[str]]] = load_sounddevice) -> Report:
+def ask_loopback_confirmation(args: argparse.Namespace) -> bool:
+    """True only for --confirm-loopback or a typed "yes" at an interactive prompt."""
+    if getattr(args, "confirm_loopback", False):
+        return True
+    try:
+        if not sys.stdin.isatty():
+            return False
+        return input(LOOPBACK_PROMPT).strip().lower() == "yes"
+    except (EOFError, OSError, ValueError):
+        return False
+
+
+def run_check(args: argparse.Namespace, loader: Callable[[bool], Tuple[Any, Optional[str]]] = load_sounddevice,
+              say: Callable[[str], None] = print,
+              confirm: Optional[Callable[[], bool]] = None) -> Report:
     rep = Report(started=_dt.datetime.now().astimezone().isoformat(timespec="seconds"))
     rep.environment = {
         "Python": sys.version.split()[0],
@@ -737,6 +767,12 @@ def run_check(args: argparse.Namespace, loader: Callable[[bool], Tuple[Any, Opti
             rep.add(s, SKIPPED, "--list-only")
         return rep
 
+    # Warn and confirm before any stream opens or any tone plays.
+    loop_ok = False
+    if args.loopback:
+        say(LOOPBACK_WARNING)
+        loop_ok = bool(confirm() if confirm is not None else ask_loopback_confirmation(args))
+
     dev, why = pick_device(rep.devices, args.device)
     if dev is None:
         rep.add(later[1], SKIPPED if args.device is None else FAIL, why)
@@ -760,7 +796,8 @@ def run_check(args: argparse.Namespace, loader: Callable[[bool], Tuple[Any, Opti
         rep.add("Play test tone", SKIPPED, "--no-play")
     else:
         _play_step(rep, sd, dev, rate, args.buffer, args.seconds)
-    _loopback_step(rep, sd, dev, rate, args.buffer, args.seconds, args.loopback, args.loop_out, args.loop_in)
+    _loopback_step(rep, sd, dev, rate, args.buffer, args.seconds, args.loopback, args.loop_out, args.loop_in,
+                   loop_ok)
     return rep
 
 

@@ -15,6 +15,7 @@ import struct
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 _PATH = Path(__file__).resolve().parents[1] / "scripts" / "scarlett_check.py"
@@ -224,8 +225,8 @@ class FullRun(unittest.TestCase):
 
     def test_loopback_detects_the_tone_through_a_fake_cable(self):
         sd = FakeSD(loop=(0, 0))
-        rep = sc.run_check(_args("--rates", "48000", "--buffers", "256", "--seconds", "0.5", "--no-play", "--loopback"),
-                           loader=lambda asio: (sd, None))
+        rep = sc.run_check(_args("--rates", "48000", "--buffers", "256", "--seconds", "0.5", "--no-play", "--loopback",
+                                 "--confirm-loopback"), loader=lambda asio: (sd, None), say=lambda m: None)
         self.assertEqual(_status(rep, "Play test tone"), sc.SKIPPED)
         self.assertEqual(_status(rep, "Loopback tone"), sc.PASS)
         rec = next(r for r in rep.records if r["label"] == "Loopback tone")
@@ -233,8 +234,8 @@ class FullRun(unittest.TestCase):
 
     def test_loopback_without_cable_fails_not_detected(self):
         sd = FakeSD(input_value=0.0)
-        rep = sc.run_check(_args("--rates", "48000", "--buffers", "256", "--seconds", "0.3", "--no-play", "--loopback"),
-                           loader=lambda asio: (sd, None))
+        rep = sc.run_check(_args("--rates", "48000", "--buffers", "256", "--seconds", "0.3", "--no-play", "--loopback",
+                                 "--confirm-loopback"), loader=lambda asio: (sd, None), say=lambda m: None)
         step = next(s for s in rep.steps if s.name == "Loopback tone")
         self.assertEqual(step.status, sc.FAIL)
         self.assertIn("not detected", step.detail)
@@ -276,6 +277,74 @@ class Formatting(unittest.TestCase):
         self.assertNotIn("## Devices", text)
         self.assertEqual(sc.fmt_db(None), "-inf dBFS")
         self.assertEqual(sc.fmt_ms(0.0015), "1.50 ms")
+
+
+class LoopbackNeedsConfirmation(unittest.TestCase):
+    """--loopback warns first and runs only after an explicit confirmation."""
+
+    ARGS = ("--rates", "48000", "--buffers", "256", "--seconds", "0.5", "--loopback")
+
+    def _run(self, *extra, confirm=None):
+        sd = FakeSD(loop=(0, 0))
+        events = []
+        real_init = sd.opened
+
+        class _Log(list):
+            def append(self, item):
+                events.append(("open", item[0]))
+                super().append(item)
+
+        sd.opened = _Log(real_init)
+        kw = {"say": lambda m: events.append(("say", m))}
+        if confirm is not None:
+            kw["confirm"] = confirm
+        rep = sc.run_check(_args(*(self.ARGS + extra)), loader=lambda asio: (sd, None), **kw)
+        return rep, sd, events
+
+    def _warning_first(self, events):
+        says = [i for i, e in enumerate(events) if e[0] == "say" and "WARNING" in e[1]]
+        opens = [i for i, e in enumerate(events) if e[0] == "open"]
+        self.assertTrue(says, "no warning printed")
+        self.assertTrue(not opens or says[0] < opens[0], "warning came after a stream opened")
+        text = events[says[0]][1]
+        for phrase in ("monitor", "output volume", "feedback", "loud"):
+            self.assertIn(phrase, text)
+
+    def test_no_confirmation_means_no_loopback(self):
+        rep, sd, events = self._run(confirm=lambda: False)
+        self.assertEqual(_status(rep, "Loopback tone"), sc.SKIPPED)
+        self.assertNotIn("duplex", [o[0] for o in sd.opened])
+        self._warning_first(events)
+
+    def test_non_interactive_without_flag_does_not_run(self):
+        with unittest.mock.patch.object(sc.sys.stdin, "isatty", return_value=False, create=True):
+            rep, sd, events = self._run()
+        self.assertEqual(_status(rep, "Loopback tone"), sc.SKIPPED)
+        self.assertIn("--confirm-loopback", next(s for s in rep.steps if s.name == "Loopback tone").detail)
+        self.assertNotIn("duplex", [o[0] for o in sd.opened])
+
+    def test_prompt_needs_the_word_yes(self):
+        for answer, runs in (("", False), ("y", False), ("no", False), ("yes", True), (" YES ", True)):
+            with self.subTest(answer=answer), \
+                    unittest.mock.patch.object(sc.sys.stdin, "isatty", return_value=True, create=True), \
+                    unittest.mock.patch("builtins.input", return_value=answer):
+                rep, sd, events = self._run()
+            self.assertEqual("duplex" in [o[0] for o in sd.opened], runs)
+
+    def test_flag_confirms_and_still_warns_first(self):
+        rep, sd, events = self._run("--confirm-loopback")
+        self.assertEqual(_status(rep, "Loopback tone"), sc.PASS)
+        self._warning_first(events)
+        opens = [e[1] for e in events if e[0] == "open"]
+        self.assertIn("output", opens)  # the play step also waits for the warning
+
+    def test_without_loopback_no_warning_and_no_prompt(self):
+        sd = FakeSD()
+        said = []
+        sc.run_check(_args("--rates", "48000", "--buffers", "256", "--seconds", "0.05"),
+                     loader=lambda asio: (sd, None), say=said.append,
+                     confirm=lambda: self.fail("asked without --loopback"))
+        self.assertFalse([m for m in said if "WARNING" in m])
 
 
 if __name__ == "__main__":
