@@ -116,4 +116,3 @@ Pressing a binary:
 - Non-WAV formats are stored; edit decodes them via ffmpeg, mix does not (a non-WAV clip fails the mix as unreadable)
 - No VST host yet; the maker produces source
 - No multi-level undo UI; the stack is tool-driven
-"""
