@@ -35,7 +35,7 @@ Applied per clip and written back to a new WAV:
 - compressor (threshold, ratio, makeup)
 - morph envelope (time/gain points)
 - delay (time, feedback, mix)
-- 30-band EQ (100 Hz–20 kHz, log-spaced). UI has a vertical slider per band. Hover shows the current ±dB for that band. Apply sends the 30 gains. Not yet frequency-selective: boosting one band raises 200 Hz, 1 kHz and 5 kHz equally (`effects.py`). Marked shipped again once frequency-selective tests pass.
+- 30-band EQ (100 Hz–20 kHz, log-spaced). UI has a vertical slider per band. Hover shows the current ±dB for that band. Apply sends the 30 gains. Each band is an RBJ peaking biquad (`effects.py`); bands at or above Nyquist are skipped. 16-bit WAV only. Verified by measurement (sine-wave level tests), not yet judged by ear. Applying it to a 3-minute 44.1 kHz stereo track takes about 7 seconds end to end (measured 7.39 s with 3 bands, 7.37 s with all 30; the EQ step alone 3.6 to 4.3 s). Earlier builds were not frequency-selective: boosting one band raised 200 Hz, 1 kHz and 5 kHz equally.
 - simple reverb (room, mix)
 
 ## Mix and bounce
@@ -75,6 +75,8 @@ Each preset writes a `.cpp` with parameters and a starter DSP stub. Compile agai
 UI builder objects: knob, vertical slider, horizontal slider, button, label, meter, xy pad. Models can add parameters and objects; users bind objects to parameters and export source plus layout.
 
 Catalog endpoint: `GET /api/vst/presets`.
+
+VST prompt design: broken since the first commit; returns 501. A non-empty `prompt` on `POST /api/audio/vst` or the `make_vst` tool is refused. Use an effect preset.
 
 Pressing a binary:
 

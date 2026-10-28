@@ -11,7 +11,7 @@ Native window via FastAPI and pywebview. Not a browser tab.
 | Studio | What ships today | What is staged |
 |--------|------------------|----------------|
 | Chat | Multi-turn chat, tool indicator, direct commands | K80 inference when a die is connected |
-| DAW | Tracks, clips, ASIO record, sequencer, instruments, mix, bounce, undo | VST binary compile needs the SDK on the machine. 30-band EQ: UI and plumbing exist, processing is not yet frequency-selective |
+| DAW | Tracks, clips, ASIO record, sequencer, instruments, mix, bounce, undo, 30-band EQ | VST binary compile needs the SDK on the machine. VST prompt design is broken since the first commit (returns 501) |
 | Video | Timeline, clips, text, VFX render (ffmpeg), audio split, MP4 encode | Validated glTF/FBX/BVH binaries |
 | Fusion | Status and plan | Dual-die data movement |
 | Fusion | Status and activation plan | Real dual-die data movement |
@@ -36,6 +36,7 @@ Ships:
 - 16-step sequencer, BPM set/detect, loop generation
 - Clip edits rewrite WAV: trim, reverse, gain, silence, fade
 - Effects: normalize, compress, morph, delay, simple reverb
+- 30-band EQ: RBJ peaking biquads, 30 log-spaced bands from 100 Hz to 20 kHz; bands at or above Nyquist are skipped. 16-bit WAV only. Verified by measurement (sine-wave level tests), not yet judged by ear. Applying it to a 3-minute 44.1 kHz stereo track takes about 7 seconds end to end (measured 7.39 s with 3 bands, 7.37 s with all 30; the EQ step alone 3.6 to 4.3 s). Earlier builds were not frequency-selective: boosting one band raised 200 Hz, 1 kHz and 5 kHz equally.
 - Undo (20 steps)
 - Play mix and bounce to stereo WAV
 - Stored formats: WAV, MP3, FLAC, OGG, AIFF, M4A, AAC, WMA. Non-WAV converts via ffmpeg before edit.
@@ -44,7 +45,7 @@ Staged:
 
 - VST maker writes `.cpp` for VST3/JUCE. Binary `.vst3` requires the Steinberg SDK and a C++ toolchain on the machine (`scripts/install_vst3sdk.sh`, then press).
 - VST UI builder: drag-and-drop knobs, sliders, buttons, labels; bind to parameters; export source plus layout JSON. Same SDK requirement for a binary.
-- 30-band EQ (100 Hz–20 kHz): UI and plumbing exist, but processing is not yet frequency-selective (boosting one band raises 200 Hz, 1 kHz and 5 kHz equally). Moves to Ships once frequency-selective tests pass.
+- VST prompt design: broken since the first commit; returns 501. A non-empty `prompt` on `POST /api/audio/vst` or the `make_vst` tool is refused. Use an effect preset.
 
 ## Video / VFX
 
