@@ -39,6 +39,11 @@ function setupTabs() {
 setupTabs();
 refreshTracks();
 
+// Escape a value before it goes into an innerHTML template (text or quoted attribute).
+function escapeHtml(v) {
+  return String(v).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+}
+
 function bind(id, event, fn) {
   const el = document.getElementById(id);
   if (el) el.addEventListener(event, fn);
@@ -276,14 +281,14 @@ async function refreshTracks() {
     const scar = t.scarlett ? " · Scarlett" : "";
     const idx = t.asio_index != null ? ` #${t.asio_index}` : "";
     row.innerHTML = `
-      <span class="track-name">#${t.id} ${t.name}</span>
+      <span class="track-name">#${escapeHtml(t.id)} ${escapeHtml(t.name)}</span>
       <button class="mute${t.mute ? " on" : ""}" title="Mute">M</button>
       <button class="solo${t.solo ? " on" : ""}" title="Solo">S</button>
       <button class="mon${t.monitor ? " on" : ""}" title="Monitor">🔊</button>
-      <input class="lvl" type="range" min="0" max="2" step="0.01" value="${t.gain || 1}" />
-      <span class="db">${gainToDb(t.gain || 1)}</span>
-      <input class="pan" type="range" min="-1" max="1" step="0.01" value="${t.pan || 0}" />
-      <span class="pan-label">${panLabel(t.pan || 0)[0]}</span>
+      <input class="lvl" type="range" min="0" max="2" step="0.01" value="${escapeHtml(t.gain || 1)}" />
+      <span class="db">${escapeHtml(gainToDb(t.gain || 1))}</span>
+      <input class="pan" type="range" min="-1" max="1" step="0.01" value="${escapeHtml(t.pan || 0)}" />
+      <span class="pan-label">${escapeHtml(panLabel(t.pan || 0)[0])}</span>
       <button class="fx" title="FX">fx</button>
       <button class="arm${t.armed ? " on" : ""}" title="Arm">arm</button>
       <button class="arm-more" title="Arm type">▾</button>
@@ -551,7 +556,7 @@ function renderFxList() {
   items.forEach((fx, i) => {
     const row = document.createElement("div");
     row.className = "fx-item";
-    row.innerHTML = `<span>${fx.name}</span><button data-i="${i}">Remove</button>`;
+    row.innerHTML = `<span>${escapeHtml(fx.name)}</span><button data-i="${i}">Remove</button>`;
     row.querySelector("button").onclick = () => {
       items.splice(i, 1);
       renderFxList();
@@ -708,7 +713,7 @@ async function detectDevices() {
     const devices = data.devices || [];
     if (!devices.length) {
       const reason = data.probe && data.probe.reason ? data.probe.reason : "No ASIO inputs";
-      sel.innerHTML = `<option value="">${reason}</option>`;
+      sel.innerHTML = `<option value="">${escapeHtml(reason)}</option>`;
       return;
     }
     for (const d of devices) {
@@ -723,7 +728,7 @@ async function detectDevices() {
     }
     updateScarlettBadge();
   } catch (e) {
-    sel.innerHTML = `<option value="">${e.message}</option>`;
+    sel.innerHTML = `<option value="">${escapeHtml(e.message)}</option>`;
   }
 }
 
@@ -945,7 +950,6 @@ const _al = document.getElementById("audio-load"); if (_al) _al.onclick = async 
   try {
     const clip = await api("/api/audio/upload", { method: "POST", body: fd });
     selectedClip = clip.id;
-    document.getElementById("audio-clip-id").value = clip.id;
     await refreshClips();
     document.getElementById("audio-transport-status").textContent = `Uploaded to track ${selectedTrack}`;
   } catch (e) { alert(e.message); }
