@@ -199,6 +199,19 @@ def _ensure_track() -> int:
     return _audio_tracks[0]["id"]
 
 
+def _track_for_new_clip(track_id: Optional[int]) -> int:
+    """Return the track id a new clip should go on.
+
+None means the first track (created if there are none). A supplied id must
+name an existing track.
+
+Raises:
+    HTTPException: 404 when a supplied track id has no track."""
+    if track_id is None:
+        return _ensure_track()
+    return _get_track(track_id)["id"]
+
+
 def _validate_rate_for_track(track: Dict[str, Any], rate: int) -> None:
     """Raise if the track Scarlett profile does not support the rate.
 
@@ -268,6 +281,7 @@ Raises:
             raise HTTPException(status_code=400, detail="unknown instrument")
         note = int(args.get("note", 60))
         duration = float(args.get("duration", 0.4))
+        _get_track(track_id)
         pcm = render_instrument(instrument, duration, _sample_rate, note)
         clip_id = _clip_ids.next_id()
         path = save_pcm(f"{instrument}_{clip_id}.wav", pcm, _sample_rate)
@@ -280,6 +294,7 @@ Raises:
     if name == "generate_loop":
         style = str(args.get("style", "basic"))
         bars = int(args.get("bars", 1))
+        _get_track(track_id)
         pcm = generate_loop(_bpm, bars, _sample_rate, style)
         clip_id = _clip_ids.next_id()
         path = save_pcm(f"loop_{style}_{clip_id}.wav", pcm, _sample_rate)
@@ -291,6 +306,7 @@ Raises:
 
     if name == "render_pattern":
         bars = int(args.get("bars", 1))
+        _get_track(track_id)
         pcm = render_pattern(_pattern, _bpm, _sample_rate, bars)
         clip_id = _clip_ids.next_id()
         path = save_pcm(f"pattern_{clip_id}.wav", pcm, _sample_rate)
@@ -1272,9 +1288,8 @@ def add_clip(
     track_id: Optional[int] = None,
     position: float = 0.0,
 ) -> Dict[str, Any]:
-    """add clip."""
-    if track_id is None:
-        track_id = _ensure_track()
+    """add clip. A supplied track_id must name an existing track (404 otherwise)."""
+    track_id = _track_for_new_clip(track_id)
     clip = make_clip(
         _clip_ids.next_id(),
         name,
@@ -1293,9 +1308,8 @@ async def upload_audio(
     file: UploadFile = File(...),
     track_id: Optional[int] = Form(None),
 ) -> Dict[str, Any]:
-    """upload audio."""
-    if track_id is None:
-        track_id = _ensure_track()
+    """upload audio. A supplied track_id must name an existing track (404 otherwise)."""
+    track_id = _track_for_new_clip(track_id)
     data = await file.read()
     dest = save_upload(file.filename or "clip.wav", data)
     clip = make_clip(_clip_ids.next_id(), dest.name, dest, track_id=track_id, sample_rate=_sample_rate)
