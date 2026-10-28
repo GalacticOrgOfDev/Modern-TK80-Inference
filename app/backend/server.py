@@ -30,7 +30,7 @@ from .asio import (
     probe_asio,
 )
 from . import audio as _audio_mod
-from .paths import safe_filename
+from .paths import reserve_unique, safe_filename
 from .audio import (
     COMMON_RATES,
     DEFAULT_SAMPLE_RATE,
@@ -973,7 +973,9 @@ def asio_start(body: AsioStartRequest) -> Dict[str, Any]:
     rate = track.get("sample_rate") or _sample_rate
     _validate_rate_for_track(track, rate)
     channels = 2 if track.get("channel") == "stereo" else 1
-    path = _audio_mod.UPLOAD_DIR / f"asio_track{track['id']}.wav"
+    # Each take gets its own file (asio_track<ID>.wav, then _1, _2, ...);
+    # the recorder's wave.open(path, "wb") would truncate a shared one.
+    path = reserve_unique(_audio_mod.UPLOAD_DIR, f"asio_track{track['id']}.wav")
     try:
         info = _asio_recorder.start(
             path,
@@ -982,8 +984,15 @@ def asio_start(body: AsioStartRequest) -> Dict[str, Any]:
             channels=channels,
             device_index=track.get("asio_index"),
         )
-    except RuntimeError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    except BaseException as e:
+        # This call created the file; drop it if the take never started.
+        try:
+            path.unlink()
+        except OSError:
+            pass
+        if isinstance(e, RuntimeError):
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        raise
     _asio_track_id = track["id"]
     return info
 
