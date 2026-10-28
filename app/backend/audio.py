@@ -336,7 +336,9 @@ def mix_arrangement(
 ) -> Path:
     """Bounce the arrangement to a stereo WAV.
 
-    Solo wins. Muted tracks and muted clips are skipped.
+    Solo wins. Muted tracks, muted clips, and silenced clips are skipped
+    (a silenced clip still counts toward the mix length).
+    Each clip plays its trim window, reversed if flagged (see _clip_window).
     Clip gain, track gain, and master gain multiply.
     Master compressor is applied to the sum if enabled.
     """
@@ -373,13 +375,15 @@ def mix_arrangement(
     master_gain = float(master.get("gain", 1.0))
 
     for clip, track in active:
+        if clip.get("silenced"):
+            continue
         try:
             c_rate, c_ch, c_w, raw = _read_wav(Path(clip["path"]))
         except Exception:
             continue
         if c_w != 2 or c_rate != rate:
             continue
-        samples = _samples(raw)
+        samples = _clip_window(_samples(raw), max(1, c_ch), c_rate, clip)
         frame_size = max(1, c_ch)
         gain = float(clip.get("gain", 1.0)) * float(track.get("gain", 1.0))
         channel = track.get("channel", "stereo")
@@ -421,6 +425,35 @@ def mix_arrangement(
     if dest.exists():
         dest = UPLOAD_DIR / f"mix_{total}.wav"
     return _write_wav(dest, bytes(out), rate, 2)
+
+
+def _clip_window(
+    samples: List[int], frame_size: int, rate: int, clip: Dict[str, Any]
+) -> List[int]:
+    """Return the interleaved samples a clip plays, before placement.
+
+    The clip edit flags never rewrite the source file; they are applied here.
+    trim_in is the source offset in seconds where playback starts (0 if unset).
+    trim_out is the source offset in seconds where it stops; 0 or unset means
+    the end of the file. The window [trim_in, trim_out) is placed at the clip's
+    timeline position, so the right half of a split (position and trim_in both
+    moved by the split point) continues where the left half stops.
+    reversed plays that window backwards, frame by frame.
+    """
+    frames = len(samples) // frame_size
+    trim_in = max(0.0, float(clip.get("trim_in") or 0.0))
+    trim_out = float(clip.get("trim_out") or 0.0)
+    i0 = min(frames, int(round(trim_in * rate)))
+    i1 = frames if trim_out <= 0 else min(frames, int(round(trim_out * rate)))
+    if i1 <= i0:
+        return []
+    window = samples[i0 * frame_size : i1 * frame_size]
+    if clip.get("reversed"):
+        n = i1 - i0
+        window = [
+            window[(n - 1 - i) * frame_size + c] for i in range(n) for c in range(frame_size)
+        ]
+    return window
 
 
 def _compress_sample(v: float, thresh: float, ratio: float) -> float:
