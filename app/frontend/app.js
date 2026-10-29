@@ -223,6 +223,22 @@ async function loadMusic() {
   }
 }
 
+// Push the master bus values to both places that show them: the Settings drawer
+// (#master-gain, #master-mute, compressor fields) and the Master row (#master-row-gain, #master-mute-btn).
+function syncMasterControls() {
+  const gain = master.gain ?? 1;
+  const set = (id, fn) => { const el = document.getElementById(id); if (el) fn(el); };
+  set("master-gain", (el) => { el.value = gain; });
+  set("master-row-gain", (el) => { el.value = gain; });
+  set("master-mute", (el) => { el.checked = !!master.mute; });
+  set("master-mute-btn", (el) => { el.classList.toggle("on", !!master.mute); });
+  const c = master.compressor || {};
+  set("master-comp", (el) => { el.checked = !!c.enabled; });
+  set("master-thresh", (el) => { el.value = c.threshold ?? 0.5; });
+  set("master-ratio", (el) => { el.value = c.ratio ?? 4; });
+  set("master-makeup", (el) => { el.value = c.makeup ?? 1; });
+}
+
 async function loadAudioSettings() {
   try {
     const data = await api("/api/audio/settings");
@@ -235,13 +251,7 @@ async function loadAudioSettings() {
     document.getElementById("asio-enabled").checked = asioEnabled;
     document.getElementById("asio-buffer").value = String(asioBuffer);
     document.getElementById("rate-pill").textContent = `${studioRate} Hz`;
-    document.getElementById("master-gain").value = master.gain || 1;
-    document.getElementById("master-mute").checked = !!master.mute;
-    const c = master.compressor || {};
-    document.getElementById("master-comp").checked = !!c.enabled;
-    document.getElementById("master-thresh").value = c.threshold ?? 0.5;
-    document.getElementById("master-ratio").value = c.ratio ?? 4;
-    document.getElementById("master-makeup").value = c.makeup ?? 1;
+    syncMasterControls();
     updateAsioStatus(data);
   } catch (e) {
     /* keep defaults */
@@ -778,6 +788,19 @@ document.getElementById("asio-buffer").onchange = async (e) => {
     document.getElementById("audio-transport-status").textContent = "Master updated";
   } catch (e) { alert(e.message); }
 };
+
+// Master row: the slider and M button post only the field they change (the route accepts partial bodies).
+async function postMasterField(fields, label) {
+  try {
+    master = await api("/api/audio/master", { method: "POST", body: JSON.stringify(fields) });
+    syncMasterControls();
+  } catch (e) {
+    const status = document.getElementById("audio-transport-status");
+    if (status) status.textContent = `Could not set master ${label}: ${e.message}`;
+  }
+}
+(document.getElementById("master-row-gain")||{}).onchange = (ev) => postMasterField({ gain: Number(ev.target.value) }, "level");
+(document.getElementById("master-mute-btn")||{}).onclick = () => postMasterField({ mute: !master.mute }, "mute");
 
 // Music
 (document.getElementById("bpm-set")||{}).onclick =  async () => {

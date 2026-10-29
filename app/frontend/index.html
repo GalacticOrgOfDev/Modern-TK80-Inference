@@ -152,7 +152,7 @@
             <button id="add-track-inline" class="add-track-btn">+</button>
             <div class="track master-row" id="master-header">
               <span class="track-name">Master</span>
-              <input type="range" class="lvl" id="master-gain" min="0" max="2" step="0.05" value="1" title="Master level" />
+              <input type="range" class="lvl" id="master-row-gain" min="0" max="2" step="0.05" value="1" title="Master level" />
               <button id="master-mute-btn">M</button>
               <button id="master-fx-btn" class="fx-btn">fx</button>
             </div>
@@ -206,7 +206,7 @@
             <input id="library-search" placeholder="Search instruments" />
             <div id="library-list"></div>
             <label>Prompt<input id="instrument-prompt" placeholder="describe a sound" /></label>
-            <button id="instrument-gen">Generate instrument</button>
+            <button id="library-instrument-gen">Generate instrument</button>
           </div>
           <div id="drawer-agent" class="drawer">
             <textarea id="agent-prompt" placeholder="Ask the agent about this project"></textarea>
