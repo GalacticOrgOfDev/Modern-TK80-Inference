@@ -1,7 +1,8 @@
 """ASIO compatibility for the Modern-TK80 Windows app.
 
 Low-latency recording path. Prefer 64-sample buffer at 44100 Hz
-(~1.5 ms) on the Focusrite USB ASIO driver. Raise the buffer only
+(~1.5 ms, a computed buffer duration (buffer size / sample rate), not a
+measured latency) on the Focusrite USB ASIO driver. Raise the buffer only
 if the driver reports underruns.
 
 While recording, a rolling peak buffer is kept so the UI can draw
