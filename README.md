@@ -30,6 +30,7 @@ Ships:
 - Tracks with stereo / left / right, level, pan (mix and bounce only), mute, solo, arm
 - Master bus with level, mute, compressor
 - ASIO recording (sounddevice). Scarlett 2i2 Gen 1/2 profile when the device name matches
+- The app's saved ASIO buffer setting (default 64 samples, `app/backend/asio.py:21`; stored in `uploads/settings.json`, `app/backend/server.py:850-880`) is passed to the input stream as its block size (`app/backend/asio.py:236`). The ms figure the app shows next to it is a computed buffer duration (buffer size divided by sample rate), not a measured latency. Whether the Focusrite driver uses that block size is unverified.
 - Sample rate default 44100 Hz
 - Instruments: kick, snare, hat, bass, lead, pad
 - 16-step sequencer, BPM set/detect, loop generation
