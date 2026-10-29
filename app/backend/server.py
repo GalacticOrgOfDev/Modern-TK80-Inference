@@ -1449,6 +1449,18 @@ window backwards, so its timeline-left half takes the end of the window."""
     return {"clips": _audio_clips}
 
 
+@app.delete("/api/audio/clips/{clip_id}")
+def delete_clip(clip_id: int) -> Dict[str, Any]:
+    """Remove one clip. Its track stays and its audio file stays on disk.
+
+One undo snapshot is pushed, so undo puts the clip back. 404 for an
+unknown clip id."""
+    clip = _get_clip(clip_id)
+    _push_undo("delete", clip)
+    _audio_clips[:] = [c for c in _audio_clips if c.get("id") != clip_id]
+    return {"clips": _audio_clips}
+
+
 @app.post("/api/audio/clips/mute")
 def clip_mute(body: ClipMuteRequest) -> Dict[str, Any]:
     """clip mute."""
