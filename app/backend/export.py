@@ -30,7 +30,7 @@ def export_timeline(
         "texts": texts,
         "objects_3d": objects_3d,
         "total_duration": round(total, 3),
-        "note": "JSON manifest. Use /api/video/encode for MP4.",
+        "note": "JSON manifest. MP4 encode is not available from the app yet.",
     }
     dest = UPLOAD_DIR / f"{name}.json"
     dest.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
