@@ -121,10 +121,18 @@ See `app/packaging/README.md`. Today `app/packaging/Product.wxs` installs only `
 python -m pytest tests/
 ```
 
-pytest was not installed where the counts below were taken, so this command has not been run for them. Results at commit `64b87f7`, Python 3.13, Linux, no GPU or audio hardware:
+pytest was not installed where the counts below were taken, so this command has not been run for them. Results at commit `9d4682b`, Python 3.13, Linux, no GPU or audio hardware:
 
-- `python3 -m unittest discover -s tests -t .` ran 177 and reported `FAILED (errors=1)`. The 177 are 176 real test methods plus one failed import: `tests/test_video.py` imports pytest, which was missing. All 176 test methods passed.
-- A local harness script (not in the repo) imports each test module, runs its unittest cases and also calls its plain `test_` functions, which unittest discovery does not collect. It reported 180 run, 0 failed: the same 176 plus 4 plain functions (2 in `tests/test_formats.py`, 2 in `tests/test_eq_and_vst.py`). It skips `tests/test_video.py` for the same missing pytest, so that file's 2 tests did not run.
+- `python3 -m unittest discover -s tests -t .` ran 197 and reported `FAILED (errors=1)`. The 197 are 196 real test methods plus one failed import: `tests/test_video.py` imports pytest, which was missing. All 196 test methods passed.
+- A local harness script (not in the repo) imports each test module, runs its unittest cases and also calls its plain `test_` functions, which unittest discovery does not collect. It reported 200 run, 0 failed: the same 196 plus 4 plain functions (2 in `tests/test_formats.py`, 2 in `tests/test_eq_and_vst.py`). It skips `tests/test_video.py` for the same missing pytest, so that file's 2 tests did not run.
+
+Front-end tests use Node's built-in runner, no install:
+
+```bash
+node --test "tests/js/*.test.js"
+```
+
+Quote the glob: Node 24 rejects a bare directory. At commit `9d4682b` with Node v24.22.1 there were 2 files in `tests/js` (`refresh_tracks.test.js`, `master_controls.test.js`), 5 tests, 5 passing. These tests extract real function text from `app/frontend/app.js` and run it against a fake backend and a stubbed DOM (`master_controls.test.js` also reads `index.html` ids), so they are not browser tests.
 
 ## Status
 
