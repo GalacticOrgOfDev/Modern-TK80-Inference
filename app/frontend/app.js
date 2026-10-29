@@ -281,13 +281,8 @@ async function refreshTracks() {
     data = { tracks: [] };
   }
   audioTracks = data.tracks || [];
-  while (audioTracks.length < 4) {
-    try {
-      await api(`/api/audio/tracks?name=Audio%20${audioTracks.length + 1}&channel=stereo`, { method: "POST" });
-      const again = await api("/api/audio/tracks");
-      audioTracks = again.tracks || audioTracks;
-    } catch (e) { break; }
-  }
+  // A new project starts with four tracks (the backend seeds them, server.py:114-116).
+  // Do not top the list back up here: a deleted track must stay deleted.
   const list = document.getElementById("track-list");
   list.innerHTML = "";
   for (const t of audioTracks) {
