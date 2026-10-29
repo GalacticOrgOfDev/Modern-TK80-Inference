@@ -12,6 +12,7 @@ Id rules:
 from __future__ import annotations
 
 import copy
+import math
 from typing import Any, Dict, Iterable, List, Optional
 
 TRACK_TYPES = ("audio", "instrument")
@@ -72,6 +73,23 @@ def remove_track(
     tracks[:] = [t for t in tracks if t.get("id") != track_id]
     clips[:] = [c for c in clips if c.get("track_id") != track_id]
     return True
+
+
+def check_clip_position(value: Any) -> float:
+    """Return a clip timeline position in seconds, or raise ValueError.
+
+    Accepts an int or float that is finite and not negative, returned as a
+    float unchanged (no clamping, no rounding). Rejects bools, strings,
+    None, NaN, infinities and negative numbers.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("position must be a number of seconds")
+    pos = float(value)
+    if not math.isfinite(pos):
+        raise ValueError("position must be finite")
+    if pos < 0:
+        raise ValueError("position must not be negative")
+    return pos
 
 
 def restore_clip_snapshot(

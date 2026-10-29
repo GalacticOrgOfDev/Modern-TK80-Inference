@@ -48,6 +48,7 @@ from .audio import (
 from .daw_state import (
     DEFAULT_TRACK_TYPE,
     IdCounter,
+    check_clip_position,
     check_track_type,
     find_by_id,
     remove_track,
@@ -1459,6 +1460,28 @@ unknown clip id."""
     _push_undo("delete", clip)
     _audio_clips[:] = [c for c in _audio_clips if c.get("id") != clip_id]
     return {"clips": _audio_clips}
+
+
+class ClipMoveRequest(BaseModel):
+    clip_id: int
+    position: Any = None
+
+
+@app.post("/api/audio/clips/move")
+def move_clip(body: ClipMoveRequest) -> Dict[str, Any]:
+    """Set a clip's timeline position in seconds. The clip stays on its track.
+
+400 when position is not a finite, non-negative number; 404 for an unknown
+clip id. The position is stored as given (no clamping). One undo snapshot
+is pushed. Mix and bounce read clip["position"], so they use the new time."""
+    try:
+        position = check_clip_position(body.position)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    clip = _get_clip(body.clip_id)
+    _push_undo("move", clip)
+    clip["position"] = position
+    return clip
 
 
 @app.post("/api/audio/clips/mute")
