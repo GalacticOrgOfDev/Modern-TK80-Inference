@@ -261,6 +261,9 @@ def design_vfx(prompt: str) -> Dict[str, Any]:
     if not layers:
         layers.append("noise=alls=10:allf=t,eq=saturation=1.3")
     return {"prompt": text, "filter": ",".join(layers), "layers": layers}
+
+
+def _filter_for(text: str) -> str:
     """Map any prompt to an ffmpeg filter chain."""
     rules = [
         ("static", "noise=alls=20:allf=t+u"),
