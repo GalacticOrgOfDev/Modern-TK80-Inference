@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Ensure ffmpeg is available for Modern-TK80 audio/video processing.
 # On Windows, install via winget or chocolatey if missing.
-# On Linux, use the distro package manager.
+# Otherwise, install via apt-get or brew, in that order.
 set -euo pipefail
 
 if command -v ffmpeg >/dev/null 2>&1; then
